@@ -295,7 +295,12 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         if missing_videos:
             errors.append(f"video index references missing files: {missing_videos[:3]}")
 
-    local_loadable = bool(not errors and present["data_parquet"])
+    local_loadable = bool(
+        not errors
+        and present["data_parquet"]
+        and _episode_rows_have_data_shard_indices(episode_rows)
+        and _episode_rows_have_video_shard_indices(episode_rows, video_rows)
+    )
     official_loader = _validate_with_official_lerobot_loader(root, info)
     if official_loader["available"]:
         lerobot_loadable = bool(not errors and official_loader["ok"])
@@ -317,6 +322,38 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         "errors": errors,
         "warnings": warnings,
     }
+
+
+def _episode_rows_have_data_shard_indices(episode_rows: list[dict[str, Any]]) -> bool:
+    return all(
+        row.get("data/chunk_index") is not None and row.get("data/file_index") is not None
+        for row in episode_rows
+    )
+
+
+def _episode_rows_have_video_shard_indices(
+    episode_rows: list[dict[str, Any]],
+    video_rows: list[dict[str, Any]],
+) -> bool:
+    video_keys_by_episode: dict[int, set[str]] = {}
+    for row in video_rows:
+        if row.get("episode_index") is None or not row.get("video_key"):
+            continue
+        video_keys_by_episode.setdefault(int(row["episode_index"]), set()).add(str(row["video_key"]))
+    if not video_keys_by_episode:
+        return True
+    return all(
+        row.get(f"videos/{video_key}/chunk_index") is not None
+        and row.get(f"videos/{video_key}/file_index") is not None
+        for row in episode_rows
+        for video_key in video_keys_by_episode.get(_episode_index_key(row), set())
+    )
+
+
+def _episode_index_key(row: dict[str, Any]) -> int:
+    if row.get("episode_index") is None:
+        return -1
+    return int(row["episode_index"])
 
 
 def _validate_with_official_lerobot_loader(root: Path, info: dict[str, Any]) -> dict[str, Any]:

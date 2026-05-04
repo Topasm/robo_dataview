@@ -183,6 +183,98 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertFalse(validation["official_loader"]["ok"])
             self.assertIn("RuntimeError: cannot load", validation["official_loader"]["error"])
 
+    def test_validate_lerobot_snapshot_accepts_complete_local_shard_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir)
+            artifact = write_lerobot_v3_snapshot(
+                export_dir,
+                dataset_id="sample-xvla-soft-fold",
+                episodes=[
+                    EpisodeDetail(
+                        dataset_id="sample-xvla-soft-fold",
+                        episode_index=0,
+                        task_index=3,
+                        length=1,
+                        fps=20.0,
+                        camera_names=["cam_high"],
+                    )
+                ],
+                annotations_by_episode={},
+                version_description="unit test",
+                timeseries_by_episode={
+                    0: {
+                        "timestamps": [0.0],
+                        "states": [[0.0, 0.0]],
+                        "actions": [[1.0, 1.0]],
+                    }
+                },
+                video_blobs_by_episode={0: {"cam_high": b"fake mp4"}},
+            )
+            root = Path(artifact["root"])
+            (root / "data/chunk-000/file-000.parquet").write_text(
+                "placeholder",
+                encoding="utf-8",
+            )
+
+            validation = validate_lerobot_v3_snapshot(root)
+
+            self.assertTrue(validation["present"]["data_parquet"])
+            self.assertTrue(validation["metadata_ok"])
+            self.assertTrue(validation["local_lerobot_loadable_heuristic"])
+
+    def test_validate_lerobot_snapshot_requires_video_shard_metadata_for_local_loadable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir)
+            artifact = write_lerobot_v3_snapshot(
+                export_dir,
+                dataset_id="sample-xvla-soft-fold",
+                episodes=[
+                    EpisodeDetail(
+                        dataset_id="sample-xvla-soft-fold",
+                        episode_index=0,
+                        task_index=3,
+                        length=1,
+                        fps=20.0,
+                        camera_names=["cam_high"],
+                    )
+                ],
+                annotations_by_episode={},
+                version_description="unit test",
+                timeseries_by_episode={
+                    0: {
+                        "timestamps": [0.0],
+                        "states": [[0.0, 0.0]],
+                        "actions": [[1.0, 1.0]],
+                    }
+                },
+                video_blobs_by_episode={0: {"cam_high": b"fake mp4"}},
+            )
+            root = Path(artifact["root"])
+            episodes_parquet_path = root / "meta/episodes/chunk-000/file-000.parquet"
+            if episodes_parquet_path.exists():
+                episodes_parquet_path.unlink()
+            episodes_path = root / "meta/episodes/chunk-000/file-000.jsonl"
+            rows = [
+                json.loads(line)
+                for line in episodes_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            rows[0].pop("videos/cam_high/chunk_index")
+            episodes_path.write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+            (root / "data/chunk-000/file-000.parquet").write_text(
+                "placeholder",
+                encoding="utf-8",
+            )
+
+            validation = validate_lerobot_v3_snapshot(root)
+
+            self.assertTrue(validation["present"]["data_parquet"])
+            self.assertTrue(validation["metadata_ok"])
+            self.assertFalse(validation["local_lerobot_loadable_heuristic"])
+
 
 class _FakeLeRobotDataset:
     def __init__(self, repo_id: str, root: Path) -> None:

@@ -277,7 +277,7 @@ lerobot_v3/
 │  └─ file-000.index.jsonl
 ├─ videos/
 │  ├─ video_index.jsonl
-│  └─ <camera>/chunk-000/episode_<index>.mp4
+│  └─ <camera>/chunk-000/file-<index>.mp4
 ├─ annotations/annotations.jsonl
 └─ validation.json
 ```
@@ -292,7 +292,9 @@ mean/std/min/max statistics for exported numeric frame features. Episode metadat
 `videos/<video_key>/chunk_index` / `videos/<video_key>/file_index` entries so the
 official `video_path` template can resolve copied MP4 artifacts.
 `validation.json` contains both the local loadability heuristic and an
-`official_loader` result. When the optional `lerobot` package is installed, validation attempts
+`official_loader` result. The local heuristic requires Parquet frame data plus
+data/video shard index metadata when video artifacts are present. When the optional
+`lerobot` package is installed, validation attempts
 `LeRobotDataset(repo_id, root=<export_root>)` and records success, dataset
 length, or the exact exception.
 
