@@ -7,7 +7,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 
 from apps.api.schemas.rerun import RerunSessionCreate, RerunSessionRecord
-from apps.api.services.lance_store import _numeric_vector, store
+from apps.api.services.lance_store import _numeric_vector, _sequence, store
 from apps.api.services.pydantic_compat import model_copy
 
 
@@ -19,17 +19,6 @@ def _vector_norm(value: object) -> float | None:
     if not vector:
         return None
     return sum(item * item for item in vector) ** 0.5
-
-
-def _sequence(value: object) -> list[object]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return value
-    try:
-        return list(value)  # type: ignore[arg-type]
-    except TypeError:
-        return []
 
 
 def _set_rerun_sequence_time(rr: object, timeline: str, sequence: int) -> None:

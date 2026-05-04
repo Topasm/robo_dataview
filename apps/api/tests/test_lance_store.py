@@ -252,6 +252,52 @@ class LanceDatasetStoreTest(unittest.TestCase):
 
         self.assertEqual([result.episode_index for result in results], [0, 2])
 
+    def test_norm_series_uses_sample_fallback_for_built_in_dataset(self) -> None:
+        store = LanceDatasetStore()
+        series = store.get_episode_norm_series("sample-xvla-soft-fold", 0)
+
+        self.assertIsNotNone(series)
+        self.assertEqual(series.episode_index, 0)
+        self.assertGreater(series.frame_count, 0)
+        self.assertEqual(len(series.sample_indices), series.sample_count)
+        self.assertEqual(len(series.state_norms), series.sample_count)
+        self.assertEqual(len(series.action_norms), series.sample_count)
+        self.assertEqual(series.sample_indices[0], 0)
+        self.assertEqual(series.sample_indices[-1], series.frame_count - 1)
+        for value in series.state_norms + series.action_norms:
+            self.assertIsNotNone(value)
+
+    def test_norm_series_downsamples_long_episodes(self) -> None:
+        episode_rows = [
+            {
+                "episode_index": 0,
+                "task_index": 0,
+                "fps": 30.0,
+                "timestamps": [frame / 30.0 for frame in range(2000)],
+                "actions": [[1.0, 0.0] for _ in range(2000)],
+                "observation_state": [[0.0, 1.0] for _ in range(2000)],
+            },
+        ]
+        fake_tables = {
+            "/datasets/long/episodes.lance": FakeDataset(
+                episode_rows,
+                list(episode_rows[0].keys()),
+            ),
+            "/datasets/long/frames.lance": FakeDataset([], ["episode_index"]),
+            "/datasets/long/videos.lance": FakeDataset([], ["camera_angle"]),
+        }
+        sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+
+        store = LanceDatasetStore()
+        record = store.open_dataset(DatasetOpenRequest(uri="/datasets/long", name="long"))
+        series = store.get_episode_norm_series(record.dataset_id, 0)
+
+        self.assertIsNotNone(series)
+        self.assertEqual(series.frame_count, 2000)
+        self.assertLessEqual(series.sample_count, 601)
+        self.assertEqual(series.sample_indices[0], 0)
+        self.assertEqual(series.sample_indices[-1], 1999)
+
 
 if __name__ == "__main__":
     unittest.main()

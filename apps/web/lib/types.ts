@@ -43,6 +43,20 @@ export type StateActionSummary = {
   actionNormMax: number | null;
 };
 
+export type EpisodeTimeseries = {
+  datasetId: string;
+  episodeIndex: number;
+  frameCount: number;
+  fps: number | null;
+  sampleCount: number;
+  sampleIndices: number[];
+  timestamps: (number | null)[] | null;
+  stateNorms: (number | null)[];
+  actionNorms: (number | null)[];
+  stateDim: number | null;
+  actionDim: number | null;
+};
+
 export type SegmentAnnotation = {
   id: string;
   datasetId: string;

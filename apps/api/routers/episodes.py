@@ -4,7 +4,12 @@ from typing import Annotated
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 
-from apps.api.schemas.episodes import EpisodeDetail, EpisodeListItem, StateActionSummary
+from apps.api.schemas.episodes import (
+    EpisodeDetail,
+    EpisodeListItem,
+    EpisodeTimeseries,
+    StateActionSummary,
+)
 from apps.api.services.lance_store import store
 
 
@@ -34,6 +39,14 @@ def state_action_summary(episode_index: int, dataset_id: str = Query(...)) -> St
     if summary is None:
         raise HTTPException(status_code=404, detail="Episode not found")
     return summary
+
+
+@router.get("/episodes/{episode_index}/timeseries", response_model=EpisodeTimeseries)
+def episode_timeseries(episode_index: int, dataset_id: str = Query(...)) -> EpisodeTimeseries:
+    series = store.get_episode_norm_series(dataset_id, episode_index)
+    if series is None:
+        raise HTTPException(status_code=404, detail="Episode not found")
+    return series
 
 
 @router.get("/episodes/{episode_index}/video/{camera}", response_model=None)

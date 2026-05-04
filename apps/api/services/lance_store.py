@@ -8,11 +8,17 @@ from pathlib import Path
 from typing import Any
 
 from apps.api.schemas.datasets import DatasetOpenRequest, DatasetRecord, DatasetSummary
-from apps.api.schemas.episodes import EpisodeDetail, EpisodeListItem, StateActionSummary
+from apps.api.schemas.episodes import (
+    EpisodeDetail,
+    EpisodeListItem,
+    EpisodeTimeseries,
+    StateActionSummary,
+)
 from apps.api.schemas.search import FilterSearchRequest, SearchResult
 from apps.api.services.lerobot_io import read_lerobot_snapshot_episodes
 from apps.api.services.pydantic_compat import model_dump
 
+NORM_SERIES_MAX_POINTS = 600
 TABLE_NAMES = ("frames", "episodes", "videos")
 STATE_COLUMNS = ("observation_state", "observation.state", "state")
 ACTION_COLUMNS = ("actions", "action")
@@ -193,6 +199,35 @@ def _norm_bounds(sequence: Any) -> tuple[float | None, float | None]:
     if not norms:
         return None, None
     return min(norms), max(norms)
+
+
+def _sequence(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    try:
+        return list(value)
+    except TypeError:
+        return []
+
+
+def _norm_at(sequence: list[Any], index: int) -> float | None:
+    if index < 0 or index >= len(sequence):
+        return None
+    vector = _numeric_vector(sequence[index])
+    if not vector:
+        return None
+    return math.sqrt(sum(item * item for item in vector))
+
+
+def _timestamp_at(timestamps: list[Any], index: int) -> float | None:
+    if index < 0 or index >= len(timestamps):
+        return None
+    value = timestamps[index]
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
 
 
 def _episode_length(row: dict[str, Any]) -> int | None:
@@ -582,6 +617,66 @@ class LanceDatasetStore:
             "states": [[frame / max(1, frame_count), 0.0] for frame in range(frame_count)],
             "actions": [[0.0, frame / max(1, frame_count)] for frame in range(frame_count)],
         }
+
+    def get_episode_norm_series(
+        self,
+        dataset_id: str,
+        episode_index: int,
+    ) -> EpisodeTimeseries | None:
+        timeseries = self.get_episode_timeseries(dataset_id, episode_index)
+        if timeseries is None:
+            return None
+
+        states = _sequence(timeseries.get("states"))
+        actions = _sequence(timeseries.get("actions"))
+        timestamps = _sequence(timeseries.get("timestamps"))
+        frame_count = max(len(states), len(actions), len(timestamps))
+        if frame_count <= 0:
+            episode = self.get_episode(dataset_id, episode_index)
+            frame_count = (episode.length or 0) if episode is not None else 0
+
+        episode = self.get_episode(dataset_id, episode_index)
+        fps = episode.fps if episode is not None else None
+
+        if frame_count == 0:
+            return EpisodeTimeseries(
+                dataset_id=dataset_id,
+                episode_index=episode_index,
+                frame_count=0,
+                fps=fps,
+                sample_count=0,
+                sample_indices=[],
+                timestamps=None,
+                state_norms=[],
+                action_norms=[],
+                state_dim=_vector_dim(states),
+                action_dim=_vector_dim(actions),
+            )
+
+        stride = max(1, math.ceil(frame_count / NORM_SERIES_MAX_POINTS))
+        sample_indices = list(range(0, frame_count, stride))
+        if sample_indices[-1] != frame_count - 1:
+            sample_indices.append(frame_count - 1)
+
+        state_norms = [_norm_at(states, index) for index in sample_indices]
+        action_norms = [_norm_at(actions, index) for index in sample_indices]
+        sample_timestamps: list[float | None] | None = None
+        if timestamps:
+            sample_timestamps = [_timestamp_at(timestamps, index) for index in sample_indices]
+
+        return EpisodeTimeseries(
+            dataset_id=dataset_id,
+            episode_index=episode_index,
+            frame_count=frame_count,
+            fps=fps,
+            sample_count=len(sample_indices),
+            sample_indices=sample_indices,
+            timestamps=sample_timestamps,
+            state_norms=state_norms,
+            action_norms=action_norms,
+            state_dim=_vector_dim(states),
+            action_dim=_vector_dim(actions),
+        )
 
     def filter_search(self, payload: FilterSearchRequest) -> list[SearchResult]:
         episodes = self.list_episodes(payload.dataset_id, limit=payload.limit, offset=0)

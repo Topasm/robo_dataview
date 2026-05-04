@@ -1,6 +1,7 @@
 import type {
   DatasetSummary,
   Episode,
+  EpisodeTimeseries,
   ExportRecord,
   JobRecord,
   RerunSession,
@@ -116,6 +117,20 @@ type StateActionSummaryResponse = {
   action_norm_max: number | null;
 };
 
+type EpisodeTimeseriesResponse = {
+  dataset_id: string;
+  episode_index: number;
+  frame_count: number;
+  fps: number | null;
+  sample_count: number;
+  sample_indices: number[];
+  timestamps: (number | null)[] | null;
+  state_norms: (number | null)[];
+  action_norms: (number | null)[];
+  state_dim: number | null;
+  action_dim: number | null;
+};
+
 export type SegmentAnnotationCreate = {
   datasetId: string;
   episodeIndex: number;
@@ -174,6 +189,17 @@ export async function fetchStateActionSummary(
     `/episodes/${episodeIndex}/state-action?${query}`
   );
   return toStateActionSummary(row);
+}
+
+export async function fetchEpisodeTimeseries(
+  datasetId: string,
+  episodeIndex: number,
+): Promise<EpisodeTimeseries> {
+  const query = new URLSearchParams({ dataset_id: datasetId });
+  const row = await request<EpisodeTimeseriesResponse>(
+    `/episodes/${episodeIndex}/timeseries?${query}`
+  );
+  return toEpisodeTimeseries(row);
 }
 
 export async function fetchAnnotations(
@@ -384,6 +410,22 @@ function toStateActionSummary(raw: StateActionSummaryResponse): StateActionSumma
     stateNormMax: raw.state_norm_max,
     actionNormMin: raw.action_norm_min,
     actionNormMax: raw.action_norm_max
+  };
+}
+
+function toEpisodeTimeseries(raw: EpisodeTimeseriesResponse): EpisodeTimeseries {
+  return {
+    datasetId: raw.dataset_id,
+    episodeIndex: raw.episode_index,
+    frameCount: raw.frame_count,
+    fps: raw.fps,
+    sampleCount: raw.sample_count,
+    sampleIndices: raw.sample_indices,
+    timestamps: raw.timestamps,
+    stateNorms: raw.state_norms,
+    actionNorms: raw.action_norms,
+    stateDim: raw.state_dim,
+    actionDim: raw.action_dim
   };
 }
 

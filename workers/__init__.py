@@ -1,1 +1,1 @@
-"""Worker entry points for Robot Data Studio."""
+"""Worker helpers for Robot Data Studio."""

@@ -32,3 +32,17 @@ class StateActionSummary(BaseModel):
     state_norm_max: float | None = None
     action_norm_min: float | None = None
     action_norm_max: float | None = None
+
+
+class EpisodeTimeseries(BaseModel):
+    dataset_id: str
+    episode_index: int
+    frame_count: int
+    fps: float | None = None
+    sample_count: int
+    sample_indices: list[int]
+    timestamps: list[float | None] | None = None
+    state_norms: list[float | None]
+    action_norms: list[float | None]
+    state_dim: int | None = None
+    action_dim: int | None = None
