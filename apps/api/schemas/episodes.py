@@ -18,6 +18,19 @@ class EpisodeListItem(BaseModel):
     split: str | None = None
 
 
+class EpisodeListPage(BaseModel):
+    dataset_id: str
+    items: list[EpisodeListItem]
+    total: int
+    limit: int
+    offset: int
+    next_offset: int | None = None
+    previous_offset: int | None = None
+    sort_by: str = "episode_index"
+    sort_order: str = "asc"
+    filter_query: str | None = None
+
+
 class EpisodeDetail(EpisodeListItem):
     fps: float | None = None
     camera_names: list[str]

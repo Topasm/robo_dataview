@@ -38,6 +38,7 @@ Response:
 
 ```text
 GET /episodes?dataset_id=...
+GET /episodes/page?dataset_id=...
 GET /episodes/{episode_index}?dataset_id=...
 PATCH /episodes/{episode_index}/labels?dataset_id=...
 GET /episodes/{episode_index}/video/{camera}?dataset_id=...
@@ -45,7 +46,24 @@ GET /episodes/{episode_index}/state-action?dataset_id=...
 GET /episodes/{episode_index}/timeseries?dataset_id=...
 ```
 
-`GET /episodes` supports `limit` and `offset` query params.
+`GET /episodes` supports `limit`, `offset`, `sort_by`, `sort_order`, and
+`filter_query` query params while preserving the legacy array response.
+`GET /episodes/page` accepts the same params and returns pagination metadata:
+
+```json
+{
+  "dataset_id": "xvla-soft-fold",
+  "items": [],
+  "total": 1542,
+  "limit": 100,
+  "offset": 0,
+  "next_offset": 100,
+  "previous_offset": null,
+  "sort_by": "episode_index",
+  "sort_order": "asc",
+  "filter_query": "review_status == \"accepted\""
+}
+```
 
 `PATCH /episodes/{episode_index}/labels` stores curation labels as a local
 overlay without mutating the raw Lance dataset. Supported fields:

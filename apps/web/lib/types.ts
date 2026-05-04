@@ -32,6 +32,19 @@ export type Episode = {
   cameraNames: string[];
 };
 
+export type EpisodeListPage = {
+  datasetId: string;
+  items: Episode[];
+  total: number;
+  limit: number;
+  offset: number;
+  nextOffset: number | null;
+  previousOffset: number | null;
+  sortBy: string;
+  sortOrder: "asc" | "desc";
+  filterQuery: string | null;
+};
+
 export type StateActionSummary = {
   datasetId: string;
   episodeIndex: number;

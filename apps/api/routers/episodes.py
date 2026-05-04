@@ -8,6 +8,7 @@ from apps.api.schemas.episodes import (
     EpisodeDetail,
     EpisodeLabelUpdate,
     EpisodeListItem,
+    EpisodeListPage,
     EpisodeTimeseries,
     StateActionSummary,
 )
@@ -22,8 +23,43 @@ def list_episodes(
     dataset_id: str = Query(...),
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
+    sort_by: str = Query(default="episode_index"),
+    sort_order: str = Query(default="asc"),
+    filter_query: str | None = Query(default=None),
 ) -> list[EpisodeListItem]:
-    return store.list_episodes(dataset_id, limit=limit, offset=offset)
+    try:
+        return store.list_episodes(
+            dataset_id,
+            limit=limit,
+            offset=offset,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            filter_query=filter_query,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/episodes/page", response_model=EpisodeListPage)
+def list_episode_page(
+    dataset_id: str = Query(...),
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    sort_by: str = Query(default="episode_index"),
+    sort_order: str = Query(default="asc"),
+    filter_query: str | None = Query(default=None),
+) -> EpisodeListPage:
+    try:
+        return store.list_episode_page(
+            dataset_id,
+            limit=limit,
+            offset=offset,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            filter_query=filter_query,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/episodes/{episode_index}", response_model=EpisodeDetail)

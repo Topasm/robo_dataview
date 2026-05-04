@@ -9,7 +9,7 @@ from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
 from apps.api.routers import episodes
-from apps.api.schemas.episodes import EpisodeDetail, EpisodeLabelUpdate
+from apps.api.schemas.episodes import EpisodeDetail, EpisodeLabelUpdate, EpisodeListItem, EpisodeListPage
 
 
 class FakeVideoStore:
@@ -46,6 +46,48 @@ class FakeEpisodeLabelStore:
             success_label=payload.success_label,
             has_human_label=True,
             camera_names=[],
+        )
+
+
+class FakeEpisodePageStore:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def list_episode_page(
+        self,
+        dataset_id: str,
+        limit: int,
+        offset: int,
+        *,
+        sort_by: str = "episode_index",
+        sort_order: str = "asc",
+        filter_query: str | None = None,
+    ) -> EpisodeListPage:
+        self.calls.append(
+            {
+                "dataset_id": dataset_id,
+                "limit": limit,
+                "offset": offset,
+                "sort_by": sort_by,
+                "sort_order": sort_order,
+                "filter_query": filter_query,
+            }
+        )
+        return EpisodeListPage(
+            dataset_id=dataset_id,
+            items=[
+                EpisodeListItem(
+                    dataset_id=dataset_id,
+                    episode_index=7,
+                    review_status="accepted",
+                )
+            ],
+            total=1,
+            limit=limit,
+            offset=offset,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            filter_query=filter_query,
         )
 
 
@@ -190,6 +232,28 @@ class EpisodeVideoEndpointTest(unittest.TestCase):
                 )
 
         self.assertEqual(context.exception.status_code, 404)
+
+    def test_episode_page_forwards_pagination_sort_and_filter(self) -> None:
+        fake_store = FakeEpisodePageStore()
+
+        with patch.object(episodes, "store", fake_store):
+            page = episodes.list_episode_page(
+                dataset_id="dataset-a",
+                limit=25,
+                offset=50,
+                sort_by="quality_score",
+                sort_order="desc",
+                filter_query='review_status == "accepted"',
+            )
+
+        self.assertEqual(page.total, 1)
+        self.assertEqual(page.items[0].episode_index, 7)
+        self.assertEqual(fake_store.calls[0]["dataset_id"], "dataset-a")
+        self.assertEqual(fake_store.calls[0]["limit"], 25)
+        self.assertEqual(fake_store.calls[0]["offset"], 50)
+        self.assertEqual(fake_store.calls[0]["sort_by"], "quality_score")
+        self.assertEqual(fake_store.calls[0]["sort_order"], "desc")
+        self.assertEqual(fake_store.calls[0]["filter_query"], 'review_status == "accepted"')
 
 
 def _request(method: str) -> Request:

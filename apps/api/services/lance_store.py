@@ -13,6 +13,7 @@ from apps.api.schemas.episodes import (
     EpisodeDetail,
     EpisodeLabelUpdate,
     EpisodeListItem,
+    EpisodeListPage,
     EpisodeTimeseries,
     StateActionSummary,
 )
@@ -42,6 +43,17 @@ FILTER_ALIASES = {
     "review": "review_status",
     "task": "task_index",
     "episode": "episode_index",
+}
+EPISODE_SORT_FIELDS = {
+    "episode_index",
+    "task_index",
+    "length",
+    "success_label",
+    "quality_score",
+    "review_status",
+    "caption",
+    "failure_reason",
+    "split",
 }
 
 
@@ -527,6 +539,33 @@ def _matches_filter(
     return False
 
 
+def _sort_episodes(
+    episodes: list[EpisodeListItem],
+    sort_by: str,
+    sort_order: str,
+) -> list[EpisodeListItem]:
+    if sort_by not in EPISODE_SORT_FIELDS:
+        raise ValueError(f"Unsupported episode sort field: {sort_by}")
+    if sort_order not in {"asc", "desc"}:
+        raise ValueError("sort_order must be 'asc' or 'desc'")
+
+    non_null = [episode for episode in episodes if model_dump(episode).get(sort_by) is not None]
+    nulls = [episode for episode in episodes if model_dump(episode).get(sort_by) is None]
+    non_null.sort(
+        key=lambda episode: _sortable_episode_value(model_dump(episode).get(sort_by)),
+        reverse=sort_order == "desc",
+    )
+    return non_null + nulls
+
+
+def _sortable_episode_value(value: Any) -> Any:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        return float(value)
+    return str(value).lower()
+
+
 @dataclass
 class LanceBundle:
     base_uri: str
@@ -681,7 +720,25 @@ class LanceDatasetStore:
             return {}
         return None
 
-    def list_episodes(self, dataset_id: str, limit: int, offset: int) -> list[EpisodeListItem]:
+    def list_episodes(
+        self,
+        dataset_id: str,
+        limit: int,
+        offset: int,
+        *,
+        sort_by: str = "episode_index",
+        sort_order: str = "asc",
+        filter_query: str | None = None,
+    ) -> list[EpisodeListItem]:
+        if sort_by != "episode_index" or sort_order != "asc" or filter_query:
+            return self.list_episode_page(
+                dataset_id,
+                limit=limit,
+                offset=offset,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                filter_query=filter_query,
+            ).items
         bundle = self._bundles.get(dataset_id)
         if bundle is not None:
             return self._list_lance_episodes(dataset_id, bundle, limit=limit, offset=offset)
@@ -690,6 +747,60 @@ class LanceDatasetStore:
             EpisodeListItem(**self._apply_episode_overrides(dataset_id, model_dump(episode)))
             for episode in episodes[offset : offset + limit]
         ]
+
+    def list_episode_page(
+        self,
+        dataset_id: str,
+        limit: int,
+        offset: int,
+        *,
+        sort_by: str = "episode_index",
+        sort_order: str = "asc",
+        filter_query: str | None = None,
+    ) -> EpisodeListPage:
+        if limit <= 0:
+            raise ValueError("limit must be greater than zero")
+        if offset < 0:
+            raise ValueError("offset must be greater than or equal to zero")
+        if sort_by not in EPISODE_SORT_FIELDS:
+            raise ValueError(f"Unsupported episode sort field: {sort_by}")
+        if sort_order not in {"asc", "desc"}:
+            raise ValueError("sort_order must be 'asc' or 'desc'")
+
+        needs_materialized_page = filter_query or sort_by != "episode_index" or sort_order != "asc"
+        if needs_materialized_page:
+            episodes = self._all_episode_items(dataset_id)
+            if filter_query:
+                filters = _parse_filter_query(filter_query)
+                episodes = [
+                    episode
+                    for episode in episodes
+                    if all(
+                        _matches_filter(episode, field, operator, expected)
+                        for field, operator, expected in filters
+                    )
+                ]
+            episodes = _sort_episodes(episodes, sort_by=sort_by, sort_order=sort_order)
+            total = len(episodes)
+            items = episodes[offset : offset + limit]
+        else:
+            total = self._episode_count(dataset_id)
+            items = self.list_episodes(dataset_id, limit=limit, offset=offset)
+
+        next_offset = offset + limit if offset + limit < total else None
+        previous_offset = max(offset - limit, 0) if offset > 0 and total > 0 else None
+        return EpisodeListPage(
+            dataset_id=dataset_id,
+            items=items,
+            total=total,
+            limit=limit,
+            offset=offset,
+            next_offset=next_offset,
+            previous_offset=previous_offset,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            filter_query=filter_query,
+        )
 
     def get_episode(self, dataset_id: str, episode_index: int) -> EpisodeDetail | None:
         bundle = self._bundles.get(dataset_id)
@@ -1447,6 +1558,24 @@ class LanceDatasetStore:
             for episode in episodes
         ]
         self._summaries[dataset_id] = self._summary_from_episodes(record, updated)
+
+    def _episode_count(self, dataset_id: str) -> int:
+        bundle = self._bundles.get(dataset_id)
+        if bundle is not None:
+            return _count_rows(bundle.tables["episodes"])
+        return len(self._episodes.get(dataset_id, []))
+
+    def _all_episode_items(self, dataset_id: str) -> list[EpisodeListItem]:
+        total = self._episode_count(dataset_id)
+        if total == 0:
+            return []
+        bundle = self._bundles.get(dataset_id)
+        if bundle is not None:
+            return self._list_lance_episodes(dataset_id, bundle, limit=total, offset=0)
+        return [
+            EpisodeListItem(**self._apply_episode_overrides(dataset_id, model_dump(episode)))
+            for episode in self._episodes.get(dataset_id, [])
+        ]
 
     def _load_episode_label_overrides(self) -> None:
         if not self.label_storage_root.exists():

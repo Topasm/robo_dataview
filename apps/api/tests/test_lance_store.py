@@ -198,6 +198,50 @@ class LanceDatasetStoreTest(unittest.TestCase):
             self.assertEqual(episodes[0].episode_index, 7)
             self.assertEqual(episodes[0].task_index, 4)
 
+    def test_episode_page_returns_pagination_metadata(self) -> None:
+        store = LanceDatasetStore()
+        page = store.list_episode_page("sample-xvla-soft-fold", limit=2, offset=0)
+        next_page = store.list_episode_page("sample-xvla-soft-fold", limit=2, offset=2)
+
+        self.assertEqual(page.dataset_id, "sample-xvla-soft-fold")
+        self.assertEqual(page.total, 3)
+        self.assertEqual(page.limit, 2)
+        self.assertEqual(page.offset, 0)
+        self.assertEqual(page.next_offset, 2)
+        self.assertIsNone(page.previous_offset)
+        self.assertEqual([episode.episode_index for episode in page.items], [0, 1])
+        self.assertEqual([episode.episode_index for episode in next_page.items], [2])
+        self.assertIsNone(next_page.next_offset)
+        self.assertEqual(next_page.previous_offset, 0)
+
+    def test_episode_page_supports_sort_and_filter_query(self) -> None:
+        store = LanceDatasetStore()
+        page = store.list_episode_page(
+            "sample-xvla-soft-fold",
+            limit=10,
+            offset=0,
+            sort_by="length",
+            sort_order="desc",
+            filter_query='success_label == true AND review_status == "accepted"',
+        )
+
+        self.assertEqual(page.total, 2)
+        self.assertEqual(page.sort_by, "length")
+        self.assertEqual(page.sort_order, "desc")
+        self.assertEqual(page.filter_query, 'success_label == true AND review_status == "accepted"')
+        self.assertEqual([episode.episode_index for episode in page.items], [2, 0])
+
+    def test_episode_page_rejects_unsupported_sort_field(self) -> None:
+        store = LanceDatasetStore()
+
+        with self.assertRaises(ValueError):
+            store.list_episode_page(
+                "sample-xvla-soft-fold",
+                limit=10,
+                offset=0,
+                sort_by="not_a_column",
+            )
+
     def test_video_blob_uses_episode_index_filter_before_row_offset(self) -> None:
         episode_rows = [
             {

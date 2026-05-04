@@ -1,6 +1,7 @@
 import type {
   DatasetSummary,
   Episode,
+  EpisodeListPage,
   EpisodeTimeseries,
   ExportRecord,
   FilterPreset,
@@ -53,6 +54,19 @@ type EpisodeResponse = {
   split: string | null;
   fps?: number | null;
   camera_names?: string[];
+};
+
+type EpisodeListPageResponse = {
+  dataset_id: string;
+  items: EpisodeResponse[];
+  total: number;
+  limit: number;
+  offset: number;
+  next_offset: number | null;
+  previous_offset: number | null;
+  sort_by: string;
+  sort_order: "asc" | "desc";
+  filter_query: string | null;
 };
 
 type AnnotationResponse = {
@@ -233,11 +247,45 @@ export async function fetchDatasetSummary(datasetId: string): Promise<DatasetSum
   return request<DatasetSummaryResponse>(`/datasets/${datasetId}/summary`).then(toDatasetSummary);
 }
 
-export async function fetchEpisodes(datasetId: string): Promise<Episode[]> {
+export type EpisodeListOptions = {
+  limit?: number;
+  offset?: number;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+  filterQuery?: string;
+};
+
+function episodeListQuery(datasetId: string, options: EpisodeListOptions = {}): string {
+  const query = new URLSearchParams({
+    dataset_id: datasetId,
+    limit: String(options.limit ?? 200),
+    offset: String(options.offset ?? 0),
+    sort_by: options.sortBy ?? "episode_index",
+    sort_order: options.sortOrder ?? "asc"
+  });
+  if (options.filterQuery) {
+    query.set("filter_query", options.filterQuery);
+  }
+  return query.toString();
+}
+
+export async function fetchEpisodes(
+  datasetId: string,
+  options: EpisodeListOptions = {}
+): Promise<Episode[]> {
   const episodes = await request<EpisodeResponse[]>(
-    `/episodes?dataset_id=${encodeURIComponent(datasetId)}&limit=200`
+    `/episodes?${episodeListQuery(datasetId, options)}`
   );
   return episodes.map(toEpisode);
+}
+
+export async function fetchEpisodePage(
+  datasetId: string,
+  options: EpisodeListOptions = {}
+): Promise<EpisodeListPage> {
+  return request<EpisodeListPageResponse>(`/episodes/page?${episodeListQuery(datasetId, options)}`).then(
+    toEpisodeListPage
+  );
 }
 
 export async function openDataset(uri: string, name?: string): Promise<DatasetSummary> {
@@ -621,6 +669,21 @@ function toEpisode(raw: EpisodeResponse): Episode {
     split: raw.split ?? "",
     fps: raw.fps ?? 0,
     cameraNames: raw.camera_names ?? []
+  };
+}
+
+function toEpisodeListPage(raw: EpisodeListPageResponse): EpisodeListPage {
+  return {
+    datasetId: raw.dataset_id,
+    items: raw.items.map(toEpisode),
+    total: raw.total,
+    limit: raw.limit,
+    offset: raw.offset,
+    nextOffset: raw.next_offset,
+    previousOffset: raw.previous_offset,
+    sortBy: raw.sort_by,
+    sortOrder: raw.sort_order,
+    filterQuery: raw.filter_query
   };
 }
 
