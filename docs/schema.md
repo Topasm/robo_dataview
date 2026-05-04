@@ -361,14 +361,16 @@ lance_subset/
 ├─ metadata.json
 ├─ episodes.lance
 ├─ frames.lance
+├─ videos.lance
 ├─ annotations.lance
 └─ validation.json
 ```
 
 The subset includes selected episode metadata, frame-level state/action samples
-from `frames.lance` or the episode time-series fallback, and accepted
-annotations only. Missing optional Lance dependencies fail the export explicitly
-so callers do not mistake a manifest-only export for a usable Lance dataset.
+from `frames.lance` or the episode time-series fallback, available camera video
+blobs/provenance rows, and accepted annotations only. Missing optional Lance
+dependencies fail the export explicitly so callers do not mistake a
+manifest-only export for a usable Lance dataset.
 
 ## JSONL and VLA exports
 

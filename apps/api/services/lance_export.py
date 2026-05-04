@@ -16,6 +16,7 @@ LANCE_SUBSET_VERSION = "robot_data_studio_lance_subset_v1"
 METADATA_JSON_PATH = Path("metadata.json")
 EPISODES_LANCE_PATH = Path("episodes.lance")
 FRAMES_LANCE_PATH = Path("frames.lance")
+VIDEOS_LANCE_PATH = Path("videos.lance")
 ANNOTATIONS_LANCE_PATH = Path("annotations.lance")
 
 
@@ -30,6 +31,7 @@ def write_lance_subset(
     episodes: list[EpisodeDetail],
     annotations_by_episode: dict[int, list[AnnotationRecord]],
     frames_by_episode: dict[int, list[FrameRecord]],
+    video_blobs_by_episode: dict[int, dict[str, bytes]] | None = None,
     version_description: str | None,
 ) -> dict[str, Any]:
     """Write a real Lance subset for selected episodes.
@@ -60,14 +62,17 @@ def write_lance_subset(
         for annotations in annotations_by_episode.values()
         for annotation in annotations
     ]
+    video_rows = _video_rows(episodes, video_blobs_by_episode or {})
 
     table_paths = {
         "episodes": root / EPISODES_LANCE_PATH,
         "frames": root / FRAMES_LANCE_PATH,
+        "videos": root / VIDEOS_LANCE_PATH,
         "annotations": root / ANNOTATIONS_LANCE_PATH,
     }
     _write_lance_table(lance, _table_from_rows(pa, episode_rows, _episodes_schema(pa)), table_paths["episodes"])
     _write_lance_table(lance, _table_from_rows(pa, frame_rows, _frames_schema(pa)), table_paths["frames"])
+    _write_lance_table(lance, _table_from_rows(pa, video_rows, _videos_schema(pa)), table_paths["videos"])
     _write_lance_table(
         lance,
         _table_from_rows(pa, annotation_rows, build_annotations_pyarrow_schema()),
@@ -81,6 +86,7 @@ def write_lance_subset(
         "created_at": datetime.now(timezone.utc).isoformat(),
         "total_episodes": len(episode_rows),
         "total_frames": len(frame_rows),
+        "total_videos": len(video_rows),
         "total_annotations": len(annotation_rows),
         "tables": {name: path.name for name, path in table_paths.items()},
     }
@@ -99,11 +105,13 @@ def write_lance_subset(
             "validation": str(validation_path),
             "episodes": str(table_paths["episodes"]),
             "frames": str(table_paths["frames"]),
+            "videos": str(table_paths["videos"]),
             "annotations": str(table_paths["annotations"]),
         },
         "materialized": {
             "episode_rows": len(episode_rows),
             "frame_rows": len(frame_rows),
+            "video_rows": len(video_rows),
             "annotation_rows": len(annotation_rows),
         },
     }
@@ -115,6 +123,7 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
         "metadata": metadata_path,
         "episodes": root / EPISODES_LANCE_PATH,
         "frames": root / FRAMES_LANCE_PATH,
+        "videos": root / VIDEOS_LANCE_PATH,
         "annotations": root / ANNOTATIONS_LANCE_PATH,
     }
     present = {name: path.exists() for name, path in paths.items()}
@@ -129,7 +138,7 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
         if metadata.get("format") != LANCE_SUBSET_VERSION:
             warnings.append(f"unexpected format {metadata.get('format')!r}")
 
-    for table_name in ("episodes", "frames", "annotations"):
+    for table_name in ("episodes", "frames", "videos", "annotations"):
         if not present[table_name]:
             errors.append(f"missing {table_name}.lance")
 
@@ -137,6 +146,7 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
         "metadata_ok": not errors,
         "episode_count": int(metadata.get("total_episodes") or 0),
         "frame_count": int(metadata.get("total_frames") or 0),
+        "video_count": int(metadata.get("total_videos") or 0),
         "annotation_count": int(metadata.get("total_annotations") or 0),
         "files": {name: str(path) for name, path in paths.items()},
         "present": present,
@@ -184,6 +194,32 @@ def _frame_row(frame: FrameRecord) -> dict[str, Any]:
         "action_norm": frame.action_norm,
         "is_bad_frame": frame.is_bad_frame,
     }
+
+
+def _video_rows(
+    episodes: list[EpisodeDetail],
+    video_blobs_by_episode: dict[int, dict[str, bytes]],
+) -> list[dict[str, Any]]:
+    rows = []
+    for episode in episodes:
+        for camera, blob in sorted(video_blobs_by_episode.get(episode.episode_index, {}).items()):
+            if not blob:
+                continue
+            video_key = _safe_path_name(camera)
+            filename = f"episode_{int(episode.episode_index):06d}.mp4"
+            rows.append(
+                {
+                    "dataset_id": episode.dataset_id,
+                    "episode_index": episode.episode_index,
+                    "camera": camera,
+                    "video_key": video_key,
+                    "relative_path": f"videos/{video_key}/{filename}",
+                    "filename": filename,
+                    "file_size_bytes": len(blob),
+                    "video_blob": blob,
+                }
+            )
+    return rows
 
 
 def _annotation_row(annotation: AnnotationRecord) -> dict[str, Any]:
@@ -240,3 +276,23 @@ def _frames_schema(pa: Any) -> Any:
             pa.field("is_bad_frame", pa.bool_(), nullable=False),
         ]
     )
+
+
+def _videos_schema(pa: Any) -> Any:
+    return pa.schema(
+        [
+            pa.field("dataset_id", pa.string(), nullable=False),
+            pa.field("episode_index", pa.int64(), nullable=False),
+            pa.field("camera", pa.string(), nullable=False),
+            pa.field("video_key", pa.string(), nullable=False),
+            pa.field("relative_path", pa.string(), nullable=False),
+            pa.field("filename", pa.string(), nullable=False),
+            pa.field("file_size_bytes", pa.int64(), nullable=False),
+            pa.field("video_blob", pa.binary(), nullable=False),
+        ]
+    )
+
+
+def _safe_path_name(value: str) -> str:
+    safe = "".join(character if character.isalnum() else "_" for character in value.strip())
+    return "_".join(part for part in safe.split("_") if part) or "camera"

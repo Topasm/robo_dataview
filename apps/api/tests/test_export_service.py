@@ -11,6 +11,7 @@ from apps.api.schemas.annotations import AnnotationCreate
 from apps.api.schemas.common import ExportFormat, JobStatus, ReviewStatus
 from apps.api.schemas.episodes import EpisodeDetail
 from apps.api.schemas.exports import ExportCreateRequest
+from apps.api.schemas.frames import FrameRecord
 from apps.api.services.annotation_service import annotation_store
 from apps.api.services import export_service
 from apps.api.services.export_service import ExportStore
@@ -252,18 +253,49 @@ class ExportServiceTest(unittest.TestCase):
         self.assertEqual(record.status, JobStatus.succeeded)
         self.assertEqual(artifact["materialized"]["episode_rows"], 1)
         self.assertEqual(artifact["materialized"]["frame_rows"], 180)
+        self.assertEqual(artifact["materialized"]["video_rows"], 0)
         self.assertEqual(artifact["materialized"]["annotation_rows"], 1)
         self.assertTrue(artifact["validation"]["metadata_ok"])
         self.assertTrue(Path(artifact["files"]["episodes"]).exists())
         self.assertTrue(Path(artifact["files"]["frames"]).exists())
+        self.assertTrue(Path(artifact["files"]["videos"]).exists())
         self.assertTrue(Path(artifact["files"]["annotations"]).exists())
-        self.assertEqual(len(written_paths), 3)
+        self.assertEqual(len(written_paths), 4)
         self.assertEqual(manifest["episodes"][0]["annotations"][0]["label_value"], "accepted_exact_frame")
         version_records = versions.list("sample-xvla-soft-fold")
         self.assertEqual(version_records[0].export_format, "lance")
 
         annotation_store.delete(accepted.annotation_id)
         annotation_store.delete(rejected.annotation_id)
+
+    def test_lance_export_writes_video_table_when_blobs_are_available(self) -> None:
+        fake_pyarrow = _fake_pyarrow_module()
+        fake_lance, written_paths = _fake_lance_module()
+        versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
+        exports = ExportStore(versions=versions)
+
+        with patch.object(export_service, "store", _FakeLanceVideoStore()):
+            with patch.dict(
+                sys.modules,
+                {"pyarrow": fake_pyarrow, "lance": fake_lance},
+            ):
+                record = exports.create(
+                    ExportCreateRequest(
+                        dataset_id="lance-video-dataset",
+                        episode_indices=[7],
+                        format=ExportFormat.lance,
+                        version_description="lance video subset",
+                    )
+                )
+
+        manifest = json.loads(Path(record.output_uri or "").read_text(encoding="utf-8"))
+        artifact = manifest["artifacts"]["lance_subset"]
+
+        self.assertEqual(record.status, JobStatus.succeeded)
+        self.assertEqual(artifact["materialized"]["video_rows"], 1)
+        self.assertEqual(artifact["validation"]["video_count"], 1)
+        self.assertTrue(Path(artifact["files"]["videos"]).exists())
+        self.assertTrue(any(path.endswith("videos.lance") for path in written_paths))
 
     def test_jsonl_export_writes_caption_and_annotation_files(self) -> None:
         accepted = annotation_store.create(
@@ -349,6 +381,7 @@ def _fake_pyarrow_module() -> ModuleType:
     module.int64 = lambda: "int64"
     module.float32 = lambda: "float32"
     module.bool_ = lambda: "bool"
+    module.binary = lambda: "binary"
     module.list_ = lambda dtype: f"list<{dtype}>"
     module.timestamp = lambda unit, tz=None: f"timestamp<{unit},{tz}>"
     return module
@@ -440,6 +473,52 @@ class _FakeInvalidVideoStore:
     def get_video_blob(self, dataset_id: str, episode_index: int, camera: str) -> bytes | None:
         if dataset_id == "invalid-video-dataset" and episode_index == 0 and camera == "cam_high":
             return b"not an mp4"
+        return None
+
+
+class _FakeLanceVideoStore:
+    def get_episode(self, dataset_id: str, episode_index: int) -> EpisodeDetail | None:
+        if dataset_id != "lance-video-dataset" or episode_index != 7:
+            return None
+        return EpisodeDetail(
+            dataset_id=dataset_id,
+            episode_index=7,
+            task_index=1,
+            length=1,
+            fps=20.0,
+            camera_names=["cam high"],
+        )
+
+    def list_frames(
+        self,
+        dataset_id: str,
+        episode_index: int,
+        *,
+        start_frame: int,
+        end_frame: int | None,
+        limit: int,
+    ) -> list[FrameRecord]:
+        del start_frame, end_frame, limit
+        if dataset_id != "lance-video-dataset" or episode_index != 7:
+            return []
+        return [
+            FrameRecord(
+                dataset_id=dataset_id,
+                episode_index=episode_index,
+                frame_index=0,
+                timestamp=0.0,
+                task_index=1,
+                observation_state=[0.0, 0.0],
+                action=[1.0, 1.0],
+                state_norm=0.0,
+                action_norm=1.4,
+                is_bad_frame=False,
+            )
+        ]
+
+    def get_video_blob(self, dataset_id: str, episode_index: int, camera: str) -> bytes | None:
+        if dataset_id == "lance-video-dataset" and episode_index == 7 and camera == "cam high":
+            return b"video-bytes"
         return None
 
 

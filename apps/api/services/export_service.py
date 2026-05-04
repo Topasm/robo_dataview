@@ -177,6 +177,10 @@ class ExportStore:
                     episodes=episode_records,
                     annotations_by_episode=annotations_by_episode,
                     frames_by_episode=frames_by_episode,
+                    video_blobs_by_episode={
+                        episode.episode_index: self._video_blobs(record.dataset_id, episode)
+                        for episode in episode_records
+                    },
                     version_description=payload.version_description,
                 )
             except LanceExportDependencyError as exc:
