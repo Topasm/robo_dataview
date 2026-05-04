@@ -414,6 +414,62 @@ class ExportServiceTest(unittest.TestCase):
 
         annotation_store.delete(accepted.annotation_id)
 
+    def test_export_can_publish_artifacts_to_fsspec_destination(self) -> None:
+        fake_fs = _FakePublishFs()
+        fake_fsspec = _fake_fsspec_module(fake_fs)
+        versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
+        exports = ExportStore(versions=versions)
+
+        with patch.dict(sys.modules, fake_fsspec):
+            record = exports.create(
+                ExportCreateRequest(
+                    dataset_id="sample-xvla-soft-fold",
+                    episode_indices=[0],
+                    format=ExportFormat.jsonl,
+                    version_description="published jsonl export",
+                    publish_uri="s3://bucket/robot-data/export-1",
+                )
+            )
+
+        manifest = json.loads(Path(record.output_uri or "").read_text(encoding="utf-8"))
+        publish = manifest["artifacts"]["publish"]
+        remote_manifest = json.loads(
+            fake_fs.files["bucket/robot-data/export-1/manifest.json"].decode("utf-8")
+        )
+
+        self.assertEqual(record.status, JobStatus.succeeded)
+        self.assertEqual(publish["destination_uri"], "s3://bucket/robot-data/export-1")
+        self.assertEqual(publish["manifest_uri"], "s3://bucket/robot-data/export-1/manifest.json")
+        self.assertGreaterEqual(publish["file_count"], 3)
+        self.assertIn("bucket/robot-data/export-1/jsonl_export/episodes.jsonl", fake_fs.files)
+        self.assertIn("bucket/robot-data/export-1/jsonl_export/captions.jsonl", fake_fs.files)
+        self.assertEqual(
+            remote_manifest["artifacts"]["publish"]["manifest_uri"],
+            "s3://bucket/robot-data/export-1/manifest.json",
+        )
+
+    def test_export_fails_clearly_when_publish_dependency_is_missing(self) -> None:
+        versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
+        exports = ExportStore(versions=versions)
+
+        with patch.dict(sys.modules, {"fsspec": None, "fsspec.core": None}):
+            record = exports.create(
+                ExportCreateRequest(
+                    dataset_id="sample-xvla-soft-fold",
+                    episode_indices=[0],
+                    format=ExportFormat.jsonl,
+                    version_description="published jsonl export",
+                    publish_uri="s3://bucket/robot-data/export-1",
+                )
+            )
+
+        manifest = json.loads(Path(record.output_uri or "").read_text(encoding="utf-8"))
+
+        self.assertEqual(record.status, JobStatus.failed)
+        self.assertIn("Publishing to remote object storage requires optional `fsspec`", record.message or "")
+        self.assertFalse(manifest["artifacts"]["publish"]["metadata_ok"])
+        self.assertEqual(versions.list("sample-xvla-soft-fold"), [])
+
     def test_vla_export_writes_timeseries_examples(self) -> None:
         versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
         exports = ExportStore(versions=versions)
@@ -544,6 +600,52 @@ def _fake_datasets_module() -> ModuleType:
     module.Dataset = Dataset
     module.load_from_disk = load_from_disk
     return module
+
+
+class _FakePublishHandle:
+    def __init__(self, fs: "_FakePublishFs", path: str) -> None:
+        self.fs = fs
+        self.path = path
+        self.buffer = bytearray()
+
+    def __enter__(self) -> "_FakePublishHandle":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.fs.files[self.path] = bytes(self.buffer)
+
+    def write(self, value: bytes) -> int:
+        self.buffer.extend(value)
+        return len(value)
+
+
+class _FakePublishFs:
+    def __init__(self) -> None:
+        self.files: dict[str, bytes] = {}
+        self.directories: list[str] = []
+
+    def makedirs(self, path: str, exist_ok: bool = False) -> None:
+        del exist_ok
+        self.directories.append(path)
+
+    def open(self, path: str, mode: str) -> _FakePublishHandle:
+        self.assert_write_mode(mode)
+        return _FakePublishHandle(self, path)
+
+    @staticmethod
+    def assert_write_mode(mode: str) -> None:
+        if mode != "wb":
+            raise AssertionError(f"unexpected mode: {mode}")
+
+
+def _fake_fsspec_module(fs: _FakePublishFs) -> dict[str, ModuleType]:
+    fsspec_module = ModuleType("fsspec")
+    core_module = ModuleType("fsspec.core")
+    core_module.url_to_fs = lambda uri: (fs, uri.removeprefix("s3://"))
+    return {
+        "fsspec": fsspec_module,
+        "fsspec.core": core_module,
+    }
 
 
 class _FakeSplitStore:

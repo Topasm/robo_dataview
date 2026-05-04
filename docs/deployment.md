@@ -43,7 +43,8 @@ python3 -m pip install -e ".[lance,rerun,video,export,queue,storage]"
 Use `.[export]` on machines that must write optional LeRobot Parquet/MP4
 artifacts and run official loader validation. Use `.[queue]` on API and worker
 services that enqueue Redis/RQ jobs. Use `.[storage]` when `videos.lance` rows
-reference `hf://` or object-store video paths.
+reference `hf://` or object-store video paths, or when exports should publish to
+an object-store destination.
 
 The manual GitHub Actions workflow `Official export dependencies` installs
 `.[export,video,dev]` and runs opt-in export checks with real optional
@@ -166,6 +167,8 @@ through those paths.
 - Job events: `GET /api/jobs/{job_id}/events`
 - Rerun cache artifacts: `data/cache/rerun/`
 - Export artifacts: `data/exports/`
+- Export publishing: set `ROBOT_DATA_STUDIO_EXPORT_PUBLISH_URI` or pass
+  `publish_uri` to `POST /api/exports` / `POST /api/jobs/export`
 
 Keep `ROBOT_DATA_STUDIO_JOB_QUEUE` unset for simple single-process local use.
 Set it to `rq` only when Redis and at least one worker process are running.

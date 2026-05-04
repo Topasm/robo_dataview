@@ -652,16 +652,21 @@ export async function createExportJob(
   episodeIndices: number[],
   format: ExportFormat = "lerobot",
   splits: string[] = [],
+  publishUri?: string,
 ): Promise<JobRecord> {
+  const body: Record<string, string | string[] | number[] | ExportFormat | null> = {
+    dataset_id: datasetId,
+    episode_indices: episodeIndices,
+    splits,
+    format,
+    version_description: `web selected episode ${format} export`
+  };
+  if (publishUri !== undefined) {
+    body.publish_uri = publishUri || null;
+  }
   const row = await request<JobRecordResponse>("/jobs/export", {
     method: "POST",
-    body: JSON.stringify({
-      dataset_id: datasetId,
-      episode_indices: episodeIndices,
-      splits,
-      format,
-      version_description: `web selected episode ${format} export`
-    })
+    body: JSON.stringify(body)
   });
   return toJobRecord(row);
 }
@@ -720,16 +725,21 @@ export async function createExport(
   episodeIndices: number[],
   format: ExportFormat = "lerobot",
   splits: string[] = [],
+  publishUri?: string,
 ): Promise<ExportRecord> {
+  const body: Record<string, string | string[] | number[] | ExportFormat | null> = {
+    dataset_id: datasetId,
+    episode_indices: episodeIndices,
+    splits,
+    format,
+    version_description: `web selected episode ${format} export`
+  };
+  if (publishUri !== undefined) {
+    body.publish_uri = publishUri || null;
+  }
   const row = await request<ExportRecordResponse>("/exports", {
     method: "POST",
-    body: JSON.stringify({
-      dataset_id: datasetId,
-      episode_indices: episodeIndices,
-      splits,
-      format,
-      version_description: `web selected episode ${format} export`
-    })
+    body: JSON.stringify(body)
   });
   return toExportRecord(row);
 }

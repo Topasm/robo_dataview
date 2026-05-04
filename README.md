@@ -125,7 +125,8 @@ The repository has moved past a pure skeleton. The current MVP path can:
    `lance` dependencies are installed. Lightweight JSONL caption and VLA-style
    trajectory exports are also available. `format=hf_dataset` writes a
    frame-level Hugging Face `Dataset.save_to_disk()` artifact when optional
-   export dependencies are installed. The manual official-dependency workflow
+   export dependencies are installed. `publish_uri` can copy the finished export
+   directory to a local or `fsspec` destination. The manual official-dependency workflow
    verifies native HF Dataset round-tripping plus no-video and video-backed
    LeRobot snapshots with the real official loaders. An opt-in real-dataset
    export smoke workflow also opens the default `xvla-soft-fold` `hf://` Lance

@@ -397,13 +397,18 @@ GET  /versions?dataset_id=...
   "episode_indices": [1, 2, 3],
   "splits": [],
   "format": "lerobot",
-  "version_description": "accepted successful episodes"
+  "version_description": "accepted successful episodes",
+  "publish_uri": "s3://robot-data-studio/exports/xvla-fold-v1"
 }
 ```
 
 `POST /exports` runs synchronously and returns the final export record. Use
 `POST /jobs/export` with the same payload when the export should be queued and
 tracked through `/jobs/{job_id}` or `/jobs/{job_id}/events`.
+`publish_uri` is optional. When present, the completed export directory is copied
+to a local, `file://`, or `fsspec` destination and the manifest records
+`artifacts.publish`. `ROBOT_DATA_STUDIO_EXPORT_PUBLISH_URI` can provide the same
+destination as a deployment default.
 
 When `episode_indices` is empty, `splits` can select all episodes whose saved
 split matches values such as `train`, `val`, or `test`.

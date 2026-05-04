@@ -271,7 +271,8 @@ Definition of done:
 - [x] Add queue-backed Rerun session job endpoint.
 - [x] Add auth and user identities.
 - [x] Add multi-user review assignment.
-- [ ] Add object storage support for cache and exports.
+- [x] Add object storage publishing for export artifacts.
+- [ ] Add object storage publishing for cache artifacts.
 - [x] Add deployment docs.
 
 ## Recommended Immediate Order
@@ -280,7 +281,7 @@ Definition of done:
    and larger representative downloaded or `hf://` Lance subsets.
 2. Run a real CLIP/SigLIP text-to-image search smoke with generated visual
    embeddings.
-3. Add object storage publishing for cache and exports.
+3. Add object storage publishing for cache artifacts.
 
 ## Validation Checklist
 

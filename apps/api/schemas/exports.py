@@ -9,6 +9,7 @@ class ExportCreateRequest(BaseModel):
     splits: list[str] = Field(default_factory=list)
     format: ExportFormat = ExportFormat.lerobot
     version_description: str | None = None
+    publish_uri: str | None = None
 
 
 class ExportRecord(BaseModel):

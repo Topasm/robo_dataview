@@ -12,6 +12,13 @@ from apps.api.schemas.episodes import EpisodeDetail
 from apps.api.schemas.exports import ExportCreateRequest, ExportRecord
 from apps.api.schemas.frames import FrameRecord
 from apps.api.services.annotation_service import annotation_store
+from apps.api.services.artifact_storage import (
+    ArtifactPublishDependencyError,
+    ArtifactPublishError,
+    configured_export_publish_uri,
+    publish_directory,
+    publish_file,
+)
 from apps.api.services.hf_dataset_export import (
     HFDatasetExportDependencyError,
     write_hf_dataset_export,
@@ -284,6 +291,7 @@ class ExportStore:
             "format": record.format,
             "splits": payload.splits,
             "version_description": payload.version_description,
+            "publish_uri": payload.publish_uri or configured_export_publish_uri(),
             "created_at": datetime.now(timezone.utc).isoformat(),
             "num_episodes": len(episodes),
             "episode_indices": [episode["episode_index"] for episode in episodes],
@@ -293,6 +301,42 @@ class ExportStore:
         }
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest_path.write_text(json.dumps(manifest, indent=2, default=str), encoding="utf-8")
+        publish_uri = manifest.get("publish_uri")
+        if publish_uri:
+            try:
+                publish_artifact = publish_directory(
+                    manifest_path.parent,
+                    str(publish_uri),
+                    exclude_names={"manifest.json"},
+                )
+                publish_artifact["manifest_uri"] = f"{str(publish_uri).rstrip('/')}/manifest.json"
+                artifacts["publish"] = publish_artifact
+                manifest["artifacts"] = artifacts
+                manifest_path.write_text(
+                    json.dumps(manifest, indent=2, default=str),
+                    encoding="utf-8",
+                )
+                publish_file(manifest_path, str(publish_uri), relative_path="manifest.json")
+            except (ArtifactPublishDependencyError, ArtifactPublishError) as exc:
+                artifacts["publish"] = {
+                    "destination_uri": str(publish_uri),
+                    "metadata_ok": False,
+                    "errors": [str(exc)],
+                }
+                manifest["artifacts"] = artifacts
+                manifest_path.write_text(
+                    json.dumps(manifest, indent=2, default=str),
+                    encoding="utf-8",
+                )
+                return model_copy(
+                    record,
+                    update={
+                        "status": JobStatus.failed,
+                        "output_uri": str(manifest_path),
+                        "message": f"Export artifact publishing failed: {exc}",
+                        "artifacts": artifacts,
+                    },
+                )
         if self._versions is not None:
             self._versions.append(
                 create_export_version_record(
