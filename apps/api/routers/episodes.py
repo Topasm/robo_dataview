@@ -1,7 +1,8 @@
 from io import BytesIO
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Header, HTTPException, Query, Request
+from fastapi.responses import Response, StreamingResponse
 
 from apps.api.schemas.episodes import EpisodeDetail, EpisodeListItem, StateActionSummary
 from apps.api.services.lance_store import store
@@ -35,13 +36,72 @@ def state_action_summary(episode_index: int, dataset_id: str = Query(...)) -> St
     return summary
 
 
-@router.get("/episodes/{episode_index}/video/{camera}")
-def episode_video(episode_index: int, camera: str, dataset_id: str = Query(...)) -> StreamingResponse:
+@router.get("/episodes/{episode_index}/video/{camera}", response_model=None)
+@router.head("/episodes/{episode_index}/video/{camera}", response_model=None)
+def episode_video(
+    episode_index: int,
+    camera: str,
+    request: Request,
+    dataset_id: str = Query(...),
+    range_header: Annotated[str | None, Header(alias="Range")] = None,
+) -> Response | StreamingResponse:
     blob = store.get_video_blob(dataset_id, episode_index, camera)
     if blob is None:
         raise HTTPException(status_code=404, detail="Video blob not found")
+    blob_len = len(blob)
+    base_headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(blob_len),
+    }
+    if range_header is not None:
+        byte_range = _parse_byte_range(range_header, blob_len)
+        if byte_range is None:
+            return Response(
+                status_code=416,
+                media_type="video/mp4",
+                headers={
+                    "Accept-Ranges": "bytes",
+                    "Content-Range": f"bytes */{blob_len}",
+                },
+            )
+        start, end = byte_range
+        content_length = end - start + 1
+        headers = {
+            "Accept-Ranges": "bytes",
+            "Content-Range": f"bytes {start}-{end}/{blob_len}",
+            "Content-Length": str(content_length),
+        }
+        if request.method == "HEAD":
+            return Response(status_code=206, media_type="video/mp4", headers=headers)
+        return Response(
+            content=blob[start : end + 1],
+            status_code=206,
+            media_type="video/mp4",
+            headers=headers,
+        )
+    if request.method == "HEAD":
+        return Response(media_type="video/mp4", headers=base_headers)
     return StreamingResponse(
         BytesIO(blob),
         media_type="video/mp4",
-        headers={"Content-Length": str(len(blob))},
+        headers=base_headers,
     )
+
+
+def _parse_byte_range(range_header: str, blob_len: int) -> tuple[int, int] | None:
+    if not range_header.startswith("bytes="):
+        return None
+    range_spec = range_header.removeprefix("bytes=").strip()
+    if "," in range_spec or "-" not in range_spec:
+        return None
+    start_text, end_text = range_spec.split("-", 1)
+    if not start_text.strip():
+        return None
+    try:
+        start = int(start_text)
+        end = blob_len - 1 if not end_text.strip() else int(end_text)
+    except ValueError:
+        return None
+    if start < 0 or end < start or start >= blob_len:
+        return None
+    return start, min(end, blob_len - 1)

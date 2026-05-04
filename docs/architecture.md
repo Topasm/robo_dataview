@@ -40,6 +40,65 @@ Python Workers
   LeRobot/HF export
 ```
 
+## Current Implementation Snapshot
+
+The current codebase implements the MVP as a local-first monorepo:
+
+```text
+apps/web
+  Next.js app router UI
+  Dataset browser
+  Episode list
+  Episode viewer shell
+  Timeline panel
+  Annotation editor
+  Search/filter bar
+  Rerun panel
+  Export strip
+
+apps/api
+  FastAPI app
+  In-memory service registries for datasets, jobs, exports, Rerun sessions
+  JSONL-backed annotation, embedding, and version stores
+  Optional Lance mirroring when pyarrow/lance are installed
+
+packages/robot_schema
+  Shared Lance table column definitions
+  PyArrow schema builders for annotations, embeddings, versions
+
+workers
+  Heuristic VLM proposal generator
+  Placeholder worker entry points for embeddings, thumbnails, Rerun cache, export
+
+data
+  Local annotations, embeddings, versions, cache, and export artifacts
+```
+
+Implemented now:
+
+- Lance dataset open/index for `frames.lance`, `episodes.lance`, and
+  `videos.lance` style roots.
+- LeRobot v3 metadata snapshot import/export helpers.
+- Dataset summary, schema, episode list/detail, state/action summary, and video
+  blob endpoints.
+- Annotation CRUD with range validation and persisted JSONL.
+- Optional `annotations.lance`, `embeddings.lance`, and `versions.lance`
+  mirroring.
+- Deterministic text-embedding semantic search for local development.
+- Rerun `.rrd` cache generation for state/action scalar timelines.
+- Metadata-oriented LeRobot v3 export manifest and version lineage.
+- Web UI orchestration via `useStudioData`.
+
+Not implemented yet:
+
+- Durable external database for jobs, sessions, users, and app settings.
+- Real worker queue such as RQ/Celery plus Redis.
+- Real VLM/video-model inference.
+- LanceDB vector index search.
+- Full frame table browser and frame-level mutation workflow.
+- Full LeRobot Parquet/MP4 materialization.
+- Production auth, multi-user review assignment, and audit history.
+
 ## Design Principles
 
 1. Lance owns durable data: raw episodes, annotations, embeddings, versions, and
@@ -50,6 +109,29 @@ Python Workers
    `review_status = "pending"` until reviewed by a human.
 4. LeRobot compatibility is a first-class constraint, so curated subsets must
    be exportable for training pipelines.
+
+## Service Boundaries
+
+```text
+Frontend state
+  Owns transient UI state, selection, open panels, optimistic interactions.
+
+FastAPI services
+  Own dataset indexing, validation, API contracts, local persistence, and
+  synchronous MVP job execution.
+
+Lance-compatible stores
+  Own annotation, embedding, and version records. JSONL is the mandatory local
+  fallback; Lance mirroring is optional.
+
+Workers
+  Will own expensive or asynchronous compute. The current VLM path is executed
+  synchronously through `JobStore` as a development scaffold.
+
+Rerun
+  Owns replay visualization artifacts only. Annotation source of truth stays in
+  the annotation store.
+```
 
 ## Runtime Flow
 
@@ -73,4 +155,26 @@ Export subset
   -> accepted annotations are applied
   -> worker creates LeRobot/Lance/HF-compatible output
   -> versions.lance records lineage
+```
+
+## Deployment Direction
+
+Local MVP:
+
+```text
+Next.js dev server
+FastAPI + Uvicorn
+Local filesystem data/
+Optional local Lance dependencies
+```
+
+Team/server mode:
+
+```text
+Next.js frontend
+FastAPI API service
+Redis + RQ or Celery workers
+Lance/LanceDB on local NVMe, S3, MinIO, or HF Hub cache
+SQLite/Postgres for app metadata
+Rerun recording cache on shared object storage
 ```

@@ -4,6 +4,34 @@ This schema targets Lance-native LeRobot datasets with separate tables for
 frame-level sampling, episode-level replay, raw videos, annotations, embeddings,
 and curated versions.
 
+## Current Storage Contract
+
+The target source of truth is Lance-compatible storage. The current local MVP
+uses JSONL as the mandatory durable fallback and mirrors to `.lance` datasets
+when optional `pyarrow` and `lance` packages are available.
+
+```text
+data/lance/annotations/<dataset>/annotations.jsonl
+data/lance/annotations/<dataset>/annotations.lance
+
+data/lance/embeddings/<dataset>/embeddings.jsonl
+data/lance/embeddings/<dataset>/embeddings.lance
+
+data/lance/versions/versions.jsonl
+data/lance/versions/versions.lance
+```
+
+The imported `xvla-soft-fold` dataset currently exposes camera names like:
+
+```text
+observation_images_cam_high
+observation_images_cam_left_wrist
+observation_images_cam_right_wrist
+```
+
+The target examples below use shorter camera names for readability. Loader code
+should keep supporting generic camera columns instead of hard-coding names.
+
 ## frames.lance
 
 Purpose:
@@ -30,6 +58,10 @@ vlm_step_caption: string
 human_step_caption: string
 review_status: string
 ```
+
+Current status: frame schema is documented but the frame API is still a
+placeholder. Frame-level sampling, bad-frame labels, and frame mutation are not
+implemented yet.
 
 ## episodes.lance
 
@@ -112,6 +144,11 @@ The source-of-truth code definition lives in
 environment with PyArrow installed, `build_annotations_pyarrow_schema()` returns
 the schema used to create `annotations.lance`.
 
+The API stores annotations under `data/lance/annotations/<dataset>/`. It always
+writes `annotations.jsonl` for restart-safe local development. When `pyarrow`
+and `lance` are installed, the same records are mirrored to
+`annotations.lance` with the schema above.
+
 Allowed `source` values:
 
 ```text
@@ -153,6 +190,20 @@ source_model: string
 created_at: timestamp
 ```
 
+The source-of-truth code definition lives in
+`packages/robot_schema/lance_tables.py` as `EMBEDDINGS_COLUMNS`. In an
+environment with PyArrow installed, `build_embeddings_pyarrow_schema()` returns
+the schema used to create `embeddings.lance`.
+
+The API writes deterministic text embeddings under
+`data/lance/embeddings/<dataset>/embeddings.jsonl` for local search. When
+`pyarrow` and `lance` are installed, these rows are mirrored to
+`embeddings.lance`.
+
+Current status: embeddings are deterministic 64-dimensional text-hash vectors.
+They are intended as a no-model local development path, not the final visual or
+video embedding system.
+
 ## versions.lance
 
 Purpose:
@@ -175,3 +226,29 @@ export_format: string
 created_at: timestamp
 created_by: string
 ```
+
+The API appends version rows to `data/lance/versions/versions.jsonl` whenever an
+export succeeds. With `pyarrow` and `lance` installed, rows are mirrored to
+`versions.lance`.
+
+Note: `export_uri` is also part of the current code schema so export manifests
+can be resolved from version rows.
+
+## LeRobot v3 export snapshot
+
+`format=lerobot` exports currently write a metadata-only v3-oriented snapshot:
+
+```text
+lerobot_v3/
+├─ meta/
+│  ├─ info.json
+│  ├─ tasks.jsonl
+│  └─ episodes/chunk-000/file-000.jsonl
+├─ data/chunk-000/file-000.index.jsonl
+├─ videos/
+└─ annotations/annotations.jsonl
+```
+
+The snapshot follows the LeRobot v3 directory contract for selected episodes and
+accepted annotations, but it is not yet a full Parquet/MP4 materialization. Full
+materialization needs the optional `lerobot` and `pyarrow` dependencies.

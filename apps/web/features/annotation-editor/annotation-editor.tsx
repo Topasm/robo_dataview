@@ -1,14 +1,113 @@
-import { Check, Pencil, Split, Trash2, X } from "lucide-react";
+import { useState } from "react";
+import { Bot, Check, GitBranch, Plus, Save, Trash2, X } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
-import type { Episode, SegmentAnnotation } from "@/lib/types";
+import type { Episode, JobRecord, ReviewStatus, SegmentAnnotation } from "@/lib/types";
+
+type AnnotationDraft = {
+  labelType: string;
+  labelValue: string;
+  startFrame: number;
+  endFrame: number;
+};
 
 type AnnotationEditorProps = {
   episode: Episode;
   annotations: SegmentAnnotation[];
+  vlmJob: JobRecord | null;
+  onCreateSegment: (draft: AnnotationDraft) => Promise<void>;
+  onDeleteSegment: (annotationId: string) => Promise<void>;
+  onRunVlmLabel: () => Promise<void>;
+  onSplitSegment: (annotation: SegmentAnnotation) => Promise<void>;
+  onUpdateSegment: (annotationId: string, draft: AnnotationDraft) => Promise<void>;
+  onUpdateReviewStatus: (annotationId: string, status: ReviewStatus) => Promise<void>;
 };
 
-export function AnnotationEditor({ episode, annotations }: AnnotationEditorProps) {
+export function AnnotationEditor({
+  episode,
+  annotations,
+  vlmJob,
+  onCreateSegment,
+  onDeleteSegment,
+  onRunVlmLabel,
+  onSplitSegment,
+  onUpdateSegment,
+  onUpdateReviewStatus
+}: AnnotationEditorProps) {
+  const [draft, setDraft] = useState<AnnotationDraft>({
+    labelType: "phase",
+    labelValue: "phase_label",
+    startFrame: 0,
+    endFrame: Math.max(0, Math.min(episode.length - 1, 30))
+  });
+  const [editingRows, setEditingRows] = useState<Record<string, AnnotationDraft>>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [isRunningVlm, setIsRunningVlm] = useState(false);
+
+  async function handleCreateSegment() {
+    if (!draft.labelValue.trim()) {
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await onCreateSegment({
+        ...draft,
+        labelValue: draft.labelValue.trim()
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleUpdateSegment(annotation: SegmentAnnotation) {
+    const edit = editingRows[annotation.id] ?? toDraft(annotation);
+    if (!edit.labelValue.trim()) {
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await onUpdateSegment(annotation.id, {
+        ...edit,
+        labelValue: edit.labelValue.trim()
+      });
+      setEditingRows((current) => {
+        const next = { ...current };
+        delete next[annotation.id];
+        return next;
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleSplitSegment(annotation: SegmentAnnotation) {
+    setIsSaving(true);
+    try {
+      await onSplitSegment(annotation);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function updateRowDraft(annotation: SegmentAnnotation, patch: Partial<AnnotationDraft>) {
+    setEditingRows((current) => ({
+      ...current,
+      [annotation.id]: {
+        ...(current[annotation.id] ?? toDraft(annotation)),
+        ...patch
+      }
+    }));
+  }
+
+  async function handleRunVlmLabel() {
+    setIsRunningVlm(true);
+    try {
+      await onRunVlmLabel();
+    } finally {
+      setIsRunningVlm(false);
+    }
+  }
+
   return (
     <aside className="right-panel">
       <section className="panel-section">
@@ -44,26 +143,164 @@ export function AnnotationEditor({ episode, annotations }: AnnotationEditorProps
       </section>
 
       <section className="panel-section">
+        <div className="section-title">VLM Proposals</div>
+        <button
+          className="text-button vlm-run-button"
+          disabled={isRunningVlm}
+          onClick={handleRunVlmLabel}
+          type="button"
+        >
+          <Bot size={15} />
+          Run VLM
+        </button>
+        {vlmJob ? (
+          <div className="vlm-job-status">
+            <StatusPill status={vlmJob.status} />
+            <span className="muted">{vlmJob.message}</span>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="panel-section">
+        <div className="section-title">New Segment</div>
+        <div className="segment-form">
+          <label>
+            Type
+            <select
+              onChange={(event) => setDraft((current) => ({ ...current, labelType: event.target.value }))}
+              value={draft.labelType}
+            >
+              <option value="phase">phase</option>
+              <option value="bad_range">bad_range</option>
+              <option value="important_frame">important_frame</option>
+              <option value="failure_event">failure_event</option>
+            </select>
+          </label>
+          <label>
+            Phase
+            <input
+              onChange={(event) => setDraft((current) => ({ ...current, labelValue: event.target.value }))}
+              value={draft.labelValue}
+            />
+          </label>
+          <label>
+            Start
+            <input
+              min={0}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, startFrame: Number(event.target.value) }))
+              }
+              type="number"
+              value={draft.startFrame}
+            />
+          </label>
+          <label>
+            End
+            <input
+              min={0}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, endFrame: Number(event.target.value) }))
+              }
+              type="number"
+              value={draft.endFrame}
+            />
+          </label>
+          <button
+            className="text-button segment-save-button"
+            disabled={isSaving}
+            onClick={handleCreateSegment}
+            type="button"
+          >
+            <Plus size={15} />
+            Add
+          </button>
+        </div>
+      </section>
+
+      <section className="panel-section">
         <div className="section-title">Segments</div>
         <div className="segment-list">
+          {annotations.length === 0 ? <div className="empty-state">No annotations for this episode.</div> : null}
           {annotations.map((annotation) => (
             <div className="segment-row" key={annotation.id}>
-              <div>
-                <div className="segment-label">{annotation.labelValue}</div>
+              <div className="segment-edit-grid">
+                <input
+                  aria-label="Segment label"
+                  onChange={(event) => updateRowDraft(annotation, { labelValue: event.target.value })}
+                  value={(editingRows[annotation.id] ?? toDraft(annotation)).labelValue}
+                />
+                <select
+                  aria-label="Segment type"
+                  onChange={(event) => updateRowDraft(annotation, { labelType: event.target.value })}
+                  value={(editingRows[annotation.id] ?? toDraft(annotation)).labelType}
+                >
+                  <option value="phase">phase</option>
+                  <option value="bad_range">bad_range</option>
+                  <option value="important_frame">important_frame</option>
+                  <option value="failure_event">failure_event</option>
+                  <option value="episode_caption">episode_caption</option>
+                  <option value="success_label">success_label</option>
+                </select>
+                <input
+                  aria-label="Start frame"
+                  min={0}
+                  onChange={(event) => updateRowDraft(annotation, { startFrame: Number(event.target.value) })}
+                  type="number"
+                  value={(editingRows[annotation.id] ?? toDraft(annotation)).startFrame}
+                />
+                <input
+                  aria-label="End frame"
+                  min={0}
+                  onChange={(event) => updateRowDraft(annotation, { endFrame: Number(event.target.value) })}
+                  type="number"
+                  value={(editingRows[annotation.id] ?? toDraft(annotation)).endFrame}
+                />
                 <div className="muted mono">
-                  {annotation.startFrame}-{annotation.endFrame} / {annotation.source} /{" "}
-                  {annotation.confidence.toFixed(2)}
+                  {annotation.source} / {annotation.confidence.toFixed(2)}
                 </div>
               </div>
               <StatusPill status={annotation.reviewStatus} />
               <div className="segment-actions">
-                <button className="icon-button compact" title="Edit segment" type="button">
-                  <Pencil size={14} />
+                <button
+                  className="icon-button compact"
+                  disabled={isSaving}
+                  onClick={() => handleUpdateSegment(annotation)}
+                  title="Save segment edits"
+                  type="button"
+                >
+                  <Save size={14} />
                 </button>
-                <button className="icon-button compact" title="Split segment" type="button">
-                  <Split size={14} />
+                <button
+                  className="icon-button compact"
+                  disabled={isSaving || annotation.endFrame <= annotation.startFrame}
+                  onClick={() => handleSplitSegment(annotation)}
+                  title="Split segment at midpoint"
+                  type="button"
+                >
+                  <GitBranch size={14} />
                 </button>
-                <button className="icon-button compact danger" title="Delete segment" type="button">
+                <button
+                  className="icon-button compact"
+                  onClick={() => onUpdateReviewStatus(annotation.id, "accepted")}
+                  title="Accept segment"
+                  type="button"
+                >
+                  <Check size={14} />
+                </button>
+                <button
+                  className="icon-button compact"
+                  onClick={() => onUpdateReviewStatus(annotation.id, "rejected")}
+                  title="Reject segment"
+                  type="button"
+                >
+                  <X size={14} />
+                </button>
+                <button
+                  className="icon-button compact danger"
+                  onClick={() => onDeleteSegment(annotation.id)}
+                  title="Delete segment"
+                  type="button"
+                >
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -73,4 +310,13 @@ export function AnnotationEditor({ episode, annotations }: AnnotationEditorProps
       </section>
     </aside>
   );
+}
+
+function toDraft(annotation: SegmentAnnotation): AnnotationDraft {
+  return {
+    labelType: annotation.labelType,
+    labelValue: annotation.labelValue,
+    startFrame: annotation.startFrame,
+    endFrame: annotation.endFrame
+  };
 }

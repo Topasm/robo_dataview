@@ -6,6 +6,10 @@ from fastapi import HTTPException
 
 from apps.api.schemas.common import JobStatus
 from apps.api.schemas.jobs import JobCreateRequest, JobRecord
+from apps.api.services.annotation_service import annotation_store
+from apps.api.services.lance_store import store
+from apps.api.services.pydantic_compat import model_copy
+from workers.vlm_autolabel import AutoLabelConfig, build_vlm_annotation_proposals
 
 
 class JobStore:
@@ -17,12 +21,23 @@ class JobStore:
         record = JobRecord(
             job_id=job_id,
             kind=kind,
-            status=JobStatus.queued,
+            status=JobStatus.running,
             dataset_id=payload.dataset_id,
             episode_indices=payload.episode_indices,
             progress=0.0,
-            message="Worker queue integration is planned for Phase 5.",
+            model=payload.model,
+            prompt_template=payload.prompt_template,
         )
+        if kind == "vlm_label":
+            record = self._run_vlm_label_job(record, payload)
+        else:
+            record = model_copy(
+                record,
+                update={
+                    "status": JobStatus.queued,
+                    "message": "Worker queue integration is not configured for this job type.",
+                }
+            )
         self._records[job_id] = record
         return record
 
@@ -31,6 +46,55 @@ class JobStore:
         if record is None:
             raise HTTPException(status_code=404, detail="Job not found")
         return record
+
+    def _run_vlm_label_job(self, record: JobRecord, payload: JobCreateRequest) -> JobRecord:
+        episode_indices = payload.episode_indices
+        if not episode_indices:
+            episode_indices = [
+                episode.episode_index
+                for episode in store.list_episodes(payload.dataset_id, limit=1000, offset=0)
+            ]
+        if not episode_indices:
+            return model_copy(
+                record,
+                update={
+                    "status": JobStatus.failed,
+                    "progress": 1.0,
+                    "message": "No episodes matched the VLM auto-label request.",
+                }
+            )
+
+        config = AutoLabelConfig(model=payload.model, prompt_template=payload.prompt_template)
+        created_annotation_ids: list[str] = []
+        missing_episodes: list[int] = []
+        for episode_index in episode_indices:
+            episode = store.get_episode(payload.dataset_id, episode_index)
+            if episode is None:
+                missing_episodes.append(episode_index)
+                continue
+            proposals = build_vlm_annotation_proposals(payload.dataset_id, episode, config)
+            created_annotation_ids.extend(
+                annotation_store.create(proposal).annotation_id for proposal in proposals
+            )
+
+        status = JobStatus.succeeded if created_annotation_ids else JobStatus.failed
+        message = (
+            f"Generated {len(created_annotation_ids)} pending VLM annotation proposals."
+            if created_annotation_ids
+            else "No VLM annotation proposals were generated."
+        )
+        if missing_episodes:
+            message = f"{message} Missing episodes: {missing_episodes}."
+        return model_copy(
+            record,
+            update={
+                "status": status,
+                "episode_indices": episode_indices,
+                "progress": 1.0,
+                "message": message,
+                "created_annotation_ids": created_annotation_ids,
+            }
+        )
 
 
 jobs = JobStore()

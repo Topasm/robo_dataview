@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import types
+from pathlib import Path
 import unittest
 
 from apps.api.schemas.datasets import DatasetOpenRequest
+from apps.api.schemas.episodes import EpisodeDetail
+from apps.api.schemas.search import FilterSearchRequest
 from apps.api.services.lance_store import LanceDatasetStore
+from apps.api.services.lerobot_io import write_lerobot_v3_snapshot
 
 
 class FakeSchema:
@@ -28,6 +33,18 @@ class FakeScanner:
 
     def to_table(self) -> FakeTable:
         return FakeTable(self._rows)
+
+
+class FakeBlobFile:
+    def __init__(self, payload: bytes) -> None:
+        self.payload = payload
+        self.closed = False
+
+    def read(self) -> bytes:
+        return self.payload
+
+    def close(self) -> None:
+        self.closed = True
 
 
 class FakeDataset:
@@ -58,6 +75,9 @@ class FakeDataset:
         if limit is not None:
             rows = rows[:limit]
         return FakeScanner([self._project(row, columns) for row in rows])
+
+    def take_blobs(self, blob_column: str, indices: list[int]) -> list[FakeBlobFile]:
+        return [FakeBlobFile(self._rows[index][blob_column]) for index in indices]
 
     @staticmethod
     def _project(row: dict[str, object], columns: list[str] | None) -> dict[str, object]:
@@ -138,6 +158,66 @@ class LanceDatasetStoreTest(unittest.TestCase):
         self.assertEqual(state_action.action_dim, 2)
         self.assertEqual(state_action.action_norm_max, 5.0)
         self.assertEqual(video_blob, b"not-loaded-in-metadata")
+
+    def test_open_dataset_indexes_lerobot_v3_metadata_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir)
+            artifact = write_lerobot_v3_snapshot(
+                export_dir,
+                dataset_id="sample-xvla-soft-fold",
+                episodes=[
+                    EpisodeDetail(
+                        dataset_id="sample-xvla-soft-fold",
+                        episode_index=7,
+                        task_index=4,
+                        length=30,
+                        review_status="accepted",
+                        fps=15.0,
+                        camera_names=["cam_high"],
+                        language_instruction="Place the cloth.",
+                    )
+                ],
+                annotations_by_episode={},
+                version_description="import test",
+            )
+            store = LanceDatasetStore()
+            record = store.open_dataset(
+                DatasetOpenRequest(uri=artifact["root"], name="snapshot-import")
+            )
+            summary = store.get_summary(record.dataset_id)
+            episodes = store.list_episodes(record.dataset_id, limit=10, offset=0)
+
+            self.assertEqual(record.status, "indexed")
+            self.assertEqual(record.message, "LeRobot v3 metadata snapshot indexed.")
+            self.assertIsNotNone(summary)
+            self.assertEqual(summary.episode_count, 1)
+            self.assertEqual(summary.frame_count, 30)
+            self.assertEqual(summary.camera_names, ["cam_high"])
+            self.assertEqual(episodes[0].episode_index, 7)
+            self.assertEqual(episodes[0].task_index, 4)
+
+    def test_filter_search_evaluates_basic_episode_predicates(self) -> None:
+        store = LanceDatasetStore()
+        results = store.filter_search(
+            FilterSearchRequest(
+                dataset_id="sample-xvla-soft-fold",
+                query="success_label == true AND quality_score >= 0.8",
+            )
+        )
+
+        self.assertEqual([result.episode_index for result in results], [2])
+        self.assertEqual(results[0].match_type, "episode_filter")
+
+    def test_filter_search_supports_aliases_and_contains(self) -> None:
+        store = LanceDatasetStore()
+        results = store.filter_search(
+            FilterSearchRequest(
+                dataset_id="sample-xvla-soft-fold",
+                query='status contains "accept" AND task = 3',
+            )
+        )
+
+        self.assertEqual([result.episode_index for result in results], [0, 2])
 
 
 if __name__ == "__main__":

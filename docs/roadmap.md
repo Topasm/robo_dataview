@@ -1,5 +1,35 @@
 # Roadmap
 
+Status legend:
+
+```text
+done       implemented and verified in the local MVP path
+partial    usable scaffold exists, but important behavior is missing
+planned    not implemented yet
+```
+
+## Current Phase Status
+
+```text
+Phase 0  Specification               done
+Phase 1  Lance Dataset Explorer       done
+Phase 2  Basic Web Viewer             partial
+Phase 3  Rerun Web Viewer             partial
+Phase 4  Annotation System            partial
+Phase 5  VLM Auto-Labeling            partial
+Phase 6  Search and Filtering         partial
+Phase 7  Export and Versioning        partial
+```
+
+Current verified baseline:
+
+- Python tests pass.
+- Web lint, typecheck, and production build pass.
+- `xvla-soft-fold` is indexed through the API.
+- Dataset summary reports 1,542 episodes, 2,852,512 frames, 20 FPS, and three
+  camera streams.
+- Sample Rerun `.rrd` generation works.
+
 ## Phase 0: Specification
 
 Deliverables:
@@ -22,6 +52,14 @@ Completion criteria:
 - The web UI displays an episode table.
 - Clicking an episode shows camera preview placeholders and state/action summary.
 
+Current status: done.
+
+Remaining hardening:
+
+- Add pagination/sorting for large episode lists.
+- Add better error messages for missing optional Lance dependencies.
+- Add dataset close/reload controls.
+
 ## Phase 2: Basic Web Viewer
 
 Goal:
@@ -36,6 +74,15 @@ Features:
 - Metadata panel
 - Episode label editing
 
+Current status: partial.
+
+Next:
+
+- Render actual multi-camera video panes when episode video blobs exist.
+- Add frame scrubber with timestamp/frame synchronization.
+- Add state/action chart visualization instead of summary-only display.
+- Add episode-level metadata edit endpoints and UI.
+
 ## Phase 3: Rerun Web Viewer
 
 Goal:
@@ -48,6 +95,20 @@ Implementation order:
 2. JavaScript package integration.
 3. React wrapper.
 4. gRPC streaming.
+
+Current status: partial.
+
+Implemented:
+
+- Backend creates `.rrd` cache files for state/action scalar timelines.
+- API serves generated recordings.
+
+Next:
+
+- Wire web Rerun panel to open generated `.rrd` URLs in the embedded viewer.
+- Add camera/video logging to Rerun recordings.
+- Cache by dataset version, episode index, and visualization config.
+- Add async Rerun cache worker.
 
 ## Phase 4: Annotation System
 
@@ -64,6 +125,22 @@ Features:
 - Review status
 - Annotation history
 
+Current status: partial.
+
+Implemented:
+
+- Segment annotation CRUD.
+- JSONL persistence.
+- Optional Lance mirror.
+- Review status updates.
+
+Next:
+
+- Add episode-level label editing.
+- Add drag/split/merge timeline editing.
+- Add bad frame/range labels.
+- Add annotation history and audit fields beyond `created_at`/`updated_at`.
+
 ## Phase 5: VLM Auto-Labeling
 
 Goal:
@@ -76,6 +153,21 @@ Initial approach:
 - Ask a VLM for episode caption, phase ranges, success/failure, objects, and
   important frames.
 - Store all output as pending annotations.
+
+Current status: partial.
+
+Implemented:
+
+- Synchronous job API.
+- Heuristic proposal generator.
+- Pending annotations are created for review.
+
+Next:
+
+- Move job execution to RQ/Celery.
+- Add real keyframe extraction.
+- Add provider abstraction for local/API VLMs.
+- Store raw model response, prompt version, and confidence rationale.
 
 ## Phase 6: Search and Filtering
 
@@ -91,6 +183,21 @@ Features:
 - Combined search
 - Saved filter presets
 
+Current status: partial.
+
+Implemented:
+
+- Basic `AND` filter syntax.
+- Deterministic text-embedding semantic search over episode text and
+  annotations.
+
+Next:
+
+- Add LanceDB vector index.
+- Add full-text search.
+- Add combined filter + semantic ranking.
+- Save and name filter presets.
+
 ## Phase 7: Export and Versioning
 
 Goal:
@@ -104,3 +211,19 @@ Targets:
 - Lance subset
 - JSONL captions
 - VLA training format
+
+Current status: partial.
+
+Implemented:
+
+- Selected episode export manifest.
+- Metadata-oriented LeRobot v3 snapshot.
+- Accepted annotations only.
+- Version lineage JSONL plus optional Lance mirror.
+
+Next:
+
+- Materialize full LeRobot Parquet/MP4 artifacts.
+- Add Lance subset export.
+- Add train/val/test split controls.
+- Add export validation report.

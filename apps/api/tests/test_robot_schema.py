@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import unittest
 
-from packages.robot_schema import ANNOTATIONS_COLUMNS, annotations_column_names
+from packages.robot_schema import (
+    ANNOTATIONS_COLUMNS,
+    annotations_column_names,
+    embeddings_column_names,
+    versions_column_names,
+)
 
 
 class RobotSchemaTest(unittest.TestCase):
@@ -28,6 +33,41 @@ class RobotSchemaTest(unittest.TestCase):
         non_nullable = {column.name for column in ANNOTATIONS_COLUMNS if not column.nullable}
         self.assertIn("annotation_id", non_nullable)
         self.assertIn("review_status", non_nullable)
+
+    def test_embeddings_schema_contains_required_columns_in_order(self) -> None:
+        self.assertEqual(
+            embeddings_column_names(),
+            [
+                "embedding_id",
+                "episode_index",
+                "frame_index",
+                "clip_start_frame",
+                "clip_end_frame",
+                "modality",
+                "embedding",
+                "text",
+                "source_model",
+                "created_at",
+            ],
+        )
+
+    def test_versions_schema_contains_required_columns_in_order(self) -> None:
+        self.assertEqual(
+            versions_column_names(),
+            [
+                "version_id",
+                "parent_version_id",
+                "dataset_id",
+                "description",
+                "filter_query",
+                "num_episodes",
+                "num_frames",
+                "export_format",
+                "export_uri",
+                "created_at",
+                "created_by",
+            ],
+        )
 
 
 if __name__ == "__main__":

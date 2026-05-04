@@ -30,11 +30,39 @@ high-quality datasets for VLA and robot policy training.
 apps/
   api/        FastAPI backend
   web/        Next.js frontend
-docs/         Phase 0 architecture, schema, API, and UI docs
+docs/         Architecture, schema, API, UI, roadmap, and execution plan
 workers/      Python worker entry points
 packages/     Shared schema and prompts
 data/         Local Lance data, cache, and exports
 ```
+
+## Current Implementation State
+
+The repository has moved past a pure skeleton. The current MVP path can:
+
+1. Open and index the `lance-format/lerobot-xvla-soft-fold` Lance dataset.
+2. Serve dataset summaries, episode lists, episode details, state/action
+   summaries, and MP4 blobs when available.
+3. Store human and generated annotations as JSONL and mirror them to Lance when
+   optional Lance dependencies are installed.
+4. Generate Rerun `.rrd` cache files for state/action timeline inspection.
+5. Run basic filter search and deterministic text-embedding semantic search.
+6. Create heuristic VLM-style annotation proposals for review.
+7. Export selected episodes as a metadata-oriented LeRobot v3 snapshot and
+   record version lineage.
+8. Render the main web operations UI with dataset, episode, viewer, annotation,
+   search, Rerun, and export panels.
+
+Known MVP gaps:
+
+- The frame API is still a placeholder.
+- Multi-camera video playback needs stronger browser UX and seek behavior.
+- Rerun is generated as `.rrd` cache, but the embedded viewer integration is
+  still early.
+- VLM labeling is heuristic/local scaffolding, not real model inference.
+- Semantic search uses deterministic text hashing, not LanceDB vector indexes.
+- LeRobot export is metadata-oriented and does not yet materialize full
+  Parquet/MP4 training artifacts.
 
 ## MVP Scope
 
@@ -47,5 +75,4 @@ data/         Local Lance data, cache, and exports
 7. Run basic filters.
 8. Export selected episodes.
 
-The first implementation pass in this repository defines the architecture,
-schemas, API contracts, and minimal app skeleton needed to start Phase 1.
+See `docs/plan.md` for the current implementation plan and todo list.

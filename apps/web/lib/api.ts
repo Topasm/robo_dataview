@@ -1,6 +1,19 @@
-import type { DatasetSummary, Episode } from "./types";
+import type {
+  DatasetSummary,
+  Episode,
+  ExportRecord,
+  JobRecord,
+  RerunSession,
+  ReviewStatus,
+  SearchResult,
+  SegmentAnnotation,
+  StateActionSummary
+} from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000/api";
+const API_ROOT_URL = API_BASE_URL.endsWith("/api")
+  ? API_BASE_URL.slice(0, -"/api".length)
+  : API_BASE_URL;
 
 type DatasetRecordResponse = {
   dataset_id: string;
@@ -36,6 +49,92 @@ type EpisodeResponse = {
   camera_names?: string[];
 };
 
+type AnnotationResponse = {
+  annotation_id: string;
+  dataset_id: string;
+  episode_index: number;
+  start_frame: number;
+  end_frame: number;
+  label_type: string;
+  label_value: string;
+  source: SegmentAnnotation["source"];
+  confidence: number;
+  review_status: ReviewStatus;
+};
+
+type RerunSessionResponse = {
+  session_id: string;
+  dataset_id: string;
+  episode_index: number;
+  mode: string;
+  status: string;
+  viewer_url: string | null;
+  rrd_url: string | null;
+  message: string | null;
+};
+
+type JobRecordResponse = {
+  job_id: string;
+  kind: string;
+  status: string;
+  dataset_id: string;
+  episode_indices: number[];
+  progress: number;
+  message: string | null;
+  created_annotation_ids: string[];
+};
+
+type ExportRecordResponse = {
+  export_id: string;
+  dataset_id: string;
+  episode_indices: number[];
+  format: string;
+  status: string;
+  output_uri: string | null;
+  message: string | null;
+};
+
+type SearchResultResponse = {
+  dataset_id: string;
+  episode_index: number;
+  frame_index: number | null;
+  score: number | null;
+  match_type: string;
+  label: string | null;
+};
+
+type StateActionSummaryResponse = {
+  dataset_id: string;
+  episode_index: number;
+  frame_count: number;
+  state_dim: number | null;
+  action_dim: number | null;
+  state_norm_min: number | null;
+  state_norm_max: number | null;
+  action_norm_min: number | null;
+  action_norm_max: number | null;
+};
+
+export type SegmentAnnotationCreate = {
+  datasetId: string;
+  episodeIndex: number;
+  startFrame: number;
+  endFrame: number;
+  labelType: string;
+  labelValue: string;
+  source?: SegmentAnnotation["source"];
+  confidence?: number;
+  reviewStatus?: ReviewStatus;
+};
+
+export type SegmentAnnotationUpdate = {
+  startFrame?: number;
+  endFrame?: number;
+  labelType?: string;
+  labelValue?: string;
+  reviewStatus?: ReviewStatus;
+};
+
 export async function fetchDatasetSummaries(): Promise<DatasetSummary[]> {
   const datasets = await request<DatasetRecordResponse[]>("/datasets");
   return Promise.all(datasets.map((dataset) => fetchDatasetSummary(dataset.dataset_id)));
@@ -63,6 +162,164 @@ export async function openDataset(uri: string, name?: string): Promise<DatasetSu
 export function episodeVideoUrl(datasetId: string, episodeIndex: number, camera: string): string {
   const query = new URLSearchParams({ dataset_id: datasetId });
   return `${API_BASE_URL}/episodes/${episodeIndex}/video/${encodeURIComponent(camera)}?${query}`;
+}
+
+export async function fetchStateActionSummary(
+  datasetId: string,
+  episodeIndex: number,
+): Promise<StateActionSummary> {
+  const query = new URLSearchParams({ dataset_id: datasetId });
+  const row = await request<StateActionSummaryResponse>(
+    `/episodes/${episodeIndex}/state-action?${query}`
+  );
+  return toStateActionSummary(row);
+}
+
+export async function fetchAnnotations(
+  datasetId: string,
+  episodeIndex: number,
+): Promise<SegmentAnnotation[]> {
+  const query = new URLSearchParams({
+    dataset_id: datasetId,
+    episode_index: String(episodeIndex)
+  });
+  const rows = await request<AnnotationResponse[]>(`/annotations?${query}`);
+  return rows.map(toSegmentAnnotation);
+}
+
+export async function createSegmentAnnotation(
+  payload: SegmentAnnotationCreate,
+): Promise<SegmentAnnotation> {
+  const row = await request<AnnotationResponse>("/annotations", {
+    method: "POST",
+    body: JSON.stringify({
+      dataset_id: payload.datasetId,
+      episode_index: payload.episodeIndex,
+      start_frame: payload.startFrame,
+      end_frame: payload.endFrame,
+      label_type: payload.labelType,
+      label_value: payload.labelValue,
+      source: payload.source ?? "human",
+      confidence: payload.confidence ?? 1,
+      review_status: payload.reviewStatus ?? "accepted"
+    })
+  });
+  return toSegmentAnnotation(row);
+}
+
+export async function updateAnnotationReviewStatus(
+  annotationId: string,
+  reviewStatus: ReviewStatus,
+): Promise<SegmentAnnotation> {
+  const row = await request<AnnotationResponse>(`/annotations/${annotationId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ review_status: reviewStatus })
+  });
+  return toSegmentAnnotation(row);
+}
+
+export async function updateSegmentAnnotation(
+  annotationId: string,
+  payload: SegmentAnnotationUpdate,
+): Promise<SegmentAnnotation> {
+  const body: Record<string, number | string> = {};
+  if (payload.startFrame !== undefined) {
+    body.start_frame = payload.startFrame;
+  }
+  if (payload.endFrame !== undefined) {
+    body.end_frame = payload.endFrame;
+  }
+  if (payload.labelType !== undefined) {
+    body.label_type = payload.labelType;
+  }
+  if (payload.labelValue !== undefined) {
+    body.label_value = payload.labelValue;
+  }
+  if (payload.reviewStatus !== undefined) {
+    body.review_status = payload.reviewStatus;
+  }
+  const row = await request<AnnotationResponse>(`/annotations/${annotationId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body)
+  });
+  return toSegmentAnnotation(row);
+}
+
+export async function deleteAnnotation(annotationId: string): Promise<void> {
+  await request<{ status: string }>(`/annotations/${annotationId}`, {
+    method: "DELETE"
+  });
+}
+
+export async function createRerunSession(
+  datasetId: string,
+  episodeIndex: number,
+): Promise<RerunSession> {
+  const row = await request<RerunSessionResponse>("/rerun/session", {
+    method: "POST",
+    body: JSON.stringify({
+      dataset_id: datasetId,
+      episode_index: episodeIndex,
+      mode: "rrd_cache"
+    })
+  });
+  return toRerunSession(row);
+}
+
+export async function createVlmLabelJob(
+  datasetId: string,
+  episodeIndices: number[],
+): Promise<JobRecord> {
+  const row = await request<JobRecordResponse>("/jobs/vlm-label", {
+    method: "POST",
+    body: JSON.stringify({
+      dataset_id: datasetId,
+      episode_indices: episodeIndices,
+      model: "heuristic-vlm-fallback",
+      prompt_template: "episode_autolabel_v1"
+    })
+  });
+  return toJobRecord(row);
+}
+
+export async function createExport(
+  datasetId: string,
+  episodeIndices: number[],
+): Promise<ExportRecord> {
+  const row = await request<ExportRecordResponse>("/exports", {
+    method: "POST",
+    body: JSON.stringify({
+      dataset_id: datasetId,
+      episode_indices: episodeIndices,
+      format: "lerobot",
+      version_description: "web selected episode export"
+    })
+  });
+  return toExportRecord(row);
+}
+
+export async function semanticSearch(datasetId: string, text: string): Promise<SearchResult[]> {
+  const rows = await request<SearchResultResponse[]>("/search/semantic", {
+    method: "POST",
+    body: JSON.stringify({
+      dataset_id: datasetId,
+      text,
+      limit: 10
+    })
+  });
+  return rows.map(toSearchResult);
+}
+
+export async function filterSearch(datasetId: string, query: string): Promise<SearchResult[]> {
+  const rows = await request<SearchResultResponse[]>("/search/filter", {
+    method: "POST",
+    body: JSON.stringify({
+      dataset_id: datasetId,
+      query,
+      limit: 100
+    })
+  });
+  return rows.map(toSearchResult);
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -112,5 +369,83 @@ function toEpisode(raw: EpisodeResponse): Episode {
     split: raw.split ?? "",
     fps: raw.fps ?? 0,
     cameraNames: raw.camera_names ?? []
+  };
+}
+
+function toStateActionSummary(raw: StateActionSummaryResponse): StateActionSummary {
+  return {
+    datasetId: raw.dataset_id,
+    episodeIndex: raw.episode_index,
+    frameCount: raw.frame_count,
+    stateDim: raw.state_dim,
+    actionDim: raw.action_dim,
+    stateNormMin: raw.state_norm_min,
+    stateNormMax: raw.state_norm_max,
+    actionNormMin: raw.action_norm_min,
+    actionNormMax: raw.action_norm_max
+  };
+}
+
+function toSegmentAnnotation(raw: AnnotationResponse): SegmentAnnotation {
+  return {
+    id: raw.annotation_id,
+    datasetId: raw.dataset_id,
+    episodeIndex: raw.episode_index,
+    startFrame: raw.start_frame,
+    endFrame: raw.end_frame,
+    labelType: raw.label_type,
+    labelValue: raw.label_value,
+    source: raw.source,
+    confidence: raw.confidence,
+    reviewStatus: raw.review_status
+  };
+}
+
+function toRerunSession(raw: RerunSessionResponse): RerunSession {
+  return {
+    sessionId: raw.session_id,
+    datasetId: raw.dataset_id,
+    episodeIndex: raw.episode_index,
+    mode: raw.mode,
+    status: raw.status,
+    viewerUrl: raw.viewer_url,
+    rrdUrl: raw.rrd_url ? `${API_ROOT_URL}${raw.rrd_url}` : null,
+    message: raw.message
+  };
+}
+
+function toJobRecord(raw: JobRecordResponse): JobRecord {
+  return {
+    jobId: raw.job_id,
+    kind: raw.kind,
+    status: raw.status,
+    datasetId: raw.dataset_id,
+    episodeIndices: raw.episode_indices,
+    progress: raw.progress,
+    message: raw.message,
+    createdAnnotationIds: raw.created_annotation_ids
+  };
+}
+
+function toExportRecord(raw: ExportRecordResponse): ExportRecord {
+  return {
+    exportId: raw.export_id,
+    datasetId: raw.dataset_id,
+    episodeIndices: raw.episode_indices,
+    format: raw.format,
+    status: raw.status,
+    outputUri: raw.output_uri,
+    message: raw.message
+  };
+}
+
+function toSearchResult(raw: SearchResultResponse): SearchResult {
+  return {
+    datasetId: raw.dataset_id,
+    episodeIndex: raw.episode_index,
+    frameIndex: raw.frame_index,
+    score: raw.score,
+    matchType: raw.match_type,
+    label: raw.label
   };
 }

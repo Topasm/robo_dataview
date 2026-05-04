@@ -10,12 +10,22 @@ from typing import Any
 from apps.api.schemas.datasets import DatasetOpenRequest, DatasetRecord, DatasetSummary
 from apps.api.schemas.episodes import EpisodeDetail, EpisodeListItem, StateActionSummary
 from apps.api.schemas.search import FilterSearchRequest, SearchResult, SemanticSearchRequest
+from apps.api.services.lerobot_io import read_lerobot_snapshot_episodes
+from apps.api.services.pydantic_compat import model_dump
 
 TABLE_NAMES = ("frames", "episodes", "videos")
 STATE_COLUMNS = ("observation_state", "observation.state", "state")
 ACTION_COLUMNS = ("actions", "action")
 TIMESTAMP_COLUMNS = ("timestamps", "timestamp")
 EPISODE_TEXT_COLUMNS = ("episode_caption", "caption", "language_instruction", "instruction")
+FILTER_ALIASES = {
+    "success": "success_label",
+    "quality": "quality_score",
+    "status": "review_status",
+    "review": "review_status",
+    "task": "task_index",
+    "episode": "episode_index",
+}
 
 
 def _slug(value: str) -> str:
@@ -25,6 +35,14 @@ def _slug(value: str) -> str:
 
 def _has_uri_scheme(value: str) -> bool:
     return bool(re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", value))
+
+
+def _local_path_from_uri(value: str) -> Path | None:
+    if value.startswith("file://"):
+        return Path(value.removeprefix("file://"))
+    if _has_uri_scheme(value):
+        return None
+    return Path(value)
 
 
 def _join_uri(base_uri: str, child: str) -> str:
@@ -248,6 +266,78 @@ def _metadata_columns(schema_names: list[str], include_arrays: bool = False) -> 
     return columns
 
 
+def _parse_filter_query(query: str) -> list[tuple[str, str, Any]]:
+    clauses = [clause.strip() for clause in re.split(r"\s+AND\s+", query, flags=re.IGNORECASE)]
+    filters: list[tuple[str, str, Any]] = []
+    for clause in clauses:
+        if not clause:
+            continue
+        match = re.match(
+            r"^\s*([A-Za-z_][\w.]*)\s*(contains|==|!=|>=|<=|=|>|<)\s*(.+?)\s*$",
+            clause,
+            flags=re.IGNORECASE,
+        )
+        if match is None:
+            raise ValueError(f"Unsupported filter clause: {clause}")
+        left, operator, right = match.groups()
+        field = FILTER_ALIASES.get(left.strip(), left.strip())
+        filters.append((field, "==" if operator == "=" else operator.lower(), _parse_filter_value(right)))
+    return filters
+
+
+def _parse_filter_value(value: str) -> Any:
+    stripped = value.strip()
+    if (stripped.startswith('"') and stripped.endswith('"')) or (
+        stripped.startswith("'") and stripped.endswith("'")
+    ):
+        return stripped[1:-1]
+    lowered = stripped.lower()
+    if lowered == "true":
+        return True
+    if lowered == "false":
+        return False
+    if lowered in {"null", "none"}:
+        return None
+    try:
+        if "." in stripped:
+            return float(stripped)
+        return int(stripped)
+    except ValueError:
+        return stripped
+
+
+def _matches_filter(
+    episode: EpisodeListItem,
+    field: str,
+    operator: str,
+    expected: Any,
+) -> bool:
+    actual = model_dump(episode).get(field)
+    if operator == "contains":
+        return str(expected).lower() in str(actual or "").lower()
+    if operator == "==":
+        return actual == expected
+    if operator == "!=":
+        return actual != expected
+    if actual is None:
+        return False
+    if operator in {">", ">=", "<", "<="}:
+        try:
+            actual_number = float(actual)
+            expected_number = float(expected)
+        except (TypeError, ValueError):
+            return False
+        if operator == ">":
+            return actual_number > expected_number
+        if operator == ">=":
+            return actual_number >= expected_number
+        if operator == "<":
+            return actual_number < expected_number
+        if operator == "<=":
+            return actual_number <= expected_number
+    return False
+
+
 @dataclass
 class LanceBundle:
     base_uri: str
@@ -326,6 +416,21 @@ class LanceDatasetStore:
     def open_dataset(self, payload: DatasetOpenRequest) -> DatasetRecord:
         name = payload.name or self._name_from_uri(payload.uri)
         dataset_id = _slug(name)
+        lerobot_episodes = self._try_open_lerobot_snapshot(payload.uri, dataset_id)
+        if lerobot_episodes is not None:
+            record = DatasetRecord(
+                dataset_id=dataset_id,
+                name=name,
+                uri=payload.uri,
+                status="indexed",
+                message="LeRobot v3 metadata snapshot indexed.",
+            )
+            self._datasets[dataset_id] = record
+            self._bundles.pop(dataset_id, None)
+            self._episodes[dataset_id] = lerobot_episodes
+            self._summaries[dataset_id] = self._summary_from_episodes(record, lerobot_episodes)
+            return record
+
         try:
             bundle = self._open_lance_bundle(payload.uri)
         except LanceDependencyError as exc:
@@ -369,12 +474,20 @@ class LanceDatasetStore:
     def get_summary(self, dataset_id: str) -> DatasetSummary | None:
         return self._summaries.get(dataset_id)
 
+    def get_schema(self, dataset_id: str) -> dict[str, list[str]] | None:
+        bundle = self._bundles.get(dataset_id)
+        if bundle is not None:
+            return bundle.schemas
+        if dataset_id in self._datasets:
+            return {}
+        return None
+
     def list_episodes(self, dataset_id: str, limit: int, offset: int) -> list[EpisodeListItem]:
         bundle = self._bundles.get(dataset_id)
         if bundle is not None:
             return self._list_lance_episodes(dataset_id, bundle, limit=limit, offset=offset)
         episodes = self._episodes.get(dataset_id, [])
-        return [EpisodeListItem(**episode.dict()) for episode in episodes[offset : offset + limit]]
+        return [EpisodeListItem(**model_dump(episode)) for episode in episodes[offset : offset + limit]]
 
     def get_episode(self, dataset_id: str, episode_index: int) -> EpisodeDetail | None:
         bundle = self._bundles.get(dataset_id)
@@ -421,8 +534,18 @@ class LanceDatasetStore:
         column = _video_column_for_camera(schema, camera)
         if column is None:
             return None
+        dataset = bundle.tables["episodes"]
+        if hasattr(dataset, "take_blobs"):
+            try:
+                blob_file = dataset.take_blobs(column, indices=[episode_index])[0]
+                try:
+                    return blob_file.read()
+                finally:
+                    blob_file.close()
+            except Exception:
+                pass
         row = _read_episode_row_by_index(
-            bundle.tables["episodes"],
+            dataset,
             episode_index,
             columns=["episode_index", column],
         )
@@ -430,17 +553,49 @@ class LanceDatasetStore:
             return None
         return _blob_to_bytes(row.get(column))
 
+    def get_episode_timeseries(
+        self,
+        dataset_id: str,
+        episode_index: int,
+    ) -> dict[str, Any] | None:
+        bundle = self._bundles.get(dataset_id)
+        if bundle is not None:
+            return self._get_lance_episode_timeseries(dataset_id, bundle, episode_index)
+
+        episode = self.get_episode(dataset_id, episode_index)
+        if episode is None:
+            return None
+        frame_count = episode.length or 0
+        fps = episode.fps or 20.0
+        timestamps = [frame / fps for frame in range(frame_count)]
+        return {
+            "dataset_id": dataset_id,
+            "episode_index": episode_index,
+            "timestamps": timestamps,
+            "states": [[frame / max(1, frame_count), 0.0] for frame in range(frame_count)],
+            "actions": [[0.0, frame / max(1, frame_count)] for frame in range(frame_count)],
+        }
+
     def filter_search(self, payload: FilterSearchRequest) -> list[SearchResult]:
         episodes = self.list_episodes(payload.dataset_id, limit=payload.limit, offset=0)
+        try:
+            filters = _parse_filter_query(payload.query)
+        except ValueError:
+            return []
+        matched = [
+            episode
+            for episode in episodes
+            if all(_matches_filter(episode, field, operator, expected) for field, operator, expected in filters)
+        ]
         return [
             SearchResult(
                 dataset_id=payload.dataset_id,
                 episode_index=episode.episode_index,
                 score=None,
-                match_type="filter_stub",
+                match_type="episode_filter",
                 label=payload.query,
             )
-            for episode in episodes
+            for episode in matched
         ]
 
     def semantic_search(self, payload: SemanticSearchRequest) -> list[SearchResult]:
@@ -475,6 +630,37 @@ class LanceDatasetStore:
             camera_names=[],
             message=record.message,
         )
+
+    def _summary_from_episodes(
+        self,
+        record: DatasetRecord,
+        episodes: list[EpisodeDetail],
+    ) -> DatasetSummary:
+        fps_values = {episode.fps for episode in episodes if episode.fps is not None}
+        return DatasetSummary(
+            dataset_id=record.dataset_id,
+            name=record.name,
+            uri=record.uri,
+            status=record.status,
+            episode_count=len(episodes),
+            frame_count=sum(episode.length or 0 for episode in episodes),
+            fps=fps_values.pop() if len(fps_values) == 1 else None,
+            camera_names=sorted({camera for episode in episodes for camera in episode.camera_names}),
+            reviewed_count=sum(1 for episode in episodes if episode.review_status != "pending"),
+            accepted_count=sum(1 for episode in episodes if episode.review_status == "accepted"),
+            rejected_count=sum(1 for episode in episodes if episode.review_status == "rejected"),
+            message=record.message,
+        )
+
+    def _try_open_lerobot_snapshot(
+        self,
+        uri: str,
+        dataset_id: str,
+    ) -> list[EpisodeDetail] | None:
+        path = _local_path_from_uri(uri)
+        if path is None or not (path / "meta" / "info.json").exists():
+            return None
+        return read_lerobot_snapshot_episodes(path, dataset_id=dataset_id)
 
     def _open_lance_bundle(self, uri: str) -> LanceBundle:
         try:
@@ -583,6 +769,32 @@ class LanceDatasetStore:
             action_norm_min=action_min,
             action_norm_max=action_max,
         )
+
+    def _get_lance_episode_timeseries(
+        self,
+        dataset_id: str,
+        bundle: LanceBundle,
+        episode_index: int,
+    ) -> dict[str, Any] | None:
+        schema = bundle.schemas["episodes"]
+        state_name = _first_present_name(schema, STATE_COLUMNS)
+        action_name = _first_present_name(schema, ACTION_COLUMNS)
+        timestamp_name = _first_present_name(schema, TIMESTAMP_COLUMNS)
+        columns = [
+            column
+            for column in (state_name, action_name, timestamp_name, "episode_index")
+            if column is not None
+        ]
+        row = _read_episode_row_by_index(bundle.tables["episodes"], episode_index, columns=columns)
+        if row is None:
+            return None
+        return {
+            "dataset_id": dataset_id,
+            "episode_index": episode_index,
+            "timestamps": row.get(timestamp_name) if timestamp_name else None,
+            "states": row.get(state_name) if state_name else None,
+            "actions": row.get(action_name) if action_name else None,
+        }
 
     def _episode_payload(
         self,

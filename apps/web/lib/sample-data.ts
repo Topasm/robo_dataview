@@ -65,6 +65,8 @@ export const episodes: Episode[] = [
 export const annotations: SegmentAnnotation[] = [
   {
     id: "seg-approach",
+    datasetId: datasetSummary.datasetId,
+    episodeIndex: 0,
     startFrame: 0,
     endFrame: 38,
     labelType: "phase",
@@ -75,6 +77,8 @@ export const annotations: SegmentAnnotation[] = [
   },
   {
     id: "seg-grasp",
+    datasetId: datasetSummary.datasetId,
+    episodeIndex: 0,
     startFrame: 39,
     endFrame: 88,
     labelType: "phase",
@@ -85,6 +89,8 @@ export const annotations: SegmentAnnotation[] = [
   },
   {
     id: "seg-fold",
+    datasetId: datasetSummary.datasetId,
+    episodeIndex: 0,
     startFrame: 89,
     endFrame: 156,
     labelType: "phase",
@@ -95,6 +101,8 @@ export const annotations: SegmentAnnotation[] = [
   },
   {
     id: "seg-release",
+    datasetId: datasetSummary.datasetId,
+    episodeIndex: 0,
     startFrame: 157,
     endFrame: 180,
     labelType: "phase",

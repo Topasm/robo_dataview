@@ -23,3 +23,11 @@ def dataset_summary(dataset_id: str) -> DatasetSummary:
     if summary is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return summary
+
+
+@router.get("/datasets/{dataset_id}/schema", response_model=dict[str, list[str]])
+def dataset_schema(dataset_id: str) -> dict[str, list[str]]:
+    schema = store.get_schema(dataset_id)
+    if schema is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return schema

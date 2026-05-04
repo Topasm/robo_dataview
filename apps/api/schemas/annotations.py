@@ -1,6 +1,15 @@
 from datetime import datetime
+from typing import Any, Self
 
-from pydantic import BaseModel, Field, root_validator
+from pydantic import BaseModel, Field
+
+try:
+    from pydantic import model_validator
+except ImportError:  # Pydantic v1 compatibility for system Python test environments.
+    model_validator = None
+    from pydantic import root_validator
+else:
+    root_validator = None
 
 from apps.api.schemas.common import AnnotationSource, ReviewStatus
 
@@ -17,11 +26,21 @@ class AnnotationCreate(BaseModel):
     review_status: ReviewStatus = ReviewStatus.pending
     created_by: str = "local"
 
-    @root_validator(skip_on_failure=True)
-    def validate_range(cls, values: dict[str, object]) -> dict[str, object]:
-        if int(values["end_frame"]) < int(values["start_frame"]):
-            raise ValueError("end_frame must be greater than or equal to start_frame")
-        return values
+    if model_validator is not None:
+
+        @model_validator(mode="after")
+        def validate_range(self) -> Self:
+            if self.end_frame < self.start_frame:
+                raise ValueError("end_frame must be greater than or equal to start_frame")
+            return self
+
+    else:
+
+        @root_validator(skip_on_failure=True)  # type: ignore[misc]
+        def validate_range(cls, values: dict[str, Any]) -> dict[str, Any]:
+            if int(values["end_frame"]) < int(values["start_frame"]):
+                raise ValueError("end_frame must be greater than or equal to start_frame")
+            return values
 
 
 class AnnotationUpdate(BaseModel):

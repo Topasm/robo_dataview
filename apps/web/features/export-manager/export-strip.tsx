@@ -1,6 +1,14 @@
 import { Download, PackageCheck } from "lucide-react";
 
-export function ExportStrip() {
+import type { ExportRecord } from "@/lib/types";
+
+type ExportStripProps = {
+  episodeIndex: number;
+  exportRecord: ExportRecord | null;
+  onCreateExport: () => Promise<void>;
+};
+
+export function ExportStrip({ episodeIndex, exportRecord, onCreateExport }: ExportStripProps) {
   return (
     <section className="export-strip">
       <div>
@@ -8,11 +16,18 @@ export function ExportStrip() {
           <PackageCheck size={16} />
           <span>Export</span>
         </div>
-        <div className="muted">3 selected / LeRobot target / accepted labels only</div>
+        <div className="muted">
+          Episode #{episodeIndex} / LeRobot target / accepted labels only
+        </div>
+        {exportRecord ? (
+          <div className="muted">
+            {exportRecord.status}: {exportRecord.outputUri ?? exportRecord.message}
+          </div>
+        ) : null}
       </div>
-      <button className="text-button" type="button">
+      <button className="text-button" onClick={onCreateExport} type="button">
         <Download size={15} />
-        Queue export
+        Export selected
       </button>
     </section>
   );

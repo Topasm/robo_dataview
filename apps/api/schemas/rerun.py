@@ -15,3 +15,5 @@ class RerunSessionRecord(BaseModel):
     status: str
     viewer_url: str | None = None
     rrd_url: str | None = None
+    rrd_path: str | None = None
+    message: str | None = None

@@ -18,3 +18,6 @@ class JobRecord(BaseModel):
     episode_indices: list[int]
     progress: float = 0.0
     message: str | None = None
+    created_annotation_ids: list[str] = Field(default_factory=list)
+    model: str | None = None
+    prompt_template: str | None = None

@@ -38,9 +38,49 @@ ANNOTATIONS_COLUMNS: tuple[ColumnSpec, ...] = (
     ColumnSpec("updated_at", "timestamp_us_utc", nullable=False),
 )
 
+EMBEDDINGS_COLUMNS: tuple[ColumnSpec, ...] = (
+    ColumnSpec("embedding_id", "string", nullable=False),
+    ColumnSpec("episode_index", "int64", nullable=False),
+    ColumnSpec("frame_index", "int64"),
+    ColumnSpec("clip_start_frame", "int64"),
+    ColumnSpec("clip_end_frame", "int64"),
+    ColumnSpec(
+        "modality",
+        "string",
+        nullable=False,
+        description="image | video_clip | text | trajectory",
+    ),
+    ColumnSpec("embedding", "list_float32", nullable=False),
+    ColumnSpec("text", "string"),
+    ColumnSpec("source_model", "string", nullable=False),
+    ColumnSpec("created_at", "timestamp_us_utc", nullable=False),
+)
+
+VERSIONS_COLUMNS: tuple[ColumnSpec, ...] = (
+    ColumnSpec("version_id", "string", nullable=False),
+    ColumnSpec("parent_version_id", "string"),
+    ColumnSpec("dataset_id", "string", nullable=False),
+    ColumnSpec("description", "string"),
+    ColumnSpec("filter_query", "string"),
+    ColumnSpec("num_episodes", "int64", nullable=False),
+    ColumnSpec("num_frames", "int64", nullable=False),
+    ColumnSpec("export_format", "string", nullable=False),
+    ColumnSpec("export_uri", "string"),
+    ColumnSpec("created_at", "timestamp_us_utc", nullable=False),
+    ColumnSpec("created_by", "string", nullable=False),
+)
+
 
 def annotations_column_names() -> list[str]:
     return [column.name for column in ANNOTATIONS_COLUMNS]
+
+
+def embeddings_column_names() -> list[str]:
+    return [column.name for column in EMBEDDINGS_COLUMNS]
+
+
+def versions_column_names() -> list[str]:
+    return [column.name for column in VERSIONS_COLUMNS]
 
 
 def build_annotations_pyarrow_schema() -> Any:
@@ -68,6 +108,38 @@ def build_annotations_pyarrow_schema() -> Any:
     )
 
 
+def build_embeddings_pyarrow_schema() -> Any:
+    """Return the PyArrow schema used to create `embeddings.lance`."""
+
+    return _build_pyarrow_schema(EMBEDDINGS_COLUMNS, "embeddings.lance")
+
+
+def build_versions_pyarrow_schema() -> Any:
+    """Return the PyArrow schema used to create `versions.lance`."""
+
+    return _build_pyarrow_schema(VERSIONS_COLUMNS, "versions.lance")
+
+
+def _build_pyarrow_schema(columns: tuple[ColumnSpec, ...], table_name: str) -> Any:
+    try:
+        import pyarrow as pa
+    except ImportError as exc:
+        raise RuntimeError(f"pyarrow is required to build the {table_name} schema") from exc
+
+    metadata = {
+        column.name: column.description
+        for column in columns
+        if column.description is not None
+    }
+    return pa.schema(
+        [
+            pa.field(column.name, _pyarrow_type(pa, column.dtype), nullable=column.nullable)
+            for column in columns
+        ],
+        metadata={key.encode(): value.encode() for key, value in metadata.items()},
+    )
+
+
 def _pyarrow_type(pa: Any, dtype: str) -> Any:
     if dtype == "string":
         return pa.string()
@@ -75,6 +147,8 @@ def _pyarrow_type(pa: Any, dtype: str) -> Any:
         return pa.int64()
     if dtype == "float32":
         return pa.float32()
+    if dtype == "list_float32":
+        return pa.list_(pa.float32())
     if dtype == "timestamp_us_utc":
         return pa.timestamp("us", tz="UTC")
     raise ValueError(f"Unsupported dtype: {dtype}")

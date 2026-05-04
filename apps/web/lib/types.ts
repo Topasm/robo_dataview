@@ -31,8 +31,22 @@ export type Episode = {
   cameraNames: string[];
 };
 
+export type StateActionSummary = {
+  datasetId: string;
+  episodeIndex: number;
+  frameCount: number;
+  stateDim: number | null;
+  actionDim: number | null;
+  stateNormMin: number | null;
+  stateNormMax: number | null;
+  actionNormMin: number | null;
+  actionNormMax: number | null;
+};
+
 export type SegmentAnnotation = {
   id: string;
+  datasetId: string;
+  episodeIndex: number;
   startFrame: number;
   endFrame: number;
   labelType: string;
@@ -40,4 +54,45 @@ export type SegmentAnnotation = {
   source: "human" | "vlm" | "heuristic" | "import";
   confidence: number;
   reviewStatus: ReviewStatus;
+};
+
+export type RerunSession = {
+  sessionId: string;
+  datasetId: string;
+  episodeIndex: number;
+  mode: string;
+  status: string;
+  viewerUrl: string | null;
+  rrdUrl: string | null;
+  message: string | null;
+};
+
+export type JobRecord = {
+  jobId: string;
+  kind: string;
+  status: string;
+  datasetId: string;
+  episodeIndices: number[];
+  progress: number;
+  message: string | null;
+  createdAnnotationIds: string[];
+};
+
+export type ExportRecord = {
+  exportId: string;
+  datasetId: string;
+  episodeIndices: number[];
+  format: string;
+  status: string;
+  outputUri: string | null;
+  message: string | null;
+};
+
+export type SearchResult = {
+  datasetId: string;
+  episodeIndex: number;
+  frameIndex: number | null;
+  score: number | null;
+  matchType: string;
+  label: string | null;
 };
