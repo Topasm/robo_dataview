@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -125,7 +126,7 @@ def write_lerobot_v3_snapshot(
     }
 
     info_path.write_text(json.dumps(info, indent=2, sort_keys=True), encoding="utf-8")
-    stats_path.write_text(json.dumps(_empty_stats(), indent=2, sort_keys=True), encoding="utf-8")
+    stats_path.write_text(json.dumps(_stats(frame_rows), indent=2, sort_keys=True), encoding="utf-8")
     _write_jsonl(tasks_jsonl_path, task_rows)
     _write_jsonl(episodes_jsonl_path, episode_rows)
     _write_jsonl(data_index_path, _data_index_rows(episode_rows))
@@ -536,11 +537,61 @@ def _common_fps(episodes: list[EpisodeDetail]) -> float | None:
     return None
 
 
-def _empty_stats() -> dict[str, Any]:
+def _stats(frame_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    features: dict[str, Any] = {}
+    timestamp_values = [
+        float(row["timestamp"])
+        for row in frame_rows
+        if isinstance(row.get("timestamp"), (int, float))
+    ]
+    if timestamp_values:
+        features["timestamp"] = _scalar_stats(timestamp_values)
+
+    for key in ("observation.state", "action"):
+        vectors = [
+            [float(value) for value in row[key]]
+            for row in frame_rows
+            if isinstance(row.get(key), list) and row[key]
+        ]
+        if vectors:
+            features[key] = _vector_stats(vectors)
+
+    result: dict[str, Any] = {"features": features}
+    if not features:
+        result["note"] = "Statistics are not materialized because no frame rows were exported."
+    return result
+
+
+def _scalar_stats(values: list[float]) -> dict[str, list[float]]:
+    return _vector_stats([[value] for value in values])
+
+
+def _vector_stats(vectors: list[list[float]]) -> dict[str, list[float]]:
+    dim = max(len(vector) for vector in vectors)
+    columns = [
+        [vector[index] for vector in vectors if index < len(vector) and math.isfinite(vector[index])]
+        for index in range(dim)
+    ]
     return {
-        "note": "Statistics are not materialized by the current exporter.",
-        "features": {},
+        "mean": [_mean(column) for column in columns],
+        "std": [_std(column) for column in columns],
+        "min": [min(column) if column else 0.0 for column in columns],
+        "max": [max(column) if column else 0.0 for column in columns],
     }
+
+
+def _mean(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    return sum(values) / len(values)
+
+
+def _std(values: list[float]) -> float:
+    if len(values) <= 1:
+        return 0.0
+    mean = _mean(values)
+    variance = sum((value - mean) ** 2 for value in values) / len(values)
+    return math.sqrt(variance)
 
 
 def _feature_schema(frame_rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:

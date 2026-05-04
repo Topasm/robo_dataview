@@ -114,6 +114,10 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertEqual(info["features"]["observation.state"]["shape"], [2])
             self.assertEqual(info["features"]["action"]["shape"], [2])
             self.assertEqual(info["features"]["timestamp"]["shape"], [1])
+            stats = json.loads((root / "meta/stats.json").read_text(encoding="utf-8"))
+            self.assertEqual(stats["features"]["observation.state"]["min"], [0.0, 0.0])
+            self.assertEqual(stats["features"]["observation.state"]["max"], [1.0, 1.0])
+            self.assertEqual(stats["features"]["action"]["max"], [3.0, 4.0])
             episode_rows = [
                 json.loads(line)
                 for line in (root / "meta/episodes/chunk-000/file-000.jsonl")

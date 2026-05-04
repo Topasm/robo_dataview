@@ -286,7 +286,8 @@ The snapshot follows the LeRobot v3 directory contract for selected episodes and
 accepted annotations. It writes frame JSONL and available camera MP4 blobs, and
 also writes Parquet shards when `pyarrow` is installed. For materialized frame
 exports, `meta/info.json` derives concrete `observation.state` and `action`
-feature dimensions from exported rows. Episode metadata includes
+feature dimensions from exported rows, and `meta/stats.json` contains
+mean/std/min/max statistics for exported numeric frame features. Episode metadata includes
 `data/chunk_index`, `data/file_index`, and per-camera
 `videos/<video_key>/chunk_index` / `videos/<video_key>/file_index` entries so the
 official `video_path` template can resolve copied MP4 artifacts.
