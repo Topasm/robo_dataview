@@ -12,6 +12,7 @@ from starlette.responses import StreamingResponse
 
 from apps.api.routers import episodes
 from apps.api.schemas.episodes import EpisodeDetail, EpisodeLabelUpdate, EpisodeListItem, EpisodeListPage
+from apps.api.services.episode_preview_service import EpisodePreview
 from apps.api.services.lance_store import VideoSource
 
 
@@ -35,6 +36,29 @@ class FakeVideoFileStore:
         if dataset_id != "dataset-a" or episode_index != 3 or camera != "cam_high":
             return None
         return VideoSource(size=self.path.stat().st_size, path=self.path)
+
+
+class FakePreviewService:
+    def __init__(self, path: Path | None) -> None:
+        self.path = path
+
+    def get_or_create_preview(
+        self,
+        *,
+        dataset_id: str,
+        episode_index: int,
+        camera: str,
+        frame_index: int = 0,
+    ) -> EpisodePreview | None:
+        if (
+            self.path is None
+            or dataset_id != "dataset-a"
+            or episode_index != 3
+            or camera != "cam_high"
+            or frame_index != 4
+        ):
+            return None
+        return EpisodePreview(path=self.path, content_type="image/jpeg", frame_index=frame_index)
 
 
 class FakeEpisodeLabelStore:
@@ -250,6 +274,33 @@ class EpisodeVideoEndpointTest(unittest.TestCase):
                     _request("GET"),
                     dataset_id="dataset-a",
                     range_header=None,
+                )
+
+        self.assertEqual(context.exception.status_code, 404)
+
+    def test_episode_preview_returns_file_response(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "preview.jpg"
+            path.write_bytes(b"jpeg")
+            with patch.object(episodes, "episode_preview_service", FakePreviewService(path)):
+                response = episodes.episode_preview(
+                    3,
+                    "cam_high",
+                    dataset_id="dataset-a",
+                    frame_index=4,
+                )
+
+            self.assertEqual(response.media_type, "image/jpeg")
+            self.assertEqual(Path(response.path), path)
+
+    def test_episode_preview_returns_404_when_source_missing(self) -> None:
+        with patch.object(episodes, "episode_preview_service", FakePreviewService(None)):
+            with self.assertRaises(HTTPException) as context:
+                episodes.episode_preview(
+                    3,
+                    "cam_high",
+                    dataset_id="dataset-a",
+                    frame_index=4,
                 )
 
         self.assertEqual(context.exception.status_code, 404)

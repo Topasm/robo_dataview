@@ -22,7 +22,7 @@ import {
   SkipForward
 } from "lucide-react";
 
-import { episodeVideoUrl, fetchEpisodeTimeseries } from "@/lib/api";
+import { episodePreviewUrl, episodeVideoUrl, fetchEpisodeTimeseries } from "@/lib/api";
 import type { Episode, EpisodeTimeseries } from "@/lib/types";
 
 type EpisodeViewerProps = {
@@ -559,6 +559,10 @@ function CameraVideo({
     () => episodeVideoUrl(datasetId, episodeIndex, name),
     [datasetId, episodeIndex, name]
   );
+  const poster = useMemo(
+    () => episodePreviewUrl(datasetId, episodeIndex, name),
+    [datasetId, episodeIndex, name]
+  );
   return (
     <>
       {status === "error" ? (
@@ -572,6 +576,7 @@ function CameraVideo({
         onCanPlay={() => onStatusChange(name, "ready")}
         onError={() => onStatusChange(name, "error")}
         playsInline
+        poster={poster}
         preload="metadata"
         ref={register}
         src={src}

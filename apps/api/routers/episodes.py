@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from apps.api.schemas.episodes import (
     EpisodeDetail,
@@ -15,6 +15,10 @@ from apps.api.schemas.episodes import (
     StateActionSummary,
 )
 from apps.api.services.lance_store import store
+from apps.api.services.episode_preview_service import (
+    EpisodePreviewUnavailable,
+    episode_preview_service,
+)
 
 
 router = APIRouter(tags=["episodes"])
@@ -98,6 +102,27 @@ def episode_timeseries(episode_index: int, dataset_id: str = Query(...)) -> Epis
     if series is None:
         raise HTTPException(status_code=404, detail="Episode not found")
     return series
+
+
+@router.get("/episodes/{episode_index}/preview/{camera}", response_model=None)
+def episode_preview(
+    episode_index: int,
+    camera: str,
+    dataset_id: str = Query(...),
+    frame_index: int = Query(default=0, ge=0),
+) -> FileResponse:
+    try:
+        preview = episode_preview_service.get_or_create_preview(
+            dataset_id=dataset_id,
+            episode_index=episode_index,
+            camera=camera,
+            frame_index=frame_index,
+        )
+    except EpisodePreviewUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if preview is None:
+        raise HTTPException(status_code=404, detail="Video source not found")
+    return FileResponse(preview.path, media_type=preview.content_type)
 
 
 @router.get("/episodes/{episode_index}/video/{camera}", response_model=None)

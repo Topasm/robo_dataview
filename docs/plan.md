@@ -155,7 +155,7 @@ Definition of done:
 - [x] Add state/action summary cards.
 - [x] Add state/action time-series chart.
 - [x] Add selected-frame metadata panel.
-- [ ] Add thumbnail or keyframe preview cache.
+- [x] Add thumbnail or keyframe preview cache.
 
 ### P3: Annotation Workflow
 

@@ -301,6 +301,19 @@ export function episodeVideoUrl(datasetId: string, episodeIndex: number, camera:
   return `${API_BASE_URL}/episodes/${episodeIndex}/video/${encodeURIComponent(camera)}?${query}`;
 }
 
+export function episodePreviewUrl(
+  datasetId: string,
+  episodeIndex: number,
+  camera: string,
+  frameIndex = 0
+): string {
+  const query = new URLSearchParams({
+    dataset_id: datasetId,
+    frame_index: String(frameIndex)
+  });
+  return `${API_BASE_URL}/episodes/${episodeIndex}/preview/${encodeURIComponent(camera)}?${query}`;
+}
+
 export async function fetchStateActionSummary(
   datasetId: string,
   episodeIndex: number,
