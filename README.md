@@ -36,6 +36,41 @@ packages/     Shared schema and prompts
 data/         Local Lance data, cache, and exports
 ```
 
+## Local Development
+
+Robot Data Studio expects you to manage the Python virtual environment
+explicitly. The repo scripts use the active shell environment; they do not
+create or mutate `.venv`.
+
+Base setup:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -e ".[dev]"
+npm install
+cp .env.example .env
+```
+
+Optional Python extras:
+
+```bash
+python3 -m pip install -e ".[lance]"      # Lance/LanceDB + PyArrow mirrors
+python3 -m pip install -e ".[rerun]"      # Rerun .rrd generation
+python3 -m pip install -e ".[video]"      # OpenCV keyframe/preview extraction
+python3 -m pip install -e ".[lerobot]"    # official LeRobotDataset validation
+```
+
+Run API and web together:
+
+```bash
+npm run dev
+```
+
+The script starts FastAPI on `http://127.0.0.1:8000` and Next.js on
+`http://127.0.0.1:3000` by default. Override `API_HOST`, `API_PORT`,
+`WEB_HOST`, or `WEB_PORT` in `.env` or the shell.
+
 ## Current Implementation State
 
 The repository has moved past a pure skeleton. The current MVP path can:

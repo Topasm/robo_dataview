@@ -134,10 +134,10 @@ Definition of done:
 - [x] Ignore local virtualenv and Python packaging artifacts.
 - [x] Replace deprecated `next lint` script with ESLint CLI.
 - [x] Split web data orchestration from `page.tsx` into `useStudioData`.
-- [ ] Add a one-command local dev script for API + web.
-- [ ] Add `.env.example` with `NEXT_PUBLIC_API_BASE_URL` and Rerun settings.
-- [ ] Document dependency installation for base, Lance, Rerun, and dev extras.
-- [ ] Decide whether `.venv` should be recreated by script or left manual.
+- [x] Add a one-command local dev script for API + web.
+- [x] Add `.env.example` with `NEXT_PUBLIC_API_BASE_URL` and Rerun settings.
+- [x] Document dependency installation for base, Lance, Rerun, and dev extras.
+- [x] Decide whether `.venv` should be recreated by script or left manual.
 
 ### P1: Dataset and Episode Explorer
 
