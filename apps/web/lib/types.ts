@@ -137,3 +137,12 @@ export type SearchResult = {
   matchType: string;
   label: string | null;
 };
+
+export type FilterPreset = {
+  presetId: string;
+  datasetId: string;
+  name: string;
+  query: string;
+  createdAt: string;
+  updatedAt: string;
+};

@@ -1,10 +1,13 @@
 import { useState } from "react";
-import { Plus, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Plus, Save, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 
-import type { SearchResult } from "@/lib/types";
+import type { FilterPreset, SearchResult } from "@/lib/types";
 
 type SearchFilterBarProps = {
+  filterPresets: FilterPreset[];
   results: SearchResult[];
+  onCreateFilterPreset: (name: string, query: string) => Promise<void>;
+  onDeleteFilterPreset: (presetId: string) => Promise<void>;
   onFilterSearch: (query: string) => Promise<void>;
   onSelectResult: (episodeIndex: number) => void;
   onSemanticSearch: (text: string) => Promise<void>;
@@ -43,6 +46,9 @@ const STATUS_OPTIONS = ["pending", "accepted", "rejected", "edited"];
 const DEFAULT_FILTER_FIELD = FILTER_FIELDS[0];
 
 export function SearchFilterBar({
+  filterPresets,
+  onCreateFilterPreset,
+  onDeleteFilterPreset,
   onFilterSearch,
   results,
   onSelectResult,
@@ -57,6 +63,8 @@ export function SearchFilterBar({
       value: "accepted"
     }
   ]);
+  const [presetName, setPresetName] = useState("");
+  const [selectedPresetId, setSelectedPresetId] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const filterQuery = buildFilterQuery(filterRows);
 
@@ -116,6 +124,43 @@ export function SearchFilterBar({
         };
       })
     );
+  }
+
+  function applyPreset(presetId: string) {
+    setSelectedPresetId(presetId);
+    const preset = filterPresets.find((item) => item.presetId === presetId);
+    if (preset) {
+      setFilterRows(parseFilterQuery(preset.query));
+      setPresetName(preset.name);
+    }
+  }
+
+  async function savePreset() {
+    const name = presetName.trim();
+    if (!name || !filterQuery) {
+      return;
+    }
+    setIsSearching(true);
+    try {
+      await onCreateFilterPreset(name, filterQuery);
+      setPresetName("");
+      setSelectedPresetId("");
+    } finally {
+      setIsSearching(false);
+    }
+  }
+
+  async function deleteSelectedPreset() {
+    if (!selectedPresetId) {
+      return;
+    }
+    setIsSearching(true);
+    try {
+      await onDeleteFilterPreset(selectedPresetId);
+      setSelectedPresetId("");
+    } finally {
+      setIsSearching(false);
+    }
   }
 
   return (
@@ -211,6 +256,45 @@ export function SearchFilterBar({
 
       {filterQuery ? <div className="filter-query-preview mono">{filterQuery}</div> : null}
 
+      <div className="filter-preset-row">
+        <select
+          aria-label="Saved filter presets"
+          onChange={(event) => applyPreset(event.target.value)}
+          value={selectedPresetId}
+        >
+          <option value="">Saved filters</option>
+          {filterPresets.map((preset) => (
+            <option key={preset.presetId} value={preset.presetId}>
+              {preset.name}
+            </option>
+          ))}
+        </select>
+        <input
+          aria-label="Filter preset name"
+          onChange={(event) => setPresetName(event.target.value)}
+          placeholder="Preset name"
+          value={presetName}
+        />
+        <button
+          className="icon-button"
+          disabled={isSearching || !presetName.trim() || !filterQuery}
+          onClick={savePreset}
+          title="Save filter preset"
+          type="button"
+        >
+          <Save size={15} />
+        </button>
+        <button
+          className="icon-button"
+          disabled={isSearching || !selectedPresetId}
+          onClick={deleteSelectedPreset}
+          title="Delete filter preset"
+          type="button"
+        >
+          <Trash2 size={15} />
+        </button>
+      </div>
+
       {results.length > 0 ? (
         <div className="search-results">
           {results.map((result) => (
@@ -229,6 +313,52 @@ export function SearchFilterBar({
       ) : null}
     </section>
   );
+}
+
+function parseFilterQuery(query: string): FilterRow[] {
+  const rows = query
+    .split(/\s+AND\s+/i)
+    .map((clause, index) => parseFilterClause(clause, index))
+    .filter((row): row is FilterRow => row !== null);
+  return rows.length > 0
+    ? rows
+    : [
+        {
+          id: `filter-${Date.now()}`,
+          field: DEFAULT_FILTER_FIELD.key,
+          operator: "==",
+          value: "accepted"
+        }
+      ];
+}
+
+function parseFilterClause(clause: string, index: number): FilterRow | null {
+  const match = clause.match(/^\s*([A-Za-z_][\w.]*)\s*(contains|==|!=|>=|<=|>|<)\s*(.+?)\s*$/i);
+  if (!match) {
+    return null;
+  }
+  const [, fieldKey, operator, rawValue] = match;
+  const field = fieldByKey(fieldKey);
+  if (field.key !== fieldKey || !field.operators.includes(operator as FilterOperator)) {
+    return null;
+  }
+  return {
+    id: `filter-${Date.now()}-${index}`,
+    field: field.key,
+    operator: operator as FilterOperator,
+    value: normalizeFilterValue(parseFilterValue(rawValue), field.valueType)
+  };
+}
+
+function parseFilterValue(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
 }
 
 function FilterValueInput({

@@ -209,6 +209,7 @@ Implemented:
 
 - Basic `AND` filter syntax.
 - Typed web filter builder for common episode fields.
+- Saved filter presets.
 - Deterministic text-embedding semantic search over episode text and
   annotations.
 
@@ -217,7 +218,6 @@ Next:
 - Add LanceDB vector index.
 - Add full-text search.
 - Add combined filter + semantic ranking.
-- Save and name filter presets.
 
 ## Phase 7: Export and Versioning
 

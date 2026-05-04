@@ -183,7 +183,7 @@ Definition of done:
 - [x] Basic `AND` filter parser.
 - [x] Text-hash semantic search scaffold.
 - [x] Add filter builder UI with typed fields.
-- [ ] Add saved filter presets.
+- [x] Add saved filter presets.
 - [ ] Add full-text search.
 - [ ] Add LanceDB vector index service.
 - [ ] Add visual/video embeddings from CLIP, SigLIP, DINOv2, or video VLMs.

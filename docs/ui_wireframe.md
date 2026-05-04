@@ -142,7 +142,8 @@ Implemented panels:
 - Top navigation shell.
 - Dataset browser with dataset open control and summary metrics.
 - Episode list with selection.
-- Search/filter bar with semantic text search and typed structured filter rows.
+- Search/filter bar with semantic text search, typed structured filter rows, and
+  saved presets.
 - Episode viewer with active camera selection, one `<video>` playback pane,
   loading and error states.
 - Timeline panel showing segment annotations.

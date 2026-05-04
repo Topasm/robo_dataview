@@ -145,6 +145,9 @@ DELETE /annotations/{annotation_id}
 ```text
 POST /search/filter
 POST /search/semantic
+GET  /search/filter-presets?dataset_id=...
+POST /search/filter-presets
+DELETE /search/filter-presets/{preset_id}
 ```
 
 `POST /search/filter`
@@ -165,6 +168,9 @@ MVP filter syntax supports `AND` clauses with `=`, `==`, `!=`, `>`, `>=`, `<`,
 `POST /search/semantic` currently uses deterministic text-hash embeddings over
 episode text and annotations. It is a local development substitute for future
 LanceDB vector search.
+
+Filter presets persist reusable structured filter queries to
+`data/lance/filter_presets/filter_presets.jsonl`.
 
 ## Rerun
 

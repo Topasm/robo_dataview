@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -20,3 +22,18 @@ class SearchResult(BaseModel):
     score: float | None = None
     match_type: str
     label: str | None = None
+
+
+class FilterPresetCreate(BaseModel):
+    dataset_id: str
+    name: str = Field(..., min_length=1, max_length=80)
+    query: str = Field(..., min_length=1)
+
+
+class FilterPresetRecord(BaseModel):
+    preset_id: str
+    dataset_id: str
+    name: str
+    query: str
+    created_at: datetime
+    updated_at: datetime

@@ -18,6 +18,7 @@ export default function Home() {
     dataStatus,
     episodeRows,
     exportRecord,
+    filterPresets,
     rerunSession,
     rerunViewerUrl,
     searchResults,
@@ -26,9 +27,11 @@ export default function Home() {
     selectedSummary,
     vlmJob,
     handleCreateExport,
+    handleCreateFilterPreset,
     handleCreateRerunSession,
     handleCreateSegment,
     handleDeleteSegment,
+    handleDeleteFilterPreset,
     handleFilterSearch,
     handleMergeSegments,
     handleOpenDataset,
@@ -84,6 +87,9 @@ export default function Home() {
         <DatasetBrowser onOpenDataset={handleOpenDataset} summary={selectedSummary} />
         <div className="center-column">
           <SearchFilterBar
+            filterPresets={filterPresets}
+            onCreateFilterPreset={handleCreateFilterPreset}
+            onDeleteFilterPreset={handleDeleteFilterPreset}
             onFilterSearch={handleFilterSearch}
             onSelectResult={handleSelectEpisode}
             onSemanticSearch={handleSemanticSearch}

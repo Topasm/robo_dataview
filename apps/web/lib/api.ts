@@ -3,6 +3,7 @@ import type {
   Episode,
   EpisodeTimeseries,
   ExportRecord,
+  FilterPreset,
   JobRecord,
   RerunSession,
   ReviewStatus,
@@ -113,6 +114,15 @@ type SearchResultResponse = {
   score: number | null;
   match_type: string;
   label: string | null;
+};
+
+type FilterPresetResponse = {
+  preset_id: string;
+  dataset_id: string;
+  name: string;
+  query: string;
+  created_at: string;
+  updated_at: string;
 };
 
 type StateActionSummaryResponse = {
@@ -403,6 +413,34 @@ export async function filterSearch(datasetId: string, query: string): Promise<Se
   return rows.map(toSearchResult);
 }
 
+export async function fetchFilterPresets(datasetId: string): Promise<FilterPreset[]> {
+  const query = new URLSearchParams({ dataset_id: datasetId });
+  const rows = await request<FilterPresetResponse[]>(`/search/filter-presets?${query}`);
+  return rows.map(toFilterPreset);
+}
+
+export async function createFilterPreset(
+  datasetId: string,
+  name: string,
+  query: string,
+): Promise<FilterPreset> {
+  const row = await request<FilterPresetResponse>("/search/filter-presets", {
+    method: "POST",
+    body: JSON.stringify({
+      dataset_id: datasetId,
+      name,
+      query
+    })
+  });
+  return toFilterPreset(row);
+}
+
+export async function deleteFilterPreset(presetId: string): Promise<void> {
+  await request<{ status: string }>(`/search/filter-presets/${presetId}`, {
+    method: "DELETE"
+  });
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
@@ -555,5 +593,16 @@ function toSearchResult(raw: SearchResultResponse): SearchResult {
     score: raw.score,
     matchType: raw.match_type,
     label: raw.label
+  };
+}
+
+function toFilterPreset(raw: FilterPresetResponse): FilterPreset {
+  return {
+    presetId: raw.preset_id,
+    datasetId: raw.dataset_id,
+    name: raw.name,
+    query: raw.query,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at
   };
 }

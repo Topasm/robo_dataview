@@ -469,6 +469,25 @@ button:disabled {
   white-space: nowrap;
 }
 
+.filter-preset-row {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(120px, 1fr) minmax(108px, 1fr) 32px 32px;
+  min-height: 32px;
+}
+
+.filter-preset-row input,
+.filter-preset-row select {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  height: 32px;
+  min-width: 0;
+  outline: 0;
+  padding: 0 8px;
+}
+
 .search-results {
   background: var(--surface);
   border: 1px solid var(--border);

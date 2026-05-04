@@ -4,13 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   createExport,
+  createFilterPreset,
   createRerunSession,
   createSegmentAnnotation,
   createVlmLabelJob,
   deleteAnnotation,
+  deleteFilterPreset,
   fetchAnnotations,
   fetchDatasetSummaries,
   fetchEpisodes,
+  fetchFilterPresets,
   filterSearch,
   openDataset,
   semanticSearch,
@@ -23,6 +26,7 @@ import type {
   DatasetSummary,
   Episode,
   ExportRecord,
+  FilterPreset,
   JobRecord,
   RerunSession,
   ReviewStatus,
@@ -56,6 +60,7 @@ export function useStudioData() {
   const [vlmJob, setVlmJob] = useState<JobRecord | null>(null);
   const [exportRecord, setExportRecord] = useState<ExportRecord | null>(null);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [filterPresets, setFilterPresets] = useState<FilterPreset[]>([]);
   const [dataStatus, setDataStatus] = useState<"loading" | "api" | "sample">("loading");
 
   const selectedSummary =
@@ -143,11 +148,34 @@ export function useStudioData() {
     };
   }, [selectedEpisode.datasetId, selectedEpisode.episodeIndex]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadFilterPresets() {
+      try {
+        const presets = await fetchFilterPresets(selectedDatasetId);
+        if (isMounted) {
+          setFilterPresets(presets);
+        }
+      } catch {
+        if (isMounted) {
+          setFilterPresets([]);
+        }
+      }
+    }
+
+    loadFilterPresets();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedDatasetId]);
+
   function resetDerivedState() {
     setRerunSession(null);
     setVlmJob(null);
     setExportRecord(null);
     setSearchResults([]);
+    setFilterPresets([]);
   }
 
   async function handleOpenDataset(uri: string) {
@@ -310,6 +338,19 @@ export function useStudioData() {
     setSearchResults(results);
   }
 
+  async function handleCreateFilterPreset(name: string, query: string) {
+    const preset = await createFilterPreset(selectedDatasetId, name, query);
+    setFilterPresets((current) => [
+      preset,
+      ...current.filter((item) => item.presetId !== preset.presetId)
+    ]);
+  }
+
+  async function handleDeleteFilterPreset(presetId: string) {
+    await deleteFilterPreset(presetId);
+    setFilterPresets((current) => current.filter((preset) => preset.presetId !== presetId));
+  }
+
   async function handleCreateExport() {
     const record = await createExport(selectedEpisode.datasetId, [selectedEpisode.episodeIndex]);
     setExportRecord(record);
@@ -320,6 +361,7 @@ export function useStudioData() {
     dataStatus,
     episodeRows,
     exportRecord,
+    filterPresets,
     rerunSession,
     rerunViewerUrl,
     searchResults,
@@ -328,9 +370,11 @@ export function useStudioData() {
     selectedSummary,
     vlmJob,
     handleCreateExport,
+    handleCreateFilterPreset,
     handleCreateRerunSession,
     handleCreateSegment,
     handleDeleteSegment,
+    handleDeleteFilterPreset,
     handleFilterSearch,
     handleMergeSegments,
     handleOpenDataset,

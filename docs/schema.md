@@ -21,6 +21,7 @@ data/lance/versions/versions.jsonl
 data/lance/versions/versions.lance
 
 data/lance/vlm_responses/<dataset>/<job_id>.jsonl
+data/lance/filter_presets/filter_presets.jsonl
 
 data/cache/keyframes/<dataset>/episode_<index>/<prompt>_<version>/*.jpg
 ```
