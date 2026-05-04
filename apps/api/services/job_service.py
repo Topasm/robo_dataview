@@ -40,7 +40,12 @@ class JobStore:
             prompt_version=prompt.version if prompt is not None else None,
         )
         if kind == "vlm_label":
-            record = self._run_vlm_label_job(record, payload, prompt_version=prompt.version)
+            record = self._run_vlm_label_job(
+                record,
+                payload,
+                prompt_body=prompt.body,
+                prompt_version=prompt.version,
+            )
         else:
             record = model_copy(
                 record,
@@ -63,6 +68,7 @@ class JobStore:
         record: JobRecord,
         payload: JobCreateRequest,
         *,
+        prompt_body: str,
         prompt_version: str,
     ) -> JobRecord:
         episode_indices = payload.episode_indices
@@ -85,6 +91,7 @@ class JobStore:
             model=payload.model,
             prompt_template=payload.prompt_template,
             prompt_version=prompt_version,
+            prompt_body=prompt_body,
         )
         provider = get_vlm_provider(payload.model)
         created_annotation_ids: list[str] = []

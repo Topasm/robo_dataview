@@ -53,10 +53,10 @@ The repository has moved past a pure skeleton. The current MVP path can:
 6. Run basic filter search through a typed builder with saved presets, plus
    deterministic text-embedding semantic search and optional LanceDB vector
    table persistence/query when `lancedb` is installed.
-7. Create heuristic VLM-style annotation proposals for review, including
+7. Create VLM-style annotation proposals for review, including
    deterministic keyframe index sampling, versioned prompt tracking, and a
-   provider interface plus raw-response/keyframe artifact persistence for
-   future model integrations.
+   provider interface with heuristic fallback, optional OpenAI-compatible model
+   routing, and raw-response/keyframe artifact persistence.
 8. Export selected episodes as a LeRobot v3-oriented snapshot with metadata,
    frame JSONL, optional Parquet, available camera MP4 artifacts, validation,
    and version lineage.
@@ -69,7 +69,8 @@ Known MVP gaps:
   marking is available through annotation-backed frame mutation.
 - Rerun is embedded and records scalar timelines plus camera video assets when
   MP4 blobs are available; generation is still synchronous and workerless.
-- VLM labeling is heuristic/local scaffolding, not real model inference.
+- VLM labeling defaults to heuristic/local scaffolding; OpenAI-compatible model
+  inference is available only when configured with environment variables.
 - Semantic search still uses deterministic text embeddings. LanceDB
   persistence/query is optional, and real visual/video model embeddings are not
   implemented yet.

@@ -17,6 +17,8 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8
 const API_ROOT_URL = API_BASE_URL.endsWith("/api")
   ? API_BASE_URL.slice(0, -"/api".length)
   : API_BASE_URL;
+const VLM_MODEL = process.env.NEXT_PUBLIC_VLM_MODEL ?? "heuristic-vlm-fallback";
+const VLM_PROMPT_TEMPLATE = process.env.NEXT_PUBLIC_VLM_PROMPT_TEMPLATE ?? "episode_autolabel_v1";
 
 type DatasetRecordResponse = {
   dataset_id: string;
@@ -447,8 +449,8 @@ export async function createVlmLabelJob(
     body: JSON.stringify({
       dataset_id: datasetId,
       episode_indices: episodeIndices,
-      model: "heuristic-vlm-fallback",
-      prompt_template: "episode_autolabel_v1"
+      model: VLM_MODEL,
+      prompt_template: VLM_PROMPT_TEMPLATE
     })
   });
   return toJobRecord(row);

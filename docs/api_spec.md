@@ -220,6 +220,14 @@ JSONL and return `raw_response_ids` plus `raw_response_uri`. When camera MP4
 blobs are available and optional video dependencies are installed, raw responses
 include decoded keyframe JPEG artifact metadata.
 
+The default model route uses the heuristic fallback provider. Set
+`model = "openai-compatible:<model-name>"` or
+`ROBOT_DATA_STUDIO_VLM_PROVIDER=openai-compatible` to use the optional
+OpenAI-compatible `/chat/completions` provider. Configure
+`ROBOT_DATA_STUDIO_VLM_BASE_URL`, `ROBOT_DATA_STUDIO_VLM_API_KEY`, and
+`ROBOT_DATA_STUDIO_VLM_TIMEOUT_SECONDS` as needed. The web VLM button can be
+pointed at this route with `NEXT_PUBLIC_VLM_MODEL`.
+
 ## Exports
 
 ```text

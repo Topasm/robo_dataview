@@ -67,7 +67,8 @@ packages/robot_schema
   PyArrow schema builders for those local curation tables
 
 workers
-  Heuristic VLM proposal generator and provider interface
+  Heuristic VLM proposal generator, optional OpenAI-compatible provider, and
+  provider interface
   Future async worker entry points are added when queue-backed jobs are real
 
 data
@@ -95,6 +96,8 @@ Implemented now:
   mirroring.
 - Deterministic text-embedding semantic search for local development, with
   optional LanceDB table mirror/query when `lancedb` is installed.
+- VLM provider routing with heuristic fallback and optional OpenAI-compatible
+  HTTP inference.
 - Rerun `.rrd` cache generation for state/action scalar timelines, optional
   camera video assets, deterministic cache keys, and web viewer embedding
   through `@rerun-io/web-viewer-react`.
@@ -106,7 +109,7 @@ Not implemented yet:
 
 - Durable external database for jobs, sessions, users, and app settings.
 - Real worker queue such as RQ/Celery plus Redis.
-- Real VLM/video-model inference.
+- Local VLM/video-model inference.
 - Real visual/video model embeddings.
 - Full frame table browser UI and general frame-level mutation workflow.
 - Full LeRobot Parquet/MP4 materialization.

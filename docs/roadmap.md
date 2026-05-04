@@ -183,11 +183,13 @@ Implemented:
 - VLM provider interface with heuristic fallback provider.
 - Raw provider responses persisted to job-scoped JSONL.
 - Optional OpenCV keyframe image extraction from available episode video blobs.
+- Optional OpenAI-compatible provider path selected by model prefix or
+  environment configuration.
 
 Next:
 
 - Move job execution to RQ/Celery.
-- Add real local/API VLM provider implementations.
+- Add local VLM provider implementations.
 - Add confidence rationale fields to real provider responses.
 
 ## Phase 6: Search and Filtering

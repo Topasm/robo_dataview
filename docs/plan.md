@@ -44,7 +44,8 @@ Working:
 - Typed filter builder UI for common episode fields.
 - Deterministic text-embedding semantic search endpoint with optional LanceDB
   vector table persistence/query.
-- VLM-label job endpoint with heuristic pending annotation proposals.
+- VLM-label job endpoint with heuristic pending annotation proposals and
+  optional OpenAI-compatible provider routing.
 - Deterministic keyframe index sampling for VLM prompt inputs.
 - Rerun session endpoint that generates `.rrd` cache files.
 - Rerun React viewer embed for ready `.rrd` sessions.
@@ -71,7 +72,8 @@ Known limits:
 
 - Jobs run synchronously in-process.
 - Open datasets and sessions are in-memory.
-- VLM labeling is heuristic scaffolding.
+- VLM labeling defaults to heuristic scaffolding unless an OpenAI-compatible
+  provider is configured.
 - Semantic search is still text-hash based; LanceDB is an optional persistence
   and query path, not a real visual/video embedding pipeline yet.
 - Export writes frame JSONL and available MP4 artifacts; training-ready Parquet
@@ -206,8 +208,8 @@ Definition of done:
 - [x] Add VLM provider abstraction with heuristic fallback provider.
 - [x] Store raw VLM provider responses as JSONL.
 - [x] Add decoded keyframe image extraction from video blobs.
-- [ ] Add real model/API integration.
-- [ ] Store raw response and model metadata.
+- [x] Add optional OpenAI-compatible model/API integration.
+- [x] Store raw response and model metadata.
 - [ ] Add review queue for generated labels.
 
 ### P7: Export and Versioning
@@ -236,8 +238,8 @@ Definition of done:
 
 ## Recommended Immediate Order
 
-1. Replace heuristic VLM with a real provider path.
-2. Replace deterministic text embeddings with real model-backed vectors.
+1. Replace deterministic text embeddings with real model-backed vectors.
+2. Add generated-label review queue.
 3. Add general frame-level mutation endpoints.
 4. Materialize fully LeRobot-loadable Parquet/MP4 export.
 5. Move Rerun/export/VLM work into queue-backed workers.

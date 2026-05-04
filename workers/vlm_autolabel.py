@@ -19,6 +19,7 @@ class AutoLabelConfig:
     model: str
     prompt_template: str
     prompt_version: str = "v1"
+    prompt_body: str | None = None
     min_keyframes: int = 8
     max_keyframes: int = 16
 
