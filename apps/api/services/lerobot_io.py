@@ -101,13 +101,7 @@ def write_lerobot_v3_snapshot(
         "data_path": "data/chunk-{chunk_index:03d}/file-{file_index:03d}.parquet",
         "video_path": "videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4",
         "camera_names": sorted({camera for episode in episodes for camera in episode.camera_names}),
-        "features": {
-            "observation.state": {"dtype": "float32", "shape": ["state_dim"]},
-            "action": {"dtype": "float32", "shape": ["action_dim"]},
-            "timestamp": {"dtype": "float32", "shape": [1]},
-            "episode_index": {"dtype": "int64", "shape": [1]},
-            "frame_index": {"dtype": "int64", "shape": [1]},
-        },
+        "features": _feature_schema(frame_rows),
         "paths": {
             "data": "data/chunk-000/file-000.parquet",
             "data_jsonl": "data/chunk-000/file-000.jsonl",
@@ -530,6 +524,30 @@ def _empty_stats() -> dict[str, Any]:
         "note": "Statistics are not materialized by the current exporter.",
         "features": {},
     }
+
+
+def _feature_schema(frame_rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    features = {
+        "timestamp": {"dtype": "float32", "shape": [1]},
+        "episode_index": {"dtype": "int64", "shape": [1]},
+        "frame_index": {"dtype": "int64", "shape": [1]},
+        "task_index": {"dtype": "int64", "shape": [1]},
+    }
+    state_dim = _first_vector_dim_from_rows(frame_rows, "observation.state")
+    action_dim = _first_vector_dim_from_rows(frame_rows, "action")
+    if state_dim is not None:
+        features["observation.state"] = {"dtype": "float32", "shape": [state_dim]}
+    if action_dim is not None:
+        features["action"] = {"dtype": "float32", "shape": [action_dim]}
+    return features
+
+
+def _first_vector_dim_from_rows(rows: list[dict[str, Any]], key: str) -> int | None:
+    for row in rows:
+        value = row.get(key)
+        if isinstance(value, list):
+            return len(value)
+    return None
 
 
 def _sequence(value: Any) -> list[Any]:
