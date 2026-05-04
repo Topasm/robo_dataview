@@ -242,6 +242,15 @@ export type ExportArtifacts = {
   };
   jsonl?: JsonlExportArtifact;
   vla_jsonl?: JsonlExportArtifact;
+  hf_dataset?: JsonlExportArtifact & {
+    validation?: {
+      metadata_ok?: boolean;
+      loadable?: boolean;
+      frame_count?: number;
+      errors?: string[];
+      warnings?: string[];
+    };
+  };
 };
 
 export type JsonlExportArtifact = {

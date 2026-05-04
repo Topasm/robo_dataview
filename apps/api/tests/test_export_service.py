@@ -161,22 +161,57 @@ class ExportServiceTest(unittest.TestCase):
         self.assertEqual(manifest["splits"], ["val"])
         self.assertEqual(manifest["episodes"][0]["split"], "val")
 
-    def test_hf_dataset_export_fails_until_implemented(self) -> None:
+    def test_hf_dataset_export_fails_when_dependency_is_missing(self) -> None:
         versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
         exports = ExportStore(versions=versions)
 
-        record = exports.create(
-            ExportCreateRequest(
-                dataset_id="sample-xvla-soft-fold",
-                episode_indices=[0],
-                format=ExportFormat.hf_dataset,
-                version_description="hf dataset export",
+        with patch.dict(sys.modules, {"datasets": None}):
+            record = exports.create(
+                ExportCreateRequest(
+                    dataset_id="sample-xvla-soft-fold",
+                    episode_indices=[0],
+                    format=ExportFormat.hf_dataset,
+                    version_description="hf dataset export",
+                )
             )
-        )
 
         self.assertEqual(record.status, JobStatus.failed)
         self.assertIsNone(record.output_uri)
-        self.assertIn("Hugging Face Dataset export is not implemented", record.message or "")
+        self.assertIn("optional `datasets` dependency", record.message or "")
+
+    def test_hf_dataset_export_writes_saved_dataset_artifact(self) -> None:
+        fake_datasets = _fake_datasets_module()
+        versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
+        exports = ExportStore(versions=versions)
+
+        with patch.dict(sys.modules, {"datasets": fake_datasets}):
+            record = exports.create(
+                ExportCreateRequest(
+                    dataset_id="sample-xvla-soft-fold",
+                    episode_indices=[0],
+                    format=ExportFormat.hf_dataset,
+                    version_description="hf dataset export",
+                )
+            )
+
+        manifest = json.loads(Path(record.output_uri or "").read_text(encoding="utf-8"))
+        artifact = manifest["artifacts"]["hf_dataset"]
+        frames = [
+            json.loads(line)
+            for line in Path(artifact["files"]["frames_jsonl"]).read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+
+        self.assertEqual(record.status, JobStatus.succeeded)
+        self.assertEqual(artifact["materialized"]["episode_rows"], 1)
+        self.assertEqual(artifact["materialized"]["frame_rows"], 180)
+        self.assertEqual(artifact["validation"]["metadata_ok"], True)
+        self.assertEqual(artifact["validation"]["load"]["num_rows"], 180)
+        self.assertTrue(Path(artifact["files"]["dataset"]).exists())
+        self.assertEqual(frames[0]["episode_index"], 0)
+        self.assertEqual(frames[0]["frame_index"], 0)
+        self.assertIn("observation_state", frames[0])
+        self.assertEqual(versions.list("sample-xvla-soft-fold")[0].export_format, "hf_dataset")
 
     def test_lance_export_fails_when_dependencies_are_missing(self) -> None:
         versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
@@ -465,6 +500,50 @@ def _fake_lance_module(
     module.dataset = dataset
     module.write_dataset = write_dataset
     return module, written_paths
+
+
+def _fake_datasets_module() -> ModuleType:
+    module = ModuleType("datasets")
+
+    class Dataset:
+        def __init__(self, rows: list[dict]) -> None:
+            self.rows = rows
+
+        def __len__(self) -> int:
+            return len(self.rows)
+
+        @classmethod
+        def from_list(cls, rows: list[dict]) -> "Dataset":
+            return cls(rows)
+
+        def save_to_disk(self, path: str) -> None:
+            root = Path(path)
+            root.mkdir(parents=True, exist_ok=True)
+            (root / "dataset_info.json").write_text(
+                json.dumps({"num_rows": len(self.rows)}, sort_keys=True),
+                encoding="utf-8",
+            )
+            (root / "state.json").write_text(
+                json.dumps({"data_files": [{"filename": "data.jsonl"}]}, sort_keys=True),
+                encoding="utf-8",
+            )
+            (root / "data.jsonl").write_text(
+                "".join(json.dumps(row, sort_keys=True, default=str) + "\n" for row in self.rows),
+                encoding="utf-8",
+            )
+
+    def load_from_disk(path: str) -> Dataset:
+        data_path = Path(path) / "data.jsonl"
+        rows = [
+            json.loads(line)
+            for line in data_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        return Dataset(rows)
+
+    module.Dataset = Dataset
+    module.load_from_disk = load_from_disk
+    return module
 
 
 class _FakeSplitStore:

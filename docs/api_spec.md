@@ -426,10 +426,13 @@ For `format=jsonl`, the response contains `artifacts.jsonl` with
 `examples.jsonl` row per selected episode, including instruction/caption,
 state/action time series when available, labels, and accepted annotations.
 
-`format=hf_dataset` is reserved for a future native Hugging Face Dataset
-artifact. Requests fail explicitly until that export path is implemented; use
-`format=lerobot` for LeRobot/HF-compatible snapshot files or `format=jsonl` for
-portable caption data.
+For `format=hf_dataset`, the response contains `artifacts.hf_dataset` with a
+frame-level Hugging Face `Dataset.save_to_disk()` directory plus a JSONL
+readability copy. Rows include episode/frame indices, timestamp, task index,
+state/action vectors when available, caption/instruction fields, review
+metadata, and accepted annotation summaries. This path requires the optional
+`datasets` dependency from `.[export]`; missing dependencies or failed
+`load_from_disk` validation return `status=failed`.
 
 Each successful export appends a version record to
 `data/lance/versions/versions.jsonl`; with optional Lance dependencies installed,

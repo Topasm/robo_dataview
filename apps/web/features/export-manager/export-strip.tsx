@@ -28,6 +28,7 @@ export function ExportStrip({
   const lanceArtifact = exportRecord?.artifacts?.lance_subset;
   const jsonlArtifact = exportRecord?.artifacts?.jsonl;
   const vlaArtifact = exportRecord?.artifacts?.vla_jsonl;
+  const hfDatasetArtifact = exportRecord?.artifacts?.hf_dataset;
   const validation = lerobotArtifact?.validation;
   const lanceValidation = lanceArtifact?.validation;
 
@@ -99,6 +100,9 @@ export function ExportStrip({
         ) : null}
         {vlaArtifact ? (
           <ExportArtifactSummary artifact={vlaArtifact} label="VLA JSONL" />
+        ) : null}
+        {hfDatasetArtifact ? (
+          <ExportArtifactSummary artifact={hfDatasetArtifact} label="HF Dataset" />
         ) : null}
       </div>
       <div className="export-actions">

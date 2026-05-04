@@ -22,6 +22,7 @@ lerobot = [
   "lerobot>=0.4.0",
 ]
 export = [
+  "datasets>=2.19.0",
   "lerobot>=0.4.0",
   "pandas>=2.0.0",
   "pyarrow>=16.0.0",

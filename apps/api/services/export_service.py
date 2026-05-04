@@ -12,6 +12,10 @@ from apps.api.schemas.episodes import EpisodeDetail
 from apps.api.schemas.exports import ExportCreateRequest, ExportRecord
 from apps.api.schemas.frames import FrameRecord
 from apps.api.services.annotation_service import annotation_store
+from apps.api.services.hf_dataset_export import (
+    HFDatasetExportDependencyError,
+    write_hf_dataset_export,
+)
 from apps.api.services.lance_export import LanceExportDependencyError, write_lance_subset
 from apps.api.services.lance_store import store
 from apps.api.services.lerobot_io import write_lerobot_v3_snapshot
@@ -228,18 +232,42 @@ class ExportStore:
                 version_description=payload.version_description,
             )
         elif payload.format == ExportFormat.hf_dataset:
-            return model_copy(
-                record,
-                update={
-                    "status": JobStatus.failed,
-                    "output_uri": None,
-                    "message": (
-                        "Hugging Face Dataset export is not implemented yet. "
-                        "Use format=lerobot for LeRobot/HF-compatible snapshot artifacts "
-                        "or format=jsonl for portable caption exports."
-                    ),
-                },
-            )
+            timeseries_by_episode = {
+                episode.episode_index: timeseries
+                for episode in episode_records
+                if (timeseries := store.get_episode_timeseries(record.dataset_id, episode.episode_index))
+                is not None
+            }
+            try:
+                artifacts["hf_dataset"] = write_hf_dataset_export(
+                    manifest_path.parent,
+                    dataset_id=record.dataset_id,
+                    episodes=episode_records,
+                    annotations_by_episode=annotations_by_episode,
+                    timeseries_by_episode=timeseries_by_episode,
+                    version_description=payload.version_description,
+                )
+            except HFDatasetExportDependencyError as exc:
+                return model_copy(
+                    record,
+                    update={
+                        "status": JobStatus.failed,
+                        "output_uri": None,
+                        "message": str(exc),
+                    },
+                )
+            validation = artifacts["hf_dataset"].get("validation", {})
+            if not validation.get("metadata_ok", False):
+                errors = validation.get("errors") or ["Hugging Face Dataset export validation failed."]
+                return model_copy(
+                    record,
+                    update={
+                        "status": JobStatus.failed,
+                        "output_uri": None,
+                        "message": f"Hugging Face Dataset export validation failed: {errors[0]}",
+                        "artifacts": artifacts,
+                    },
+                )
         else:
             return model_copy(
                 record,
