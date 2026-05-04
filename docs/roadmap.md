@@ -247,6 +247,7 @@ Implemented:
 - Metadata-oriented LeRobot v3 snapshot.
 - Frame JSONL and available camera MP4 artifact materialization.
 - Export validation report.
+- Optional official LeRobotDataset loader validation.
 - Lance subset export for selected episodes when optional Lance dependencies are
   installed.
 - Accepted annotations only.

@@ -105,7 +105,7 @@ Implemented now:
   camera video assets, deterministic cache keys, and web viewer embedding
   through `@rerun-io/web-viewer-react`.
 - Metadata-oriented LeRobot v3 export manifest, validation report, and version
-  lineage.
+  lineage, including optional official LeRobotDataset loader validation.
 - Lance subset export for selected episodes when optional `pyarrow` and `lance`
   dependencies are installed.
 - Web UI orchestration via `useStudioData`.

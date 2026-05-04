@@ -39,6 +39,12 @@ export function ExportStrip({ episodeIndex, exportRecord, onCreateExport }: Expo
                 {validation.episode_count ?? 0} / frames {validation.frame_count ?? 0}
               </span>
             ) : null}
+            {validation?.official_loader ? (
+              <span>
+                loader {loaderStatus(validation.official_loader)} / loadable{" "}
+                {validation.lerobot_loadable ? "yes" : "no"}
+              </span>
+            ) : null}
             {lerobotArtifact.materialized ? (
               <span>
                 data rows {lerobotArtifact.materialized.frame_rows ?? 0} / videos{" "}
@@ -77,4 +83,17 @@ export function ExportStrip({ episodeIndex, exportRecord, onCreateExport }: Expo
       </div>
     </section>
   );
+}
+
+function loaderStatus(loader: {
+  available?: boolean;
+  ok?: boolean | null;
+}): string {
+  if (!loader.available) {
+    return "unavailable";
+  }
+  if (loader.ok) {
+    return "ok";
+  }
+  return "check";
 }

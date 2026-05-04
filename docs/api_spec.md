@@ -263,7 +263,10 @@ For `format=lerobot`, the response `output_uri` points to the export manifest.
 The manifest contains an `artifacts.lerobot_v3` object with the metadata snapshot
 root, file paths, materialization status, and validation report. The API
 response also includes the same `artifacts` object so the web UI can show export
-provenance without reading the manifest file.
+provenance without reading the manifest file. The validation report includes a
+local loadability heuristic and an `official_loader` object. When the optional
+`lerobot` package is installed, the official loader result records success,
+dataset length, or the exact exception.
 
 For `format=lance`, the response contains `artifacts.lance_subset` when optional
 `pyarrow` and `lance` dependencies are installed. The subset contains

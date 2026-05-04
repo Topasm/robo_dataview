@@ -143,6 +143,16 @@ export type ExportArtifacts = {
     validation?: {
       metadata_ok?: boolean;
       lerobot_loadable?: boolean;
+      local_lerobot_loadable_heuristic?: boolean;
+      official_loader?: {
+        checked?: boolean;
+        available?: boolean;
+        ok?: boolean | null;
+        repo_id?: string | null;
+        root?: string | null;
+        error?: string | null;
+        length?: number | null;
+      };
       episode_count?: number;
       frame_count?: number;
       materialized_frame_count?: number;

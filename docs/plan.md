@@ -225,6 +225,7 @@ Definition of done:
 - [x] Write LeRobot v3-oriented snapshot.
 - [x] Materialize frame JSONL and available camera MP4 artifacts.
 - [x] Add export validation report.
+- [x] Add optional official LeRobotDataset loader validation.
 - [x] Append version lineage.
 - [x] Add Lance subset export.
 - [ ] Add train/val/test split controls.

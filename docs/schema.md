@@ -284,9 +284,11 @@ lerobot_v3/
 
 The snapshot follows the LeRobot v3 directory contract for selected episodes and
 accepted annotations. It writes frame JSONL and available camera MP4 blobs, and
-also writes Parquet shards when `pyarrow` is installed. Full official
-`LeRobotDataset` loadability still needs validation against the optional
-`lerobot` package and its exact v3 expectations.
+also writes Parquet shards when `pyarrow` is installed. `validation.json`
+contains both the local loadability heuristic and an `official_loader` result.
+When the optional `lerobot` package is installed, validation attempts
+`LeRobotDataset(repo_id, root=<export_root>)` and records success, dataset
+length, or the exact exception.
 
 ## Lance subset export
 

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import sys
 import tempfile
+from types import ModuleType
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from apps.api.schemas.episodes import EpisodeDetail
 from apps.api.services.lerobot_io import (
@@ -61,6 +64,7 @@ class LeRobotIoTest(unittest.TestCase):
 
             self.assertTrue(validation["metadata_ok"])
             self.assertFalse(validation["lerobot_loadable"])
+            self.assertIn("official_loader", validation)
             self.assertEqual(validation["episode_count"], 2)
             self.assertEqual(validation["frame_count"], 20)
 
@@ -105,6 +109,84 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertTrue(Path(artifact["files"]["data_jsonl"]).exists())
             self.assertTrue(Path(artifact["files"]["video_index"]).exists())
             self.assertTrue((root / "videos/cam_high/chunk-000/episode_000000.mp4").exists())
+
+    def test_validate_lerobot_snapshot_records_official_loader_success(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir)
+            artifact = write_lerobot_v3_snapshot(
+                export_dir,
+                dataset_id="sample-xvla-soft-fold",
+                episodes=[
+                    EpisodeDetail(
+                        dataset_id="sample-xvla-soft-fold",
+                        episode_index=0,
+                        task_index=3,
+                        length=1,
+                        fps=20.0,
+                        camera_names=[],
+                    )
+                ],
+                annotations_by_episode={},
+                version_description="unit test",
+            )
+            with patch.dict(sys.modules, _fake_lerobot_modules(_FakeLeRobotDataset)):
+                validation = validate_lerobot_v3_snapshot(Path(artifact["root"]))
+
+            self.assertTrue(validation["official_loader"]["available"])
+            self.assertTrue(validation["official_loader"]["ok"])
+            self.assertEqual(validation["official_loader"]["length"], 7)
+            self.assertEqual(validation["official_loader"]["repo_id"], "local/sample-xvla-soft-fold")
+
+    def test_validate_lerobot_snapshot_records_official_loader_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir)
+            artifact = write_lerobot_v3_snapshot(
+                export_dir,
+                dataset_id="sample-xvla-soft-fold",
+                episodes=[
+                    EpisodeDetail(
+                        dataset_id="sample-xvla-soft-fold",
+                        episode_index=0,
+                        task_index=3,
+                        length=1,
+                        fps=20.0,
+                        camera_names=[],
+                    )
+                ],
+                annotations_by_episode={},
+                version_description="unit test",
+            )
+            with patch.dict(sys.modules, _fake_lerobot_modules(_FailingLeRobotDataset)):
+                validation = validate_lerobot_v3_snapshot(Path(artifact["root"]))
+
+            self.assertTrue(validation["official_loader"]["available"])
+            self.assertFalse(validation["official_loader"]["ok"])
+            self.assertIn("RuntimeError: cannot load", validation["official_loader"]["error"])
+
+
+class _FakeLeRobotDataset:
+    def __init__(self, repo_id: str, root: Path) -> None:
+        self.repo_id = repo_id
+        self.root = root
+
+    def __len__(self) -> int:
+        return 7
+
+
+class _FailingLeRobotDataset:
+    def __init__(self, repo_id: str, root: Path) -> None:
+        del repo_id, root
+        raise RuntimeError("cannot load")
+
+
+def _fake_lerobot_modules(dataset_class: type) -> dict[str, ModuleType]:
+    lerobot_module = ModuleType("lerobot")
+    datasets_module = ModuleType("lerobot.datasets")
+    datasets_module.LeRobotDataset = dataset_class
+    return {
+        "lerobot": lerobot_module,
+        "lerobot.datasets": datasets_module,
+    }
 
 
 if __name__ == "__main__":

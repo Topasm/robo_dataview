@@ -80,7 +80,8 @@ Known MVP gaps:
   LanceDB persistence/query are optional; real visual/video model embeddings are
   not implemented yet.
 - LeRobot export writes frame JSONL and available MP4 artifacts; training-ready
-  Parquet shards still require optional `pyarrow`/LeRobot dependencies.
+  Parquet shards still require optional `pyarrow`/LeRobot dependencies. When
+  `lerobot` is installed, validation records the official loader result.
 - Lance subset export requires optional `pyarrow` and `lance` dependencies and
   fails clearly when they are missing.
 

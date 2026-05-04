@@ -214,7 +214,7 @@ def read_lerobot_snapshot_episodes(root: Path, dataset_id: str | None = None) ->
 
 
 def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
-    """Validate the local snapshot without requiring LeRobot itself."""
+    """Validate the local snapshot and optionally probe the official loader."""
 
     info_path = root / "meta" / "info.json"
     paths = {
@@ -239,6 +239,8 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         return {
             "metadata_ok": False,
             "lerobot_loadable": False,
+            "local_lerobot_loadable_heuristic": False,
+            "official_loader": _unavailable_official_loader("missing meta/info.json"),
             "materialization_status": "missing_info",
             "files": {name: str(path) for name, path in paths.items()},
             "present": present,
@@ -298,9 +300,18 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         if missing_videos:
             errors.append(f"video index references missing files: {missing_videos[:3]}")
 
+    local_loadable = bool(not errors and present["data_parquet"])
+    official_loader = _validate_with_official_lerobot_loader(root, info)
+    if official_loader["available"]:
+        lerobot_loadable = bool(not errors and official_loader["ok"])
+    else:
+        lerobot_loadable = local_loadable
+
     return {
         "metadata_ok": not errors,
-        "lerobot_loadable": bool(not errors and present["data_parquet"]),
+        "lerobot_loadable": lerobot_loadable,
+        "local_lerobot_loadable_heuristic": local_loadable,
+        "official_loader": official_loader,
         "materialization_status": materialization_status,
         "episode_count": len(episode_rows),
         "frame_count": sum(int(row.get("length") or 0) for row in episode_rows),
@@ -311,6 +322,53 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         "errors": errors,
         "warnings": warnings,
     }
+
+
+def _validate_with_official_lerobot_loader(root: Path, info: dict[str, Any]) -> dict[str, Any]:
+    try:
+        try:
+            from lerobot.datasets import LeRobotDataset
+        except ImportError:
+            from lerobot.datasets.lerobot_dataset import LeRobotDataset
+    except ImportError as exc:
+        return _unavailable_official_loader(f"{type(exc).__name__}: {exc}")
+
+    repo_id = _official_loader_repo_id(info, root)
+    result: dict[str, Any] = {
+        "checked": True,
+        "available": True,
+        "ok": False,
+        "repo_id": repo_id,
+        "root": str(root),
+        "error": None,
+        "length": None,
+    }
+    try:
+        dataset = LeRobotDataset(repo_id, root=root)
+        result["length"] = len(dataset) if hasattr(dataset, "__len__") else None
+        result["ok"] = True
+    except Exception as exc:
+        result["error"] = f"{type(exc).__name__}: {exc}"
+    return result
+
+
+def _unavailable_official_loader(reason: str) -> dict[str, Any]:
+    return {
+        "checked": True,
+        "available": False,
+        "ok": None,
+        "repo_id": None,
+        "root": None,
+        "error": reason,
+        "length": None,
+    }
+
+
+def _official_loader_repo_id(info: dict[str, Any], root: Path) -> str:
+    repo_id = str(info.get("repo_id") or info.get("dataset_id") or root.name)
+    if "/" not in repo_id:
+        repo_id = f"local/{repo_id}"
+    return repo_id
 
 
 def _task_rows(episodes: list[EpisodeDetail]) -> list[dict[str, Any]]:
