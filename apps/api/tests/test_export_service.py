@@ -182,6 +182,29 @@ class ExportServiceTest(unittest.TestCase):
         self.assertIsNone(record.output_uri)
         self.assertIn("optional pyarrow and lance", record.message or "")
 
+    def test_lerobot_export_fails_when_validation_fails(self) -> None:
+        versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
+        exports = ExportStore(versions=versions)
+
+        with patch.object(export_service, "store", _FakeInvalidVideoStore()):
+            record = exports.create(
+                ExportCreateRequest(
+                    dataset_id="invalid-video-dataset",
+                    episode_indices=[0],
+                    format=ExportFormat.lerobot,
+                    version_description="invalid video export",
+                )
+            )
+
+        self.assertEqual(record.status, JobStatus.failed)
+        self.assertIsNone(record.output_uri)
+        self.assertIn("LeRobot export validation failed", record.message or "")
+        self.assertIn("invalid MP4 files", record.message or "")
+        self.assertIsNotNone(record.artifacts)
+        assert record.artifacts is not None
+        self.assertFalse(record.artifacts["lerobot_v3"]["validation"]["metadata_ok"])
+        self.assertEqual(versions.list("invalid-video-dataset"), [])
+
     def test_lance_export_writes_subset_artifact(self) -> None:
         accepted = annotation_store.create(
             AnnotationCreate(
@@ -390,6 +413,34 @@ class _FakeSplitStore:
             (episode for episode in self.episodes if episode.episode_index == episode_index),
             None,
         )
+
+
+class _FakeInvalidVideoStore:
+    def get_episode(self, dataset_id: str, episode_index: int) -> EpisodeDetail | None:
+        if dataset_id != "invalid-video-dataset" or episode_index != 0:
+            return None
+        return EpisodeDetail(
+            dataset_id=dataset_id,
+            episode_index=0,
+            task_index=1,
+            length=1,
+            fps=20.0,
+            camera_names=["cam_high"],
+        )
+
+    def get_episode_timeseries(self, dataset_id: str, episode_index: int) -> dict | None:
+        if dataset_id != "invalid-video-dataset" or episode_index != 0:
+            return None
+        return {
+            "timestamps": [0.0],
+            "states": [[0.0, 0.0]],
+            "actions": [[1.0, 1.0]],
+        }
+
+    def get_video_blob(self, dataset_id: str, episode_index: int, camera: str) -> bytes | None:
+        if dataset_id == "invalid-video-dataset" and episode_index == 0 and camera == "cam_high":
+            return b"not an mp4"
+        return None
 
 
 if __name__ == "__main__":

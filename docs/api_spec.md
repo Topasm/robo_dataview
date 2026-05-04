@@ -383,6 +383,8 @@ result records success, dataset length, or the exact exception.
 When the official loader is unavailable, `local_lerobot_loadable_heuristic` can
 still describe whether the local artifact shape appears complete, and
 `loadability_basis` records that this is not an official load result.
+If the LeRobot validation report has `metadata_ok=false`, the export request
+returns `status=failed` instead of writing a successful manifest.
 
 For `format=lance`, the response contains `artifacts.lance_subset` when optional
 `pyarrow` and `lance` dependencies are installed. The subset contains

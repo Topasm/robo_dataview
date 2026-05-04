@@ -153,6 +153,18 @@ class ExportStore:
                 timeseries_by_episode=timeseries_by_episode,
                 video_blobs_by_episode=video_blobs_by_episode,
             )
+            validation = artifacts["lerobot_v3"].get("validation", {})
+            if not validation.get("metadata_ok", False):
+                errors = validation.get("errors") or ["LeRobot export validation failed."]
+                return model_copy(
+                    record,
+                    update={
+                        "status": JobStatus.failed,
+                        "output_uri": None,
+                        "message": f"LeRobot export validation failed: {errors[0]}",
+                        "artifacts": artifacts,
+                    },
+                )
         elif payload.format == ExportFormat.lance:
             try:
                 frames_by_episode = {
