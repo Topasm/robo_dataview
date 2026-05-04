@@ -224,10 +224,11 @@ Implemented:
 - Optional OpenAI-compatible text embedding provider.
 - Visual keyframe embedding jobs with deterministic fallback and optional
   Transformers CLIP/SigLIP/DINO-style image model route.
+- Semantic search modality/source-model filters for stored visual rows.
 
 Next:
 
-- Add cross-modal visual search over compatible CLIP/SigLIP records.
+- Add a compatible CLIP/SigLIP text encoder route for true text-to-image search.
 - Move embedding jobs to a queue-backed worker process.
 
 ## Phase 7: Export and Versioning

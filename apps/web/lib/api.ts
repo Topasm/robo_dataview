@@ -169,6 +169,10 @@ type SearchResultResponse = {
   score: number | null;
   match_type: string;
   label: string | null;
+  modality?: string | null;
+  source_model?: string | null;
+  camera?: string | null;
+  source_uri?: string | null;
 };
 
 type FilterPresetResponse = {
@@ -740,7 +744,7 @@ export async function semanticSearch(
   text: string,
   filterQuery?: string,
 ): Promise<SearchResult[]> {
-  const body: Record<string, number | string> = {
+  const body: Record<string, number | string | string[]> = {
     dataset_id: datasetId,
     text,
     limit: 10
@@ -1063,7 +1067,11 @@ function toSearchResult(raw: SearchResultResponse): SearchResult {
     frameIndex: raw.frame_index,
     score: raw.score,
     matchType: raw.match_type,
-    label: raw.label
+    label: raw.label,
+    modality: raw.modality ?? null,
+    sourceModel: raw.source_model ?? null,
+    camera: raw.camera ?? null,
+    sourceUri: raw.source_uri ?? null
   };
 }
 

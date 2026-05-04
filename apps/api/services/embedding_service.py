@@ -273,20 +273,30 @@ class EmbeddingIndex:
         )
         query = self._embed_text(payload.text)
         query_embedding = query.embedding
+        target_modalities = _target_modalities(payload.modalities)
+        target_source_model = payload.source_model or query.source_model
         if persist_records:
             lancedb_results = self._search_lancedb(
                 payload.dataset_id,
                 query_embedding=query_embedding,
                 limit=payload.limit,
-                modality="text",
-                source_model=query.source_model,
+                modalities=target_modalities,
+                source_model=target_source_model,
             )
             if lancedb_results is not None:
                 return lancedb_results
 
+        allowed_episode_indices = {episode.episode_index for episode in episodes}
+        candidate_records = self._candidate_records(
+            payload.dataset_id,
+            text_records=records,
+            target_modalities=target_modalities,
+            target_source_model=target_source_model,
+            allowed_episode_indices=allowed_episode_indices,
+        )
         scored = [
             (cosine_similarity(query_embedding, record.embedding), record)
-            for record in records
+            for record in candidate_records
         ]
         scored.sort(key=lambda item: item[0], reverse=True)
         return [
@@ -295,8 +305,12 @@ class EmbeddingIndex:
                 episode_index=record.episode_index,
                 frame_index=record.frame_index,
                 score=score,
-                match_type="semantic_text_embedding",
+                match_type=_match_type_for_modality(record.modality),
                 label=record.text,
+                modality=record.modality,
+                source_model=record.source_model,
+                camera=record.camera,
+                source_uri=record.source_uri,
             )
             for score, record in scored[: payload.limit]
             if score > 0
@@ -342,6 +356,36 @@ class EmbeddingIndex:
 
     def records(self, dataset_id: str) -> list[EmbeddingRecord]:
         return self._records.get(dataset_id, [])
+
+    def _candidate_records(
+        self,
+        dataset_id: str,
+        *,
+        text_records: list[EmbeddingRecord],
+        target_modalities: set[str],
+        target_source_model: str,
+        allowed_episode_indices: set[int],
+    ) -> list[EmbeddingRecord]:
+        records: list[EmbeddingRecord] = []
+        if "text" in target_modalities:
+            records.extend(text_records)
+        stored_modalities = target_modalities - {"text"}
+        if stored_modalities:
+            records.extend(
+                record
+                for record in self.records(dataset_id)
+                if record.modality in stored_modalities
+            )
+        return [
+            record
+            for record in records
+            if record.modality in target_modalities
+            and record.source_model == target_source_model
+            and (
+                not allowed_episode_indices
+                or record.episode_index in allowed_episode_indices
+            )
+        ]
 
     def storage_paths(self, dataset_id: str) -> dict[str, str]:
         dataset_dir = self._dataset_dir(dataset_id)
@@ -431,7 +475,7 @@ class EmbeddingIndex:
         *,
         query_embedding: list[float],
         limit: int,
-        modality: str | None = None,
+        modalities: set[str] | None = None,
         source_model: str | None = None,
     ) -> list[SearchResult] | None:
         database_path = self._dataset_dir(dataset_id) / "lancedb"
@@ -451,8 +495,8 @@ class EmbeddingIndex:
             rows = query.limit(max(limit, limit * 5)).to_list()
         except Exception:
             return None
-        if modality is not None:
-            rows = [row for row in rows if row.get("modality") == modality]
+        if modalities is not None:
+            rows = [row for row in rows if row.get("modality") in modalities]
         if source_model is not None:
             rows = [row for row in rows if row.get("source_model") == source_model]
         if not rows:
@@ -465,6 +509,10 @@ class EmbeddingIndex:
                 score=_score_from_distance(row.get("_distance")),
                 match_type="lancedb_vector",
                 label=row.get("text"),
+                modality=row.get("modality"),
+                source_model=row.get("source_model"),
+                camera=row.get("camera"),
+                source_uri=row.get("source_uri"),
             )
             for row in rows[:limit]
         ]
@@ -519,6 +567,32 @@ def tokenize(text: str) -> list[str]:
         for token in "".join(char.lower() if char.isalnum() else " " for char in text).split()
         if token
     ]
+
+
+def _target_modalities(modalities: list[str] | None) -> set[str]:
+    if not modalities:
+        return {"text"}
+    normalized: set[str] = set()
+    for modality in modalities:
+        value = modality.strip().lower()
+        if not value:
+            continue
+        if value == "visual":
+            normalized.update({"image", "video_clip"})
+        elif value == "all":
+            normalized.update({"text", "image", "video_clip", "trajectory"})
+        else:
+            normalized.add(value)
+    return normalized or {"text"}
+
+
+def _match_type_for_modality(modality: str) -> str:
+    normalized = modality.strip().lower()
+    if normalized == "text":
+        return "semantic_text_embedding"
+    if normalized in {"image", "video_clip"}:
+        return "semantic_visual_embedding"
+    return f"semantic_{normalized or 'unknown'}_embedding"
 
 
 def cosine_similarity(left: list[float], right: list[float]) -> float:

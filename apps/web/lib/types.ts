@@ -268,6 +268,10 @@ export type SearchResult = {
   score: number | null;
   matchType: string;
   label: string | null;
+  modality: string | null;
+  sourceModel: string | null;
+  camera: string | null;
+  sourceUri: string | null;
 };
 
 export type FilterPreset = {

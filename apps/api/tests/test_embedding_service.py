@@ -194,6 +194,126 @@ class EmbeddingServiceTest(unittest.TestCase):
         self.assertIn("image", {record.modality for record in records})
         self.assertIn("text", {record.modality for record in records})
 
+    def test_semantic_search_can_target_compatible_visual_records(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            index = EmbeddingIndex(
+                storage_root=Path(tmpdir),
+                embedding_provider=FakeTextEmbeddingProvider(),
+                mirror_lance=False,
+                mirror_lancedb=False,
+            )
+            index.upsert_records(
+                "sample",
+                [
+                    EmbeddingRecord(
+                        embedding_id="visual-1",
+                        episode_index=7,
+                        frame_index=4,
+                        clip_start_frame=4,
+                        clip_end_frame=4,
+                        modality="image",
+                        embedding=[1.0, 0.0],
+                        text="cam_high frame 4 visual keyframe",
+                        source_model="fake-text-embedding",
+                        created_at=datetime.now(timezone.utc),
+                        camera="cam_high",
+                        source_uri="/tmp/keyframe.jpg",
+                        content_hash="abc123",
+                    ),
+                    EmbeddingRecord(
+                        embedding_id="visual-2",
+                        episode_index=8,
+                        frame_index=4,
+                        clip_start_frame=4,
+                        clip_end_frame=4,
+                        modality="image",
+                        embedding=[0.0, 1.0],
+                        text="cam_left frame 4 visual keyframe",
+                        source_model="fake-text-embedding",
+                        created_at=datetime.now(timezone.utc),
+                        camera="cam_left",
+                        source_uri="/tmp/other.jpg",
+                        content_hash="def456",
+                    ),
+                ],
+            )
+
+            results = index.search(
+                SemanticSearchRequest(
+                    dataset_id="sample",
+                    text="cloth grasp",
+                    modalities=["image"],
+                    source_model="fake-text-embedding",
+                    limit=2,
+                ),
+                episodes=[
+                    EpisodeListItem(dataset_id="sample", episode_index=7),
+                    EpisodeListItem(dataset_id="sample", episode_index=8),
+                ],
+                annotations=[],
+            )
+
+        self.assertEqual(results[0].episode_index, 7)
+        self.assertEqual(results[0].frame_index, 4)
+        self.assertEqual(results[0].match_type, "semantic_visual_embedding")
+        self.assertEqual(results[0].modality, "image")
+        self.assertEqual(results[0].source_model, "fake-text-embedding")
+        self.assertEqual(results[0].camera, "cam_high")
+        self.assertEqual(results[0].source_uri, "/tmp/keyframe.jpg")
+
+    def test_visual_semantic_search_respects_filtered_episode_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            index = EmbeddingIndex(
+                storage_root=Path(tmpdir),
+                embedding_provider=FakeTextEmbeddingProvider(),
+                mirror_lance=False,
+                mirror_lancedb=False,
+            )
+            index.upsert_records(
+                "sample",
+                [
+                    EmbeddingRecord(
+                        embedding_id="visual-1",
+                        episode_index=7,
+                        frame_index=4,
+                        clip_start_frame=4,
+                        clip_end_frame=4,
+                        modality="image",
+                        embedding=[1.0, 0.0],
+                        text="cam_high frame 4 visual keyframe",
+                        source_model="fake-text-embedding",
+                        created_at=datetime.now(timezone.utc),
+                    ),
+                    EmbeddingRecord(
+                        embedding_id="visual-2",
+                        episode_index=8,
+                        frame_index=4,
+                        clip_start_frame=4,
+                        clip_end_frame=4,
+                        modality="image",
+                        embedding=[1.0, 0.0],
+                        text="cam_left frame 4 visual keyframe",
+                        source_model="fake-text-embedding",
+                        created_at=datetime.now(timezone.utc),
+                    ),
+                ],
+            )
+
+            results = index.search(
+                SemanticSearchRequest(
+                    dataset_id="sample",
+                    text="cloth grasp",
+                    modalities=["image"],
+                    source_model="fake-text-embedding",
+                    limit=10,
+                ),
+                episodes=[EpisodeListItem(dataset_id="sample", episode_index=7)],
+                annotations=[],
+                persist_records=False,
+            )
+
+        self.assertEqual([result.episode_index for result in results], [7])
+
     def test_embedding_index_can_search_without_persisting_filtered_records(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             storage_root = Path(tmpdir)

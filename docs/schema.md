@@ -252,9 +252,10 @@ route keyframes through an optional Transformers vision model. Visual rows store
 `camera`, `source_uri`, and `content_hash` so multi-camera frame embeddings are
 traceable.
 
-Current status: text semantic search and visual image embedding generation are
-implemented as separate paths. Cross-modal text-to-image search should only rank
-visual rows when the query and image vectors come from a compatible model family.
+Current status: semantic search can target stored text, image, video clip, or
+trajectory embedding rows via modality filters. Cross-modal text-to-image search
+should only rank visual rows when the query and image vectors come from a
+compatible model family and `source_model` is selected accordingly.
 
 ## versions.lance
 

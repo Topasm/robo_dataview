@@ -13,6 +13,8 @@ class SemanticSearchRequest(BaseModel):
     dataset_id: str
     text: str
     filter_query: str | None = None
+    modalities: list[str] | None = None
+    source_model: str | None = None
     limit: int = Field(default=20, ge=1, le=100)
 
 
@@ -29,6 +31,10 @@ class SearchResult(BaseModel):
     score: float | None = None
     match_type: str
     label: str | None = None
+    modality: str | None = None
+    source_model: str | None = None
+    camera: str | None = None
+    source_uri: str | None = None
 
 
 class FilterPresetCreate(BaseModel):

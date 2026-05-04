@@ -103,6 +103,7 @@ Implemented now:
 - Visual keyframe embedding generation with deterministic fallback, optional
   Transformers CLIP/SigLIP/DINO-style provider, and camera/source/hash metadata
   in the shared embedding table.
+- Semantic search modality/source-model filters for stored visual rows.
 - Full-text search over episode metadata and annotation text.
 - VLM provider routing with heuristic fallback and optional OpenAI-compatible
   HTTP inference.
@@ -137,7 +138,7 @@ Not implemented yet:
 
 - Durable external database for app settings.
 - Local VLM/video-model inference.
-- Cross-modal visual search over compatible text/image model embeddings.
+- Compatible CLIP/SigLIP text encoder route for true text-to-image search.
 - Larger strict real-dataset LeRobot Parquet/MP4 smoke runs with video
   materialization.
 - Remote object-store/HF path byte-range reads. Local file sources and seekable
