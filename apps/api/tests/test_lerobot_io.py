@@ -227,6 +227,46 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertEqual(video_rows[0]["height_pixels"], 480)
             self.assertEqual(video_rows[0]["width_pixels"], 640)
 
+    def test_validate_lerobot_snapshot_records_video_decode_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir)
+            with patch.dict(sys.modules, {"cv2": _fake_cv2_module(width=640, height=480, fps=20.0, frames=2)}):
+                artifact = write_lerobot_v3_snapshot(
+                    export_dir,
+                    dataset_id="sample-xvla-soft-fold",
+                    episodes=[
+                        EpisodeDetail(
+                            dataset_id="sample-xvla-soft-fold",
+                            episode_index=0,
+                            task_index=3,
+                            length=2,
+                            fps=20.0,
+                            camera_names=["cam_high"],
+                        )
+                    ],
+                    annotations_by_episode={},
+                    version_description="unit test",
+                    timeseries_by_episode={
+                        0: {
+                            "timestamps": [0.0, 0.05],
+                            "states": [[0.0], [1.0]],
+                            "actions": [[1.0], [2.0]],
+                        }
+                    },
+                    video_blobs_by_episode={0: {"cam_high": _fake_mp4_with_tkhd(640, 480)}},
+                )
+
+            readability = artifact["validation"]["video_readability"][
+                "videos/cam_high/chunk-000/file-000.mp4"
+            ]
+
+            self.assertTrue(readability["checked"])
+            self.assertTrue(readability["readable"])
+            self.assertEqual(readability["frame_count"], 2)
+            self.assertEqual(readability["width_pixels"], 640)
+            self.assertEqual(readability["height_pixels"], 480)
+            self.assertEqual(readability["fps"], 20.0)
+
     def test_lerobot_snapshot_offsets_follow_materialized_frame_rows(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             export_dir = Path(tmpdir)
@@ -939,6 +979,38 @@ def _fake_hf_datasets_write_module(written_datasets: dict[str, dict]) -> ModuleT
         "shape": shape,
         "dtype": dtype,
     }
+    return module
+
+
+def _fake_cv2_module(*, width: int, height: int, fps: float, frames: int) -> ModuleType:
+    module = ModuleType("cv2")
+    module.CAP_PROP_FRAME_COUNT = 1  # type: ignore[attr-defined]
+    module.CAP_PROP_FRAME_WIDTH = 2  # type: ignore[attr-defined]
+    module.CAP_PROP_FRAME_HEIGHT = 3  # type: ignore[attr-defined]
+    module.CAP_PROP_FPS = 4  # type: ignore[attr-defined]
+
+    class VideoCapture:
+        def __init__(self, path: str) -> None:
+            self.path = path
+
+        def isOpened(self) -> bool:
+            return True
+
+        def get(self, prop: int) -> float:
+            if prop == module.CAP_PROP_FRAME_COUNT:
+                return float(frames)
+            if prop == module.CAP_PROP_FRAME_WIDTH:
+                return float(width)
+            if prop == module.CAP_PROP_FRAME_HEIGHT:
+                return float(height)
+            if prop == module.CAP_PROP_FPS:
+                return float(fps)
+            return 0.0
+
+        def release(self) -> None:
+            return None
+
+    module.VideoCapture = VideoCapture  # type: ignore[attr-defined]
     return module
 
 

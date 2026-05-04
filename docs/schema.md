@@ -361,7 +361,10 @@ official loader check; a complete local heuristic without the official loader is
 reported through `local_lerobot_loadable_heuristic` and
 `loadability_basis=local_heuristic_unverified`. Local validation also checks
 that readable Parquet row counts match the exported task metadata, episode
-metadata, and frame index expectations.
+metadata, and frame index expectations. When OpenCV is installed, validation
+also records `video_readability` decode metadata with frame count, fps,
+width, and height for each exported MP4; decode failures are surfaced as
+warnings unless the MP4 payload itself is structurally invalid.
 
 ## Lance subset export
 

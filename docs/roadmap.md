@@ -256,6 +256,8 @@ Implemented:
   tabular shard.
 - Video feature metadata records `[height, width, channel]` shape and
   `video_info`, with MP4 `tkhd` dimensions captured when available.
+- Validation records optional OpenCV video decode metadata for exported MP4
+  artifacts.
 - Export validation report.
 - Optional official LeRobotDataset loader validation.
 - Lance subset export for selected episodes when optional Lance dependencies are

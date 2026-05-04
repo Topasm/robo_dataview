@@ -268,6 +268,7 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
             "materialization_status": "missing_info",
             "files": {name: str(path) for name, path in paths.items()},
             "present": present,
+            "video_readability": {},
             "errors": errors,
             "warnings": warnings,
         }
@@ -366,6 +367,14 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         ]
         if invalid_videos:
             errors.append(f"video index references invalid MP4 files: {invalid_videos[:3]}")
+    video_readability = _video_readability(root, video_rows)
+    for status in video_readability.values():
+        if not status.get("present"):
+            continue
+        if status.get("readable") is False:
+            warnings.append(f"{status.get('video_file')} could not be decoded: {status.get('error')}")
+        elif status.get("checked") is False:
+            warnings.append(f"{status.get('video_file')} could not be decode-checked because {status.get('error')}")
     if data_rows and video_rows and not _frame_rows_have_video_references(data_rows, video_rows, root):
         errors.append("frame rows must include valid video feature references")
 
@@ -406,6 +415,7 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         "files": {name: str(path) for name, path in paths.items()},
         "present": present,
         "parquet_readability": parquet_readability,
+        "video_readability": video_readability,
         "errors": errors,
         "warnings": warnings,
     }
@@ -488,6 +498,62 @@ def _tkhd_dimensions(payload: bytes) -> tuple[int | None, int | None]:
     if width <= 0 or height <= 0:
         return None, None
     return width, height
+
+
+def _video_readability(root: Path, video_rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    statuses: dict[str, dict[str, Any]] = {}
+    for row in video_rows:
+        video_file = str(row.get("video_file") or "")
+        if not video_file:
+            continue
+        statuses[video_file] = _video_file_status(root / video_file, row)
+    return statuses
+
+
+def _video_file_status(path: Path, video_row: dict[str, Any]) -> dict[str, Any]:
+    base = {
+        "video_file": str(video_row.get("video_file") or path),
+        "present": path.exists(),
+        "checked": False,
+        "readable": False,
+        "frame_count": None,
+        "width_pixels": None,
+        "height_pixels": None,
+        "fps": None,
+        "error": None,
+    }
+    if not path.exists():
+        return {**base, "error": "file is not present"}
+    try:
+        import cv2
+    except ImportError as exc:
+        return {**base, "readable": None, "error": f"opencv is unavailable: {exc}"}
+
+    capture = None
+    try:
+        capture = cv2.VideoCapture(str(path))
+        if not capture.isOpened():
+            return {**base, "checked": True, "error": "OpenCV could not open the video"}
+        frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+        fps = float(capture.get(cv2.CAP_PROP_FPS) or 0.0)
+    except Exception as exc:
+        return {**base, "checked": True, "error": f"{type(exc).__name__}: {exc}"}
+    finally:
+        if capture is not None:
+            capture.release()
+
+    return {
+        **base,
+        "checked": True,
+        "readable": True,
+        "frame_count": frame_count,
+        "width_pixels": width,
+        "height_pixels": height,
+        "fps": fps,
+        "error": None,
+    }
 
 
 def _parquet_readability(
