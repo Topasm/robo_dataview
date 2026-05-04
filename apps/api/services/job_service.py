@@ -9,6 +9,7 @@ from apps.api.schemas.jobs import JobCreateRequest, JobRecord
 from apps.api.services.annotation_service import annotation_store
 from apps.api.services.lance_store import store
 from apps.api.services.pydantic_compat import model_copy
+from apps.api.services.vlm_response_service import vlm_response_store
 from packages.prompts import UnknownPromptTemplateError, get_prompt_template
 from workers.vlm_autolabel import AutoLabelConfig
 from workers.vlm_provider import get_vlm_provider
@@ -86,6 +87,7 @@ class JobStore:
         )
         provider = get_vlm_provider(payload.model)
         created_annotation_ids: list[str] = []
+        raw_response_ids: list[str] = []
         missing_episodes: list[int] = []
         for episode_index in episode_indices:
             episode = store.get_episode(payload.dataset_id, episode_index)
@@ -96,6 +98,15 @@ class JobStore:
                 dataset_id=payload.dataset_id,
                 episode=episode,
                 config=config,
+            )
+            raw_response_ids.append(
+                vlm_response_store.append(
+                    dataset_id=payload.dataset_id,
+                    job_id=record.job_id,
+                    episode_index=episode_index,
+                    provider=result.provider,
+                    raw_response=result.raw_response,
+                )
             )
             created_annotation_ids.extend(
                 annotation_store.create(proposal).annotation_id for proposal in result.proposals
@@ -118,6 +129,13 @@ class JobStore:
                 "message": message,
                 "created_annotation_ids": created_annotation_ids,
                 "provider": provider.name,
+                "raw_response_ids": raw_response_ids,
+                "raw_response_uri": vlm_response_store.job_uri(
+                    dataset_id=payload.dataset_id,
+                    job_id=record.job_id,
+                )
+                if raw_response_ids
+                else None,
             }
         )
 

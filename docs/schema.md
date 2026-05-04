@@ -19,6 +19,8 @@ data/lance/embeddings/<dataset>/embeddings.lance
 
 data/lance/versions/versions.jsonl
 data/lance/versions/versions.lance
+
+data/lance/vlm_responses/<dataset>/<job_id>.jsonl
 ```
 
 The imported `xvla-soft-fold` dataset currently exposes camera names like:

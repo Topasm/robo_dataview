@@ -31,3 +31,5 @@ class JobRecord(BaseModel):
     prompt_template: str | None = None
     prompt_version: str | None = None
     provider: str | None = None
+    raw_response_ids: list[str] = Field(default_factory=list)
+    raw_response_uri: str | None = None

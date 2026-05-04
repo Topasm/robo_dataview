@@ -91,6 +91,8 @@ type JobRecordResponse = {
   prompt_template: string | null;
   prompt_version: string | null;
   provider: string | null;
+  raw_response_ids: string[];
+  raw_response_uri: string | null;
 };
 
 type ExportRecordResponse = {
@@ -526,7 +528,9 @@ function toJobRecord(raw: JobRecordResponse): JobRecord {
     model: raw.model,
     promptTemplate: raw.prompt_template,
     promptVersion: raw.prompt_version,
-    provider: raw.provider
+    provider: raw.provider,
+    rawResponseIds: raw.raw_response_ids,
+    rawResponseUri: raw.raw_response_uri
   };
 }
 

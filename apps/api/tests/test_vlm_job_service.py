@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 import unittest
 
 from fastapi import HTTPException
@@ -33,6 +34,9 @@ class VlmJobServiceTest(unittest.TestCase):
         self.assertEqual(record.prompt_template, "episode_autolabel_v1")
         self.assertEqual(record.prompt_version, "v1")
         self.assertEqual(record.provider, "heuristic-fallback")
+        self.assertEqual(len(record.raw_response_ids), 1)
+        self.assertIsNotNone(record.raw_response_uri)
+        self.assertTrue(Path(record.raw_response_uri or "").exists())
         self.assertGreaterEqual(len(record.created_annotation_ids), 20)
         self.assertEqual(len(created_by_job), len(record.created_annotation_ids))
         self.assertTrue(all(annotation.review_status == ReviewStatus.pending for annotation in created_by_job))
@@ -44,6 +48,7 @@ class VlmJobServiceTest(unittest.TestCase):
 
         for annotation_id in record.created_annotation_ids:
             annotation_store.delete(annotation_id)
+        Path(record.raw_response_uri or "").unlink(missing_ok=True)
 
     def test_vlm_label_job_fails_for_missing_episode(self) -> None:
         jobs = JobStore()

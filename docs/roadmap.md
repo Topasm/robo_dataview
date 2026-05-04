@@ -180,13 +180,14 @@ Implemented:
 - Deterministic 8 to 16 frame index sampling for prompt inputs.
 - Versioned prompt registry and prompt validation.
 - VLM provider interface with heuristic fallback provider.
+- Raw provider responses persisted to job-scoped JSONL.
 
 Next:
 
 - Move job execution to RQ/Celery.
 - Decode sampled keyframe images from video blobs.
 - Add real local/API VLM provider implementations.
-- Store raw model response, prompt version, and confidence rationale.
+- Add confidence rationale fields to real provider responses.
 
 ## Phase 6: Search and Filtering
 

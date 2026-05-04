@@ -98,6 +98,8 @@ export type JobRecord = {
   promptTemplate: string | null;
   promptVersion: string | null;
   provider: string | null;
+  rawResponseIds: string[];
+  rawResponseUri: string | null;
 };
 
 export type ExportRecord = {

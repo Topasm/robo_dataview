@@ -259,6 +259,9 @@ export function AnnotationEditor({
               {vlmJob.promptVersion ? `@${vlmJob.promptVersion}` : ""}
             </span>
             {vlmJob.provider ? <span className="mono">{vlmJob.provider}</span> : null}
+            {vlmJob.rawResponseIds.length > 0 ? (
+              <span className="mono">{vlmJob.rawResponseIds.length} raw</span>
+            ) : null}
           </div>
         ) : null}
       </section>

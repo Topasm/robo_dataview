@@ -59,7 +59,7 @@ apps/web
 apps/api
   FastAPI app
   In-memory service registries for datasets, jobs, exports, Rerun sessions
-  JSONL-backed annotation, embedding, and version stores
+  JSONL-backed annotation, embedding, version, and VLM response stores
   Optional Lance mirroring when pyarrow/lance are installed
 
 packages/robot_schema
@@ -67,7 +67,7 @@ packages/robot_schema
   PyArrow schema builders for those local curation tables
 
 workers
-  Heuristic VLM proposal generator
+  Heuristic VLM proposal generator and provider interface
   Future async worker entry points are added when queue-backed jobs are real
 
 data

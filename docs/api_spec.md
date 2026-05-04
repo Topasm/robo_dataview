@@ -203,7 +203,8 @@ GET  /jobs/{job_id}
 `POST /jobs/vlm-label` rejects unknown `prompt_template` values with `400`.
 Job records include `model`, `provider`, `prompt_template`, and
 `prompt_version` so generated annotation batches can be traced to the model
-route and prompt contract used.
+route and prompt contract used. VLM jobs also write raw provider responses to
+JSONL and return `raw_response_ids` plus `raw_response_uri`.
 
 ## Exports
 
