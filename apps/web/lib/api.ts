@@ -574,6 +574,10 @@ export async function createVisualEmbeddingJob(
   return toJobRecord(row);
 }
 
+export function jobEventsUrl(jobId: string): string {
+  return `${API_BASE_URL}/jobs/${jobId}/events`;
+}
+
 export async function createExport(
   datasetId: string,
   episodeIndices: number[],

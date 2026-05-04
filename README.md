@@ -123,8 +123,7 @@ The repository has moved past a pure skeleton. The current MVP path can:
 Known MVP gaps:
 
 - Expensive VLM and visual embedding jobs can run through optional Redis/RQ, but
-  progress streaming events are not wired yet. Rerun/export jobs still use their
-  current service paths.
+  Rerun/export jobs still use their current service paths.
 - VLM labeling defaults to heuristic/local scaffolding; OpenAI-compatible model
   inference is available only when configured with environment variables.
 - Text semantic search and visual image embedding generation are separate paths.
