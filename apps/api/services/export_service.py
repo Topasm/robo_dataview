@@ -16,6 +16,7 @@ from apps.api.services.lance_export import LanceExportDependencyError, write_lan
 from apps.api.services.lance_store import store
 from apps.api.services.lerobot_io import write_lerobot_v3_snapshot
 from apps.api.services.pydantic_compat import model_copy, model_dump
+from apps.api.services.training_export import write_jsonl_export, write_vla_jsonl_export
 from apps.api.services.version_service import (
     VersionStore,
     create_export_version_record,
@@ -178,6 +179,29 @@ class ExportStore:
                         "message": str(exc),
                     },
                 )
+        elif payload.format == ExportFormat.jsonl:
+            artifacts["jsonl"] = write_jsonl_export(
+                manifest_path.parent,
+                dataset_id=record.dataset_id,
+                episodes=episode_records,
+                annotations_by_episode=annotations_by_episode,
+                version_description=payload.version_description,
+            )
+        elif payload.format == ExportFormat.vla:
+            timeseries_by_episode = {
+                episode.episode_index: timeseries
+                for episode in episode_records
+                if (timeseries := store.get_episode_timeseries(record.dataset_id, episode.episode_index))
+                is not None
+            }
+            artifacts["vla_jsonl"] = write_vla_jsonl_export(
+                manifest_path.parent,
+                dataset_id=record.dataset_id,
+                episodes=episode_records,
+                annotations_by_episode=annotations_by_episode,
+                timeseries_by_episode=timeseries_by_episode,
+                version_description=payload.version_description,
+            )
 
         manifest = {
             "export_id": record.export_id,

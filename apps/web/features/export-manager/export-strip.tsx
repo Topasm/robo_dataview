@@ -5,12 +5,14 @@ import type { ExportRecord } from "@/lib/types";
 type ExportStripProps = {
   episodeIndex: number;
   exportRecord: ExportRecord | null;
-  onCreateExport: (format?: "lerobot" | "lance") => Promise<void>;
+  onCreateExport: (format?: "lerobot" | "lance" | "jsonl" | "vla") => Promise<void>;
 };
 
 export function ExportStrip({ episodeIndex, exportRecord, onCreateExport }: ExportStripProps) {
   const lerobotArtifact = exportRecord?.artifacts?.lerobot_v3;
   const lanceArtifact = exportRecord?.artifacts?.lance_subset;
+  const jsonlArtifact = exportRecord?.artifacts?.jsonl;
+  const vlaArtifact = exportRecord?.artifacts?.vla_jsonl;
   const validation = lerobotArtifact?.validation;
   const lanceValidation = lanceArtifact?.validation;
 
@@ -70,6 +72,12 @@ export function ExportStrip({ episodeIndex, exportRecord, onCreateExport }: Expo
             ) : null}
           </div>
         ) : null}
+        {jsonlArtifact ? (
+          <ExportArtifactSummary artifact={jsonlArtifact} label="JSONL" />
+        ) : null}
+        {vlaArtifact ? (
+          <ExportArtifactSummary artifact={vlaArtifact} label="VLA JSONL" />
+        ) : null}
       </div>
       <div className="export-actions">
         <button className="text-button" onClick={() => void onCreateExport("lerobot")} type="button">
@@ -80,8 +88,37 @@ export function ExportStrip({ episodeIndex, exportRecord, onCreateExport }: Expo
           <Download size={15} />
           Lance
         </button>
+        <button className="text-button" onClick={() => void onCreateExport("jsonl")} type="button">
+          <Download size={15} />
+          JSONL
+        </button>
+        <button className="text-button" onClick={() => void onCreateExport("vla")} type="button">
+          <Download size={15} />
+          VLA
+        </button>
       </div>
     </section>
+  );
+}
+
+function ExportArtifactSummary({
+  artifact,
+  label
+}: {
+  artifact: { root?: string; materialized?: Record<string, number | undefined> };
+  label: string;
+}) {
+  const materialized = artifact.materialized ?? {};
+  return (
+    <div className="export-artifact">
+      <span>{label}</span>
+      <span>{artifact.root}</span>
+      <span>
+        {Object.entries(materialized)
+          .map(([key, value]) => `${key} ${value ?? 0}`)
+          .join(" / ")}
+      </span>
+    </div>
   );
 }
 

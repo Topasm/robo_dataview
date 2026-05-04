@@ -467,7 +467,7 @@ export async function createVlmLabelJob(
 export async function createExport(
   datasetId: string,
   episodeIndices: number[],
-  format: "lerobot" | "lance" = "lerobot",
+  format: "lerobot" | "lance" | "jsonl" | "vla" = "lerobot",
 ): Promise<ExportRecord> {
   const row = await request<ExportRecordResponse>("/exports", {
     method: "POST",

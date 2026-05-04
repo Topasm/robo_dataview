@@ -228,9 +228,9 @@ Definition of done:
 - [x] Add optional official LeRobotDataset loader validation.
 - [x] Append version lineage.
 - [x] Add Lance subset export.
+- [x] Add JSONL captions and VLA training format export.
 - [ ] Add train/val/test split controls.
 - [ ] Materialize fully LeRobot-loadable Parquet/MP4 export.
-- [ ] Add JSONL captions and VLA training format export.
 
 ### P8: Production Shape
 

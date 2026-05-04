@@ -183,6 +183,14 @@ export type ExportArtifacts = {
       annotation_rows?: number;
     };
   };
+  jsonl?: JsonlExportArtifact;
+  vla_jsonl?: JsonlExportArtifact;
+};
+
+export type JsonlExportArtifact = {
+  root?: string;
+  files?: Record<string, string | null>;
+  materialized?: Record<string, number | undefined>;
 };
 
 export type SearchResult = {

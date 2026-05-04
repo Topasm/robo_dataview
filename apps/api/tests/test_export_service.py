@@ -201,6 +201,70 @@ class ExportServiceTest(unittest.TestCase):
         annotation_store.delete(accepted.annotation_id)
         annotation_store.delete(rejected.annotation_id)
 
+    def test_jsonl_export_writes_caption_and_annotation_files(self) -> None:
+        accepted = annotation_store.create(
+            AnnotationCreate(
+                dataset_id="sample-xvla-soft-fold",
+                episode_index=0,
+                start_frame=0,
+                end_frame=10,
+                label_type="phase",
+                label_value="jsonl_phase",
+                review_status=ReviewStatus.accepted,
+            )
+        )
+        versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
+        exports = ExportStore(versions=versions)
+
+        record = exports.create(
+            ExportCreateRequest(
+                dataset_id="sample-xvla-soft-fold",
+                episode_indices=[0],
+                format=ExportFormat.jsonl,
+                version_description="jsonl export",
+            )
+        )
+        manifest = json.loads(Path(record.output_uri or "").read_text(encoding="utf-8"))
+        artifact = manifest["artifacts"]["jsonl"]
+
+        self.assertEqual(record.status, JobStatus.succeeded)
+        self.assertEqual(artifact["materialized"]["episode_rows"], 1)
+        self.assertEqual(artifact["materialized"]["caption_rows"], 1)
+        self.assertEqual(artifact["materialized"]["annotation_rows"], 1)
+        self.assertTrue(Path(artifact["files"]["episodes"]).exists())
+        self.assertTrue(Path(artifact["files"]["captions"]).exists())
+        self.assertTrue(Path(artifact["files"]["annotations"]).exists())
+        self.assertEqual(versions.list("sample-xvla-soft-fold")[0].export_format, "jsonl")
+
+        annotation_store.delete(accepted.annotation_id)
+
+    def test_vla_export_writes_timeseries_examples(self) -> None:
+        versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
+        exports = ExportStore(versions=versions)
+
+        record = exports.create(
+            ExportCreateRequest(
+                dataset_id="sample-xvla-soft-fold",
+                episode_indices=[0],
+                format=ExportFormat.vla,
+                version_description="vla export",
+            )
+        )
+        manifest = json.loads(Path(record.output_uri or "").read_text(encoding="utf-8"))
+        artifact = manifest["artifacts"]["vla_jsonl"]
+        examples = [
+            json.loads(line)
+            for line in Path(artifact["files"]["examples"]).read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+
+        self.assertEqual(record.status, JobStatus.succeeded)
+        self.assertEqual(artifact["materialized"]["example_rows"], 1)
+        self.assertEqual(len(examples), 1)
+        self.assertEqual(examples[0]["episode_index"], 0)
+        self.assertEqual(len(examples[0]["action"]), 180)
+        self.assertEqual(versions.list("sample-xvla-soft-fold")[0].export_format, "vla")
+
 
 class _FakeTable:
     @staticmethod

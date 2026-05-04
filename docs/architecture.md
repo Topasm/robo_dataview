@@ -108,6 +108,7 @@ Implemented now:
   lineage, including optional official LeRobotDataset loader validation.
 - Lance subset export for selected episodes when optional `pyarrow` and `lance`
   dependencies are installed.
+- JSONL caption export and VLA-style JSONL trajectory export.
 - Web UI orchestration via `useStudioData`.
 
 Not implemented yet:

@@ -275,6 +275,12 @@ episodes and accepted annotations only. If those optional dependencies are
 missing, the export fails with a dependency message instead of returning an empty
 successful artifact.
 
+For `format=jsonl`, the response contains `artifacts.jsonl` with
+`episodes.jsonl`, `captions.jsonl`, and accepted `annotations.jsonl`. For
+`format=vla`, the response contains `artifacts.vla_jsonl` with one
+`examples.jsonl` row per selected episode, including instruction/caption,
+state/action time series when available, labels, and accepted annotations.
+
 Each successful export appends a version record to
 `data/lance/versions/versions.jsonl`; with optional Lance dependencies installed,
 the same records are mirrored to `versions.lance`.

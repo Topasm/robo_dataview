@@ -310,3 +310,28 @@ The subset includes selected episode metadata, frame-level state/action samples
 from `frames.lance` or the episode time-series fallback, and accepted
 annotations only. Missing optional Lance dependencies fail the export explicitly
 so callers do not mistake a manifest-only export for a usable Lance dataset.
+
+## JSONL and VLA exports
+
+`format=jsonl` writes lightweight curation files:
+
+```text
+jsonl_export/
+├─ metadata.json
+├─ episodes.jsonl
+├─ captions.jsonl
+└─ annotations.jsonl
+```
+
+`format=vla` writes one training-oriented JSONL row per selected episode:
+
+```text
+vla_export/
+├─ metadata.json
+└─ examples.jsonl
+```
+
+VLA rows include instruction/caption text, review labels, state/action
+time-series arrays when available, and accepted annotations. This is not a
+replacement for full LeRobot Parquet/MP4 training export, but it provides a
+simple interop target for experiments and caption/action pipelines.

@@ -250,6 +250,7 @@ Implemented:
 - Optional official LeRobotDataset loader validation.
 - Lance subset export for selected episodes when optional Lance dependencies are
   installed.
+- JSONL caption export and VLA-style JSONL trajectory export.
 - Accepted annotations only.
 - Version lineage JSONL plus optional Lance mirror.
 
