@@ -1,4 +1,5 @@
 export type ReviewStatus = "pending" | "accepted" | "rejected" | "edited";
+export type ExportFormat = "lerobot" | "lance" | "jsonl" | "vla" | "hf_dataset";
 
 export type DatasetSummary = {
   datasetId: string;

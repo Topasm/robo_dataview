@@ -1,14 +1,14 @@
 import { Download, PackageCheck } from "lucide-react";
 import { useState } from "react";
 
-import type { ExportRecord, JobRecord } from "@/lib/types";
+import type { ExportFormat, ExportRecord, JobRecord } from "@/lib/types";
 
 type ExportStripProps = {
   episodeIndex: number;
   exportJob: JobRecord | null;
   exportRecord: ExportRecord | null;
   onCreateExport: (
-    format?: "lerobot" | "lance" | "jsonl" | "vla",
+    format?: ExportFormat,
     scope?: "episode" | "split",
   ) => Promise<void>;
   split: string | null;
@@ -159,6 +159,15 @@ export function ExportStrip({
         >
           <Download size={15} />
           VLA
+        </button>
+        <button
+          className="text-button"
+          disabled={exportJobActive}
+          onClick={() => void onCreateExport("hf_dataset", scope)}
+          type="button"
+        >
+          <Download size={15} />
+          HF Dataset
         </button>
       </div>
     </section>

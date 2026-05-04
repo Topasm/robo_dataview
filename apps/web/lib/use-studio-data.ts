@@ -33,6 +33,7 @@ import type {
   DatasetSummary,
   Episode,
   ExportRecord,
+  ExportFormat,
   FilterPreset,
   FrameListPage,
   FrameRecord,
@@ -872,7 +873,7 @@ export function useStudioData() {
   }
 
   async function handleCreateExport(
-    format: "lerobot" | "lance" | "jsonl" | "vla" = "lerobot",
+    format: ExportFormat = "lerobot",
     scope: "episode" | "split" = "episode",
   ) {
     const split = selectedEpisode.split || null;

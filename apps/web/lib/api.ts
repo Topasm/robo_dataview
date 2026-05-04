@@ -3,6 +3,7 @@ import type {
   Episode,
   EpisodeListPage,
   EpisodeTimeseries,
+  ExportFormat,
   ExportRecord,
   FilterPreset,
   FrameListPage,
@@ -645,7 +646,7 @@ export async function createVisualEmbeddingJob(
 export async function createExportJob(
   datasetId: string,
   episodeIndices: number[],
-  format: "lerobot" | "lance" | "jsonl" | "vla" = "lerobot",
+  format: ExportFormat = "lerobot",
   splits: string[] = [],
 ): Promise<JobRecord> {
   const row = await request<JobRecordResponse>("/jobs/export", {
@@ -713,7 +714,7 @@ export async function fetchCurrentUser(): Promise<UserIdentity> {
 export async function createExport(
   datasetId: string,
   episodeIndices: number[],
-  format: "lerobot" | "lance" | "jsonl" | "vla" = "lerobot",
+  format: ExportFormat = "lerobot",
   splits: string[] = [],
 ): Promise<ExportRecord> {
   const row = await request<ExportRecordResponse>("/exports", {
