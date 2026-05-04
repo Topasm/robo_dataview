@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import tempfile
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -10,16 +12,29 @@ from starlette.responses import StreamingResponse
 
 from apps.api.routers import episodes
 from apps.api.schemas.episodes import EpisodeDetail, EpisodeLabelUpdate, EpisodeListItem, EpisodeListPage
+from apps.api.services.lance_store import VideoSource
 
 
 class FakeVideoStore:
     def __init__(self, blob: bytes | None) -> None:
         self.blob = blob
 
-    def get_video_blob(self, dataset_id: str, episode_index: int, camera: str) -> bytes | None:
+    def get_video_source(self, dataset_id: str, episode_index: int, camera: str) -> VideoSource | None:
         if dataset_id != "dataset-a" or episode_index != 3 or camera != "cam_high":
             return None
-        return self.blob
+        if self.blob is None:
+            return None
+        return VideoSource(size=len(self.blob), data=self.blob)
+
+
+class FakeVideoFileStore:
+    def __init__(self, path: Path) -> None:
+        self.path = path
+
+    def get_video_source(self, dataset_id: str, episode_index: int, camera: str) -> VideoSource | None:
+        if dataset_id != "dataset-a" or episode_index != 3 or camera != "cam_high":
+            return None
+        return VideoSource(size=self.path.stat().st_size, path=self.path)
 
 
 class FakeEpisodeLabelStore:
@@ -158,6 +173,43 @@ class EpisodeVideoEndpointTest(unittest.TestCase):
         self.assertEqual(response.headers["content-range"], "bytes 10-15/16")
         self.assertEqual(response.headers["content-length"], "6")
         self.assertEqual(response.body, b"abcdef")
+
+    def test_get_video_streams_byte_range_from_file_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "episode.mp4"
+            path.write_bytes(self.blob)
+            with patch.object(episodes, "store", FakeVideoFileStore(path)):
+                response = episodes.episode_video(
+                    3,
+                    "cam_high",
+                    _request("GET"),
+                    dataset_id="dataset-a",
+                    range_header="bytes=3-6",
+                )
+
+            self.assertIsInstance(response, StreamingResponse)
+            self.assertEqual(response.status_code, 206)
+            self.assertEqual(response.headers["content-range"], "bytes 3-6/16")
+            self.assertEqual(response.headers["content-length"], "4")
+            self.assertEqual(_stream_content(response), b"3456")
+
+    def test_get_video_streams_full_file_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "episode.mp4"
+            path.write_bytes(self.blob)
+            with patch.object(episodes, "store", FakeVideoFileStore(path)):
+                response = episodes.episode_video(
+                    3,
+                    "cam_high",
+                    _request("GET"),
+                    dataset_id="dataset-a",
+                    range_header=None,
+                )
+
+            self.assertIsInstance(response, StreamingResponse)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.headers["content-length"], "16")
+            self.assertEqual(_stream_content(response), self.blob)
 
     def test_head_video_supports_byte_range_headers_without_body(self) -> None:
         with patch.object(episodes, "store", FakeVideoStore(self.blob)):

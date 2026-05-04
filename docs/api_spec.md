@@ -101,8 +101,10 @@ Current implementation detail:
 
 - The store reads the full episode-table video blob through `take_blobs` or a
   row fallback, then the API slices the requested byte range in process.
-- Path-only `videos.lance` fallback is local-filesystem only; remote object
-  storage/HF path streaming is not implemented yet.
+- Path-only `videos.lance` fallback is local-filesystem only. For local paths,
+  the API streams the requested byte range directly from disk without reading the
+  whole file first.
+- Remote object storage/HF path streaming is not implemented yet.
 - Suffix byte ranges such as `bytes=-500` are not supported.
 
 ## Frames

@@ -557,8 +557,13 @@ class LanceDatasetStoreTest(unittest.TestCase):
 
             store = LanceDatasetStore()
             record = store.open_dataset(DatasetOpenRequest(uri=str(dataset_root), name="path-videos"))
+            video_source = store.get_video_source(record.dataset_id, 3, "cam_high")
             video_blob = store.get_video_blob(record.dataset_id, 3, "cam_high")
 
+        self.assertIsNotNone(video_source)
+        self.assertEqual(video_source.path, video_path)
+        self.assertEqual(video_source.size, len(b"file-video"))
+        self.assertIsNone(video_source.data)
         self.assertEqual(video_blob, b"file-video")
 
     def test_episode_video_columns_take_precedence_over_videos_lance(self) -> None:

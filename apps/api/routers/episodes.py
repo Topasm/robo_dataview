@@ -1,4 +1,6 @@
+from collections.abc import Iterator
 from io import BytesIO
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
@@ -107,10 +109,10 @@ def episode_video(
     dataset_id: str = Query(...),
     range_header: Annotated[str | None, Header(alias="Range")] = None,
 ) -> Response | StreamingResponse:
-    blob = store.get_video_blob(dataset_id, episode_index, camera)
-    if blob is None:
+    source = store.get_video_source(dataset_id, episode_index, camera)
+    if source is None:
         raise HTTPException(status_code=404, detail="Video blob not found")
-    blob_len = len(blob)
+    blob_len = source.size
     base_headers = {
         "Accept-Ranges": "bytes",
         "Content-Length": str(blob_len),
@@ -135,19 +137,49 @@ def episode_video(
         }
         if request.method == "HEAD":
             return Response(status_code=206, media_type="video/mp4", headers=headers)
+        if source.path is not None:
+            return StreamingResponse(
+                _iter_file_range(source.path, start, end),
+                status_code=206,
+                media_type="video/mp4",
+                headers=headers,
+            )
         return Response(
-            content=blob[start : end + 1],
+            content=(source.data or b"")[start : end + 1],
             status_code=206,
             media_type="video/mp4",
             headers=headers,
         )
     if request.method == "HEAD":
         return Response(media_type="video/mp4", headers=base_headers)
+    if source.path is not None:
+        return StreamingResponse(
+            _iter_file_range(source.path, 0, blob_len - 1),
+            media_type="video/mp4",
+            headers=base_headers,
+        )
     return StreamingResponse(
-        BytesIO(blob),
+        BytesIO(source.data or b""),
         media_type="video/mp4",
         headers=base_headers,
     )
+
+
+def _iter_file_range(
+    path: Path,
+    start: int,
+    end: int,
+    chunk_size: int = 1024 * 1024,
+) -> Iterator[bytes]:
+    with path.open("rb") as handle:
+        handle.seek(start)
+        remaining = end - start + 1
+        while remaining > 0:
+            chunk = handle.read(min(chunk_size, remaining))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+            yield chunk
 
 
 def _parse_byte_range(range_header: str, blob_len: int) -> tuple[int, int] | None:

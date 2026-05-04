@@ -391,6 +391,17 @@ def _read_video_file_from_row(
     row: dict[str, Any],
     path_name: str | None,
 ) -> bytes | None:
+    path = _video_file_path_from_row(base_uri, row, path_name)
+    if path is None:
+        return None
+    return path.read_bytes()
+
+
+def _video_file_path_from_row(
+    base_uri: str,
+    row: dict[str, Any],
+    path_name: str | None,
+) -> Path | None:
     if path_name is None:
         return None
     raw_path = row.get(path_name)
@@ -399,7 +410,7 @@ def _read_video_file_from_row(
     path_text = str(raw_path)
     for candidate in _video_path_candidates(base_uri, path_text):
         if candidate.is_file():
-            return candidate.read_bytes()
+            return candidate
     return None
 
 
@@ -572,6 +583,20 @@ class LanceBundle:
     base_uri: str
     tables: dict[str, Any]
     schemas: dict[str, list[str]]
+
+
+@dataclass
+class VideoSource:
+    size: int
+    data: bytes | None = None
+    path: Path | None = None
+
+    def read_all(self) -> bytes | None:
+        if self.data is not None:
+            return self.data
+        if self.path is not None:
+            return self.path.read_bytes()
+        return None
 
 
 class LanceDependencyError(RuntimeError):
@@ -913,6 +938,17 @@ class LanceDatasetStore:
         episode_index: int,
         camera: str,
     ) -> bytes | None:
+        source = self.get_video_source(dataset_id, episode_index, camera)
+        if source is None:
+            return None
+        return source.read_all()
+
+    def get_video_source(
+        self,
+        dataset_id: str,
+        episode_index: int,
+        camera: str,
+    ) -> VideoSource | None:
         bundle = self._bundles.get(dataset_id)
         if bundle is None:
             return None
@@ -934,13 +970,13 @@ class LanceDatasetStore:
             if row is not None:
                 blob = _blob_to_bytes(row.get(column))
                 if blob is not None:
-                    return blob
+                    return VideoSource(size=len(blob), data=blob)
 
         if column is not None and hasattr(dataset, "take_blobs"):
             try:
                 offset_rows = _read_rows(dataset, columns=["episode_index"], limit=1, offset=episode_index)
                 if not offset_rows or int(offset_rows[0].get("episode_index", -1)) != episode_index:
-                    return self._get_video_blob_from_videos_table(
+                    return self._get_video_source_from_videos_table(
                         bundle,
                         episode_row,
                         episode_index,
@@ -948,12 +984,13 @@ class LanceDatasetStore:
                     )
                 blob_file = dataset.take_blobs(column, indices=[episode_index])[0]
                 try:
-                    return blob_file.read()
+                    blob = blob_file.read()
+                    return VideoSource(size=len(blob), data=blob)
                 finally:
                     blob_file.close()
             except Exception:
                 pass
-        return self._get_video_blob_from_videos_table(bundle, episode_row, episode_index, camera)
+        return self._get_video_source_from_videos_table(bundle, episode_row, episode_index, camera)
 
     def get_episode_timeseries(
         self,
@@ -1488,6 +1525,18 @@ class LanceDatasetStore:
         episode_index: int,
         camera: str,
     ) -> bytes | None:
+        source = self._get_video_source_from_videos_table(bundle, episode_row, episode_index, camera)
+        if source is None:
+            return None
+        return source.read_all()
+
+    def _get_video_source_from_videos_table(
+        self,
+        bundle: LanceBundle,
+        episode_row: dict[str, Any] | None,
+        episode_index: int,
+        camera: str,
+    ) -> VideoSource | None:
         videos = bundle.tables.get("videos")
         if videos is None or _count_rows(videos) == 0:
             return None
@@ -1538,10 +1587,10 @@ class LanceDatasetStore:
                 continue
             blob = _blob_to_bytes(row.get(blob_name))
             if blob is not None:
-                return blob
-            file_blob = _read_video_file_from_row(bundle.base_uri, row, path_name)
-            if file_blob is not None:
-                return file_blob
+                return VideoSource(size=len(blob), data=blob)
+            file_path = _video_file_path_from_row(bundle.base_uri, row, path_name)
+            if file_path is not None:
+                return VideoSource(size=file_path.stat().st_size, path=file_path)
         return None
 
     def _read_video_rows(
