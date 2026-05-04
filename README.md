@@ -30,7 +30,7 @@ high-quality datasets for VLA and robot policy training.
 apps/
   api/        FastAPI backend
   web/        Next.js frontend
-docs/         Architecture, schema, API, UI, roadmap, and execution plan
+docs/         Architecture, schema, API, UI, roadmap, deployment, and plan
 workers/      Python worker helpers
 packages/     Shared schema and prompts
 data/         Local Lance data, cache, and exports
@@ -79,6 +79,8 @@ rq worker robot-data-studio --url "$ROBOT_DATA_STUDIO_REDIS_URL"
 
 With `ROBOT_DATA_STUDIO_JOB_QUEUE` unset, jobs run inline in the API process for
 local development.
+
+Deployment notes are in [docs/deployment.md](docs/deployment.md).
 
 The script starts FastAPI on `http://127.0.0.1:8000` and Next.js on
 `http://127.0.0.1:3000` by default. Override `API_HOST`, `API_PORT`,

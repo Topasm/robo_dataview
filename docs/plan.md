@@ -257,7 +257,7 @@ Definition of done:
 - [ ] Add auth and user identities.
 - [ ] Add multi-user review assignment.
 - [ ] Add object storage support for cache and exports.
-- [ ] Add deployment docs.
+- [x] Add deployment docs.
 
 ## Recommended Immediate Order
 
@@ -265,7 +265,7 @@ Definition of done:
 2. Move Rerun/export work into queue-backed workers and add progress events.
 3. Add cross-modal visual search over compatible CLIP/SigLIP records.
 4. Add direct Lance/object-store byte-range reads for video blobs.
-5. Add production metadata store and deployment docs.
+5. Add auth, multi-user review assignment, and object storage support.
 
 ## Validation Checklist
 
