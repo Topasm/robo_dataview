@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createExportJob,
   createFilterPreset,
-  createRerunSession,
+  createRerunSessionJob,
   createSegmentAnnotation,
   createVlmLabelJob,
   deleteAnnotation,
@@ -17,6 +17,7 @@ import {
   fetchFilterPresets,
   fetchFrameRecord,
   fetchFrameWindowPage,
+  fetchRerunSession,
   filterSearch,
   fullTextSearch,
   openDataset,
@@ -97,7 +98,11 @@ function mergeJobEvent(record: JobRecord, event: JobProgressEvent): JobRecord {
     queueJobId: event.queueJobId,
     createdExportId: event.createdExportId,
     exportFormat: event.exportFormat,
-    exportUri: event.exportUri
+    exportUri: event.exportUri,
+    createdRerunSessionId: event.createdRerunSessionId,
+    rerunRrdUrl: event.rerunRrdUrl,
+    rerunRrdPath: event.rerunRrdPath,
+    rerunViewerUrl: event.rerunViewerUrl
   };
 }
 
@@ -108,6 +113,7 @@ export function useStudioData() {
   const [selectedEpisodeIndex, setSelectedEpisodeIndex] = useState(episodes[0].episodeIndex);
   const [annotationRows, setAnnotationRows] = useState<SegmentAnnotation[]>(annotations);
   const [rerunSession, setRerunSession] = useState<RerunSession | null>(null);
+  const [rerunJob, setRerunJob] = useState<JobRecord | null>(null);
   const [vlmJob, setVlmJob] = useState<JobRecord | null>(null);
   const [exportJob, setExportJob] = useState<JobRecord | null>(null);
   const [exportRecord, setExportRecord] = useState<ExportRecord | null>(null);
@@ -141,6 +147,8 @@ export function useStudioData() {
   );
 
   const rerunViewerUrl = process.env.NEXT_PUBLIC_RERUN_IFRAME_URL ?? null;
+  const rerunJobId = rerunJob?.jobId ?? null;
+  const rerunJobStatus = rerunJob?.status ?? null;
   const vlmJobId = vlmJob?.jobId ?? null;
   const vlmJobStatus = vlmJob?.status ?? null;
   const exportJobId = exportJob?.jobId ?? null;
@@ -390,6 +398,55 @@ export function useStudioData() {
   }, [selectedEpisode.datasetId, selectedEpisode.episodeIndex, vlmJobId, vlmJobStatus]);
 
   useEffect(() => {
+    if (!rerunJobId || !rerunJobStatus || TERMINAL_JOB_STATUSES.has(rerunJobStatus)) {
+      return;
+    }
+
+    const jobId = rerunJobId;
+    let isActive = true;
+    const controller = new AbortController();
+    streamJobEvents(
+      jobId,
+      (event) => {
+        if (!isActive) {
+          return;
+        }
+        setRerunJob((current) =>
+          current?.jobId === event.jobId ? mergeJobEvent(current, event) : current
+        );
+        if (TERMINAL_JOB_STATUSES.has(event.status) && event.createdRerunSessionId) {
+          fetchRerunSession(event.createdRerunSessionId)
+            .then((session) => {
+              if (isActive) {
+                setRerunSession(session);
+              }
+            })
+            .catch(() => undefined);
+        }
+      },
+      controller.signal
+    ).catch((error) => {
+      if (isActive && error instanceof Error && error.name !== "AbortError") {
+        setRerunJob((current) =>
+          current?.jobId === jobId
+            ? {
+                ...current,
+                status: "failed",
+                progress: 1,
+                message: error.message
+              }
+            : current
+        );
+      }
+    });
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, [rerunJobId, rerunJobStatus]);
+
+  useEffect(() => {
     if (!exportJobId || !exportJobStatus || TERMINAL_JOB_STATUSES.has(exportJobStatus)) {
       return;
     }
@@ -440,6 +497,7 @@ export function useStudioData() {
 
   function resetDerivedState() {
     setRerunSession(null);
+    setRerunJob(null);
     setVlmJob(null);
     setExportJob(null);
     setExportRecord(null);
@@ -768,8 +826,12 @@ export function useStudioData() {
   }
 
   async function handleCreateRerunSession() {
-    const session = await createRerunSession(selectedEpisode.datasetId, selectedEpisode.episodeIndex);
-    setRerunSession(session);
+    const job = await createRerunSessionJob(selectedEpisode.datasetId, selectedEpisode.episodeIndex);
+    setRerunJob(job);
+    if (TERMINAL_JOB_STATUSES.has(job.status) && job.createdRerunSessionId) {
+      const session = await fetchRerunSession(job.createdRerunSessionId);
+      setRerunSession(session);
+    }
   }
 
   async function handleRunVlmLabel() {
@@ -895,6 +957,7 @@ export function useStudioData() {
     framePage,
     frameRows,
     frameRowsStatus,
+    rerunJob,
     rerunSession,
     rerunViewerUrl,
     searchResults,

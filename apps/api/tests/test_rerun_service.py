@@ -85,7 +85,7 @@ class RerunSessionStoreTest(unittest.TestCase):
             sys.modules["rerun"] = self.previous_rerun
         rerun_service.import_module = self.previous_import_module
         rerun_service.RERUN_CACHE_DIR = self.previous_cache_dir
-        for path in self.cache_dir.glob("*.rrd"):
+        for path in self.cache_dir.glob("*"):
             path.unlink()
         if self.cache_dir.exists():
             self.cache_dir.rmdir()
@@ -144,6 +144,21 @@ class RerunSessionStoreTest(unittest.TestCase):
         self.assertEqual(first.cache_key, second.cache_key)
         self.assertEqual(first.rrd_path, second.rrd_path)
         self.assertEqual(len(fake_rerun.saved_paths), 1)
+
+    def test_persistent_store_loads_worker_created_session_records(self) -> None:
+        fake_rerun = FakeRerunModule()
+        sys.modules["rerun"] = fake_rerun
+        record_path = self.cache_dir / "rerun_sessions.jsonl"
+
+        with patch.object(rerun_service, "store", FakeRerunStore()):
+            first_store = RerunSessionStore(record_path=record_path)
+            created = first_store.create(RerunSessionCreate(dataset_id="dataset-a", episode_index=3))
+            second_store = RerunSessionStore(record_path=record_path)
+            loaded = second_store.get(created.session_id)
+
+        self.assertEqual(loaded.session_id, created.session_id)
+        self.assertEqual(loaded.status, "ready")
+        self.assertEqual(loaded.rrd_path, created.rrd_path)
 
     def test_create_reports_missing_dependency(self) -> None:
         def raise_import_error(name: str) -> object:

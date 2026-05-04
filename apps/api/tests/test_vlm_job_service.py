@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from apps.api.schemas.common import ExportFormat, JobStatus, ReviewStatus
 from apps.api.schemas.exports import ExportCreateRequest, ExportRecord
 from apps.api.schemas.jobs import JobCreateRequest, JobRecord, VisualEmbeddingJobCreateRequest
+from apps.api.schemas.rerun import RerunSessionCreate, RerunSessionRecord
 from apps.api.services.embedding_service import EmbeddingRecord
 from apps.api.services.annotation_service import annotation_store
 from apps.api.services.job_service import JobStore
@@ -176,6 +177,32 @@ class VlmJobServiceTest(unittest.TestCase):
         self.assertEqual(result.message, "Export completed.")
         self.assertEqual(fake_exports.payload, payload)
 
+    def test_rerun_session_job_creates_session_record(self) -> None:
+        jobs = JobStore()
+        fake_sessions = FakeRerunSessionStore(
+            RerunSessionRecord(
+                session_id="session-1",
+                dataset_id="sample-xvla-soft-fold",
+                episode_index=0,
+                mode="rrd_cache",
+                status="ready",
+                rrd_url="/api/rerun/recordings/session-1.rrd",
+                rrd_path="data/cache/rerun/session-1.rrd",
+                message="Generated Rerun recording.",
+            )
+        )
+        payload = RerunSessionCreate(dataset_id="sample-xvla-soft-fold", episode_index=0)
+
+        with patch("apps.api.services.job_service.rerun_sessions", fake_sessions):
+            result = jobs.create(kind="rerun_session", payload=payload)
+
+        self.assertEqual(result.status, JobStatus.succeeded)
+        self.assertEqual(result.episode_indices, [0])
+        self.assertEqual(result.created_rerun_session_id, "session-1")
+        self.assertEqual(result.rerun_rrd_url, "/api/rerun/recordings/session-1.rrd")
+        self.assertEqual(result.rerun_rrd_path, "data/cache/rerun/session-1.rrd")
+        self.assertEqual(fake_sessions.payload, payload)
+
     def test_job_store_persists_records_to_sqlite(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             sqlite_path = Path(tmpdir) / "metadata.sqlite3"
@@ -197,6 +224,36 @@ class VlmJobServiceTest(unittest.TestCase):
         self.assertEqual(loaded.status, JobStatus.queued)
         self.assertEqual(loaded.dataset_id, "sample-xvla-soft-fold")
         self.assertEqual(loaded.episode_indices, [0])
+
+    def test_job_store_refreshes_sqlite_updates_from_worker_process(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sqlite_path = Path(tmpdir) / "metadata.sqlite3"
+            api_store = JobStore(sqlite_path=sqlite_path)
+            queued = api_store.create(
+                kind="unconfigured_job",
+                payload=JobCreateRequest(
+                    dataset_id="sample-xvla-soft-fold",
+                    episode_indices=[0],
+                ),
+            )
+            worker_store = JobStore(sqlite_path=sqlite_path)
+            worker_store._save(
+                JobRecord(
+                    job_id=queued.job_id,
+                    kind="unconfigured_job",
+                    status=JobStatus.succeeded,
+                    dataset_id="sample-xvla-soft-fold",
+                    episode_indices=[0],
+                    progress=1.0,
+                    message="Worker finished.",
+                )
+            )
+
+            refreshed = api_store.get(queued.job_id)
+
+        self.assertEqual(refreshed.status, JobStatus.succeeded)
+        self.assertEqual(refreshed.progress, 1.0)
+        self.assertEqual(refreshed.message, "Worker finished.")
 
     def test_job_store_enqueues_when_queue_backend_is_configured(self) -> None:
         queue = FakeQueueBackend(queue_job_id="rq-job-1")
@@ -228,6 +285,18 @@ class VlmJobServiceTest(unittest.TestCase):
         self.assertEqual(record.status, JobStatus.queued)
         self.assertEqual(record.queue_job_id, "rq-export-1")
         self.assertEqual(ExportCreateRequest(**queue.payloads[0]), payload)
+
+    def test_job_store_enqueues_rerun_session_jobs_when_queue_backend_is_configured(self) -> None:
+        queue = FakeQueueBackend(queue_job_id="rq-rerun-1")
+        jobs = JobStore(queue_backend=queue)
+        payload = RerunSessionCreate(dataset_id="sample-xvla-soft-fold", episode_index=0)
+
+        record = jobs.create(kind="rerun_session", payload=payload)
+
+        self.assertEqual(record.status, JobStatus.queued)
+        self.assertEqual(record.episode_indices, [0])
+        self.assertEqual(record.queue_job_id, "rq-rerun-1")
+        self.assertEqual(RerunSessionCreate(**queue.payloads[0]), payload)
 
     def test_queued_job_runner_updates_existing_record(self) -> None:
         queue = FakeQueueBackend(queue_job_id="rq-job-1")
@@ -301,6 +370,31 @@ class VlmJobServiceTest(unittest.TestCase):
         self.assertEqual(result.progress, 1.0)
         self.assertEqual(result.created_export_id, "export-1")
         self.assertEqual(jobs.get(queued.job_id).export_uri, "data/exports/export-1/manifest.json")
+
+    def test_queued_rerun_session_job_runner_updates_existing_record(self) -> None:
+        queue = FakeQueueBackend(queue_job_id="rq-rerun-1")
+        jobs = JobStore(queue_backend=queue)
+        payload = RerunSessionCreate(dataset_id="sample-xvla-soft-fold", episode_index=0)
+        queued = jobs.create(kind="rerun_session", payload=payload)
+        fake_sessions = FakeRerunSessionStore(
+            RerunSessionRecord(
+                session_id="session-1",
+                dataset_id="sample-xvla-soft-fold",
+                episode_index=0,
+                mode="rrd_cache",
+                status="ready",
+                rrd_url="/api/rerun/recordings/session-1.rrd",
+                rrd_path="data/cache/rerun/session-1.rrd",
+            )
+        )
+
+        with patch("apps.api.services.job_service.rerun_sessions", fake_sessions):
+            result = jobs.run(queued.job_id, "rerun_session", queue.payloads[0])
+
+        self.assertEqual(result.status, JobStatus.succeeded)
+        self.assertEqual(result.progress, 1.0)
+        self.assertEqual(result.created_rerun_session_id, "session-1")
+        self.assertEqual(jobs.get(queued.job_id).rerun_rrd_path, "data/cache/rerun/session-1.rrd")
 
     def test_job_store_reports_queue_enqueue_failure(self) -> None:
         jobs = JobStore(queue_backend=FakeQueueBackend(error="redis unavailable"))
@@ -389,6 +483,16 @@ class FakeExportStore:
         self.payload: ExportCreateRequest | None = None
 
     def create(self, payload: ExportCreateRequest) -> ExportRecord:
+        self.payload = payload
+        return self.record
+
+
+class FakeRerunSessionStore:
+    def __init__(self, record: RerunSessionRecord) -> None:
+        self.record = record
+        self.payload: RerunSessionCreate | None = None
+
+    def create(self, payload: RerunSessionCreate) -> RerunSessionRecord:
         self.payload = payload
         return self.record
 

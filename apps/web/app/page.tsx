@@ -25,6 +25,7 @@ export default function Home() {
     framePage,
     frameRows,
     frameRowsStatus,
+    rerunJob,
     rerunSession,
     rerunViewerUrl,
     searchResults,
@@ -131,6 +132,7 @@ export default function Home() {
                 selectedFrame={selectedFrameIndex}
               />
               <RerunPanel
+                job={rerunJob}
                 onCreateSession={handleCreateRerunSession}
                 session={rerunSession}
                 viewerUrl={rerunViewerUrl}

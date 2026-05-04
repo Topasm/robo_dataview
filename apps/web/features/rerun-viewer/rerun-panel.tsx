@@ -1,7 +1,7 @@
 import dynamic from "next/dynamic";
 import { Box, ExternalLink } from "lucide-react";
 
-import type { RerunSession } from "@/lib/types";
+import type { JobRecord, RerunSession } from "@/lib/types";
 
 const WebViewer = dynamic(() => import("@rerun-io/web-viewer-react"), {
   ssr: false,
@@ -9,13 +9,16 @@ const WebViewer = dynamic(() => import("@rerun-io/web-viewer-react"), {
 });
 
 type RerunPanelProps = {
+  job: JobRecord | null;
   session: RerunSession | null;
   viewerUrl?: string | null;
   onCreateSession: () => Promise<void>;
 };
 
-export function RerunPanel({ session, viewerUrl, onCreateSession }: RerunPanelProps) {
+export function RerunPanel({ job, session, viewerUrl, onCreateSession }: RerunPanelProps) {
   const effectiveViewerUrl = session?.viewerUrl ?? viewerUrl;
+  const jobActive = job ? !["succeeded", "failed"].includes(job.status) : false;
+  const progressPercent = Math.round(Math.max(0, Math.min(1, job?.progress ?? 0)) * 100);
 
   return (
     <section className="rerun-panel">
@@ -23,10 +26,18 @@ export function RerunPanel({ session, viewerUrl, onCreateSession }: RerunPanelPr
         <Box size={16} />
         <span>Rerun</span>
       </div>
-      <button className="text-button" onClick={onCreateSession} type="button">
+      <button className="text-button" disabled={jobActive} onClick={onCreateSession} type="button">
         <ExternalLink size={15} />
         Generate cached recording
       </button>
+      {job ? (
+        <div className="rerun-session-status">
+          <span className={`status-pill status-${job.status}`}>{job.status}</span>
+          <span className="muted">
+            Job {progressPercent}%: {job.rerunRrdUrl ?? job.message ?? job.createdRerunSessionId}
+          </span>
+        </div>
+      ) : null}
       {session ? (
         <div className="rerun-session-status">
           <span className={`status-pill status-${session.status}`}>{session.status}</span>

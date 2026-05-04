@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from importlib import import_module
+import json
 from pathlib import Path
 from uuid import uuid4
 
@@ -9,6 +10,7 @@ from fastapi import HTTPException
 
 from apps.api.schemas.rerun import RerunSessionCreate, RerunSessionRecord
 from apps.api.services.lance_store import store
+from apps.api.services.pydantic_compat import model_dump
 from workers.rerun_cache_worker import (
     RERUN_RECORDING_CONFIG_VERSION,
     generate_rerun_recording,
@@ -16,6 +18,7 @@ from workers.rerun_cache_worker import (
 
 
 RERUN_CACHE_DIR = Path("data/cache/rerun")
+RERUN_SESSION_RECORD_PATH = Path("data/app/rerun_sessions.jsonl")
 
 
 def _cache_key(dataset_id: str, episode_index: int, mode: str) -> str:
@@ -24,8 +27,10 @@ def _cache_key(dataset_id: str, episode_index: int, mode: str) -> str:
 
 
 class RerunSessionStore:
-    def __init__(self) -> None:
+    def __init__(self, record_path: Path | None = None) -> None:
+        self.record_path = record_path
         self._records: dict[str, RerunSessionRecord] = {}
+        self._load_existing_records()
 
     def create(self, payload: RerunSessionCreate) -> RerunSessionRecord:
         session_id = str(uuid4())
@@ -43,11 +48,14 @@ class RerunSessionStore:
             rrd_path=str(rrd_path),
         )
         record = self._generate_rrd(record, rrd_path)
-        self._records[session_id] = record
+        self._save(record)
         return record
 
     def get(self, session_id: str) -> RerunSessionRecord:
         record = self._records.get(session_id)
+        if record is None:
+            self._load_existing_records()
+            record = self._records.get(session_id)
         if record is None:
             raise HTTPException(status_code=404, detail="Rerun session not found")
         return record
@@ -69,5 +77,26 @@ class RerunSessionStore:
             import_module_fn=import_module,
         )
 
+    def _save(self, record: RerunSessionRecord) -> None:
+        self._records[record.session_id] = record
+        if self.record_path is None:
+            return
+        self.record_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.record_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(model_dump(record), default=str, sort_keys=True))
+            handle.write("\n")
 
-rerun_sessions = RerunSessionStore()
+    def _load_existing_records(self) -> None:
+        if self.record_path is None or not self.record_path.exists():
+            return
+        for line in self.record_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                record = RerunSessionRecord(**json.loads(line))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+            self._records[record.session_id] = record
+
+
+rerun_sessions = RerunSessionStore(record_path=RERUN_SESSION_RECORD_PATH)

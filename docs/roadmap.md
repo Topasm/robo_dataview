@@ -257,6 +257,7 @@ Implemented:
   Dataset artifact is implemented.
 - Export scope controls for selected episode or current train/val/test split.
 - Queue-backed export jobs through the shared job progress event stream.
+- Queue-backed Rerun session jobs with persisted session records.
 - Accepted annotations only.
 - Version lineage JSONL plus optional Lance mirror.
 

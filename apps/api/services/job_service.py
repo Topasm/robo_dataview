@@ -11,6 +11,7 @@ from apps.api.schemas.common import JobStatus
 from apps.api.schemas.episodes import EpisodeDetail
 from apps.api.schemas.exports import ExportCreateRequest
 from apps.api.schemas.jobs import JobCreateRequest, JobRecord, VisualEmbeddingJobCreateRequest
+from apps.api.schemas.rerun import RerunSessionCreate
 from apps.api.services.annotation_service import annotation_store
 from apps.api.services.embedding_service import embedding_index
 from apps.api.services.export_service import exports
@@ -21,6 +22,7 @@ from apps.api.services.job_queue import (
 )
 from apps.api.services.lance_store import store
 from apps.api.services.pydantic_compat import model_copy, model_dump
+from apps.api.services.rerun_service import rerun_sessions
 from apps.api.services.vlm_response_service import vlm_response_store
 from packages.prompts import UnknownPromptTemplateError, get_prompt_template
 from workers.vlm_autolabel import AutoLabelConfig
@@ -32,7 +34,9 @@ from workers.visual_embedding_worker import (
 
 
 APP_METADATA_DB_PATH = Path("data/app/metadata.sqlite3")
-JobPayload = JobCreateRequest | VisualEmbeddingJobCreateRequest | ExportCreateRequest
+JobPayload = (
+    JobCreateRequest | VisualEmbeddingJobCreateRequest | ExportCreateRequest | RerunSessionCreate
+)
 QueuedJobPayload = JobPayload | dict[str, object]
 
 
@@ -114,7 +118,7 @@ class JobStore:
             kind=kind,
             status=status,
             dataset_id=payload.dataset_id,
-            episode_indices=payload.episode_indices,
+            episode_indices=_episode_indices_for_payload(payload),
             progress=0.0,
             model=getattr(payload, "model", None),
             prompt_template=getattr(payload, "prompt_template", None),
@@ -178,6 +182,8 @@ class JobStore:
             record = self._run_visual_embedding_job(record, payload)
         elif kind == "export":
             record = self._run_export_job(record, payload)
+        elif kind == "rerun_session":
+            record = self._run_rerun_session_job(record, payload)
         else:
             record = model_copy(
                 record,
@@ -190,11 +196,12 @@ class JobStore:
         return record
 
     def get(self, job_id: str) -> JobRecord:
-        record = self._records.get(job_id)
-        if record is None and self._sqlite is not None:
+        if self._sqlite is not None:
             record = self._sqlite.get(job_id)
             if record is not None:
                 self._records[job_id] = record
+                return record
+        record = self._records.get(job_id)
         if record is None:
             raise HTTPException(status_code=404, detail="Job not found")
         return record
@@ -221,12 +228,17 @@ class JobStore:
         kind: str,
         payload: QueuedJobPayload,
     ) -> JobPayload:
-        if isinstance(payload, (JobCreateRequest, VisualEmbeddingJobCreateRequest, ExportCreateRequest)):
+        if isinstance(
+            payload,
+            (JobCreateRequest, VisualEmbeddingJobCreateRequest, ExportCreateRequest, RerunSessionCreate),
+        ):
             return payload
         if kind == "visual_embedding":
             return VisualEmbeddingJobCreateRequest(**payload)
         if kind == "export":
             return ExportCreateRequest(**payload)
+        if kind == "rerun_session":
+            return RerunSessionCreate(**payload)
         return JobCreateRequest(**payload)
 
     def _run_vlm_label_job(
@@ -402,6 +414,35 @@ class JobStore:
         )
 
     @staticmethod
+    def _run_rerun_session_job(
+        record: JobRecord,
+        payload: JobPayload,
+    ) -> JobRecord:
+        if not isinstance(payload, RerunSessionCreate):
+            episode_indices = _episode_indices_for_payload(payload)
+            payload = RerunSessionCreate(
+                dataset_id=payload.dataset_id,
+                episode_index=episode_indices[0] if episode_indices else 0,
+            )
+        session = rerun_sessions.create(payload)
+        status = JobStatus.succeeded if session.status == "ready" else JobStatus.failed
+        message = session.message or f"Rerun session {session.status}."
+        return model_copy(
+            record,
+            update={
+                "status": status,
+                "episode_indices": [session.episode_index],
+                "progress": 1.0,
+                "message": message,
+                "created_rerun_session_id": session.session_id,
+                "rerun_rrd_url": session.rrd_url,
+                "rerun_rrd_path": session.rrd_path,
+                "rerun_viewer_url": session.viewer_url,
+                "artifact_count": 1 if status == JobStatus.succeeded and session.rrd_path else 0,
+            },
+        )
+
+    @staticmethod
     def _video_blobs(dataset_id: str, episode: EpisodeDetail) -> dict[str, bytes]:
         blobs: dict[str, bytes] = {}
         for camera in episode.camera_names:
@@ -409,6 +450,16 @@ class JobStore:
             if blob is not None:
                 blobs[camera] = blob
         return blobs
+
+
+def _episode_indices_for_payload(payload: JobPayload) -> list[int]:
+    episode_indices = getattr(payload, "episode_indices", None)
+    if episode_indices is not None:
+        return list(episode_indices)
+    episode_index = getattr(payload, "episode_index", None)
+    if episode_index is None:
+        return []
+    return [int(episode_index)]
 
 
 jobs = JobStore(sqlite_path=APP_METADATA_DB_PATH, queue_backend=build_job_queue_from_env())

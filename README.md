@@ -128,8 +128,8 @@ The repository has moved past a pure skeleton. The current MVP path can:
 
 Known MVP gaps:
 
-- Expensive VLM, visual embedding, and export jobs can run through optional
-  Redis/RQ, but Rerun session generation still uses its current service path.
+- Expensive VLM, visual embedding, export, and Rerun session jobs can run
+  through optional Redis/RQ.
 - VLM labeling defaults to heuristic/local scaffolding; OpenAI-compatible model
   inference is available only when configured with environment variables.
 - Text semantic search and visual image embedding generation are separate paths.

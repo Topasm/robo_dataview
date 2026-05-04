@@ -158,6 +158,10 @@ export type JobRecord = {
   createdExportId: string | null;
   exportFormat: string | null;
   exportUri: string | null;
+  createdRerunSessionId: string | null;
+  rerunRrdUrl: string | null;
+  rerunRrdPath: string | null;
+  rerunViewerUrl: string | null;
   queueJobId: string | null;
 };
 
@@ -171,6 +175,10 @@ export type JobProgressEvent = {
   createdExportId: string | null;
   exportFormat: string | null;
   exportUri: string | null;
+  createdRerunSessionId: string | null;
+  rerunRrdUrl: string | null;
+  rerunRrdPath: string | null;
+  rerunViewerUrl: string | null;
 };
 
 export type ExportRecord = {

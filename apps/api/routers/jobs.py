@@ -14,6 +14,7 @@ from apps.api.schemas.jobs import (
     PromptTemplateRecord,
     VisualEmbeddingJobCreateRequest,
 )
+from apps.api.schemas.rerun import RerunSessionCreate
 from apps.api.services.job_service import jobs
 from packages.prompts import list_prompt_templates
 
@@ -35,6 +36,11 @@ def create_visual_embedding_job(payload: VisualEmbeddingJobCreateRequest) -> Job
 @router.post("/jobs/export", response_model=JobRecord)
 def create_export_job(payload: ExportCreateRequest) -> JobRecord:
     return jobs.create(kind="export", payload=payload)
+
+
+@router.post("/jobs/rerun-session", response_model=JobRecord)
+def create_rerun_session_job(payload: RerunSessionCreate) -> JobRecord:
+    return jobs.create(kind="rerun_session", payload=payload)
 
 
 @router.get("/jobs/vlm-prompts", response_model=list[PromptTemplateRecord])
@@ -95,6 +101,10 @@ def _job_sse_event(record: JobRecord) -> str:
             "created_export_id": record.created_export_id,
             "export_format": record.export_format,
             "export_uri": record.export_uri,
+            "created_rerun_session_id": record.created_rerun_session_id,
+            "rerun_rrd_url": record.rerun_rrd_url,
+            "rerun_rrd_path": record.rerun_rrd_path,
+            "rerun_viewer_url": record.rerun_viewer_url,
         },
     )
 

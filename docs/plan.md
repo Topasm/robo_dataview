@@ -85,9 +85,9 @@ npm --workspace apps/web run build
 
 Known limits:
 
-- VLM, visual embedding, and export jobs can run through the optional RQ
-  backend, but Rerun session generation still runs in-process.
-- Open Rerun sessions and some app settings are in-memory.
+- VLM, visual embedding, export, and Rerun session jobs can run through the
+  optional RQ backend.
+- Some app settings are still in-memory.
 - VLM labeling defaults to heuristic scaffolding unless an OpenAI-compatible
   provider is configured.
 - Text semantic search and visual image embedding generation are separate paths;
@@ -256,8 +256,9 @@ Definition of done:
 - [x] Add SQLite/Postgres app metadata store.
 - [x] Add Redis + RQ/Celery worker queue.
 - [x] Add background job progress events.
-- [x] Wire web VLM and export job progress streaming.
+- [x] Wire web VLM, export, and Rerun job progress streaming.
 - [x] Add queue-backed export job endpoint.
+- [x] Add queue-backed Rerun session job endpoint.
 - [x] Add auth and user identities.
 - [x] Add multi-user review assignment.
 - [ ] Add object storage support for cache and exports.
@@ -266,10 +267,9 @@ Definition of done:
 ## Recommended Immediate Order
 
 1. Materialize fully LeRobot-loadable Parquet/MP4 export.
-2. Move Rerun session generation into queue-backed workers and add progress events.
-3. Add cross-modal visual search over compatible CLIP/SigLIP records.
-4. Add direct Lance/object-store byte-range reads for video blobs.
-5. Add object storage support for cache and exports.
+2. Add cross-modal visual search over compatible CLIP/SigLIP records.
+3. Add direct Lance/object-store byte-range reads for video blobs.
+4. Add object storage support for cache and exports.
 
 ## Validation Checklist
 

@@ -127,6 +127,10 @@ type JobRecordResponse = {
   created_export_id: string | null;
   export_format: string | null;
   export_uri: string | null;
+  created_rerun_session_id: string | null;
+  rerun_rrd_url: string | null;
+  rerun_rrd_path: string | null;
+  rerun_viewer_url: string | null;
   queue_job_id: string | null;
 };
 
@@ -140,6 +144,10 @@ type JobProgressEventResponse = {
   created_export_id: string | null;
   export_format: string | null;
   export_uri: string | null;
+  created_rerun_session_id: string | null;
+  rerun_rrd_url: string | null;
+  rerun_rrd_path: string | null;
+  rerun_viewer_url: string | null;
 };
 
 type ExportRecordResponse = {
@@ -582,6 +590,26 @@ export async function createRerunSession(
   return toRerunSession(row);
 }
 
+export async function fetchRerunSession(sessionId: string): Promise<RerunSession> {
+  const row = await request<RerunSessionResponse>(`/rerun/session/${sessionId}`);
+  return toRerunSession(row);
+}
+
+export async function createRerunSessionJob(
+  datasetId: string,
+  episodeIndex: number,
+): Promise<JobRecord> {
+  const row = await request<JobRecordResponse>("/jobs/rerun-session", {
+    method: "POST",
+    body: JSON.stringify({
+      dataset_id: datasetId,
+      episode_index: episodeIndex,
+      mode: "rrd_cache"
+    })
+  });
+  return toJobRecord(row);
+}
+
 export async function createVlmLabelJob(
   datasetId: string,
   episodeIndices: number[],
@@ -827,7 +855,11 @@ function parseJobSseEvent(rawEvent: string): JobProgressEvent | null {
     queueJobId: payload.queue_job_id,
     createdExportId: payload.created_export_id,
     exportFormat: payload.export_format,
-    exportUri: payload.export_uri
+    exportUri: payload.export_uri,
+    createdRerunSessionId: payload.created_rerun_session_id,
+    rerunRrdUrl: payload.rerun_rrd_url,
+    rerunRrdPath: payload.rerun_rrd_path,
+    rerunViewerUrl: payload.rerun_viewer_url
   };
 }
 
@@ -1002,6 +1034,10 @@ function toJobRecord(raw: JobRecordResponse): JobRecord {
     createdExportId: raw.created_export_id,
     exportFormat: raw.export_format,
     exportUri: raw.export_uri,
+    createdRerunSessionId: raw.created_rerun_session_id,
+    rerunRrdUrl: raw.rerun_rrd_url,
+    rerunRrdPath: raw.rerun_rrd_path,
+    rerunViewerUrl: raw.rerun_viewer_url,
     queueJobId: raw.queue_job_id
   };
 }

@@ -289,13 +289,13 @@ GET  /rerun/recordings/{session_id}.rrd
 }
 ```
 
-Current implementation invokes a local Rerun cache worker synchronously; P8 will
-move that worker behind a real queue. The Rerun recording logs scalar timeline
-data for timestamps, state norm, and action norm. When episode camera MP4 blobs
-are available, the recording also logs Rerun `AssetVideo` entries and per-frame
-`VideoFrameReference` rows. Responses include `cache_key`, `cache_hit`, and
-`camera_count`; the same dataset, episode, mode, and visualization config reuses
-the existing `.rrd` file.
+`POST /rerun/session` invokes the local Rerun cache worker synchronously. Use
+`POST /jobs/rerun-session` for queued generation. The Rerun recording logs
+scalar timeline data for timestamps, state norm, and action norm. When episode
+camera MP4 blobs are available, the recording also logs Rerun `AssetVideo`
+entries and per-frame `VideoFrameReference` rows. Responses include `cache_key`,
+`cache_hit`, and `camera_count`; the same dataset, episode, mode, and
+visualization config reuses the existing `.rrd` file.
 
 ## Jobs
 
@@ -304,6 +304,7 @@ GET  /jobs/vlm-prompts
 POST /jobs/vlm-label
 POST /jobs/visual-embeddings
 POST /jobs/export
+POST /jobs/rerun-session
 GET  /jobs/{job_id}
 GET  /jobs/{job_id}/events
 ```
@@ -352,6 +353,14 @@ an optional Transformers vision model.
 `created_export_id`, `export_format`, and `export_uri`. `GET /jobs/{job_id}/events`
 streams those fields with the existing job progress event so clients can track
 long-running LeRobot, Lance, JSONL, or VLA exports without blocking the request.
+
+`POST /jobs/rerun-session` accepts the same payload as `POST /rerun/session`,
+returns a `JobRecord`, and runs `.rrd` generation through the configured job
+backend. The completed job records `created_rerun_session_id`, `rerun_rrd_url`,
+`rerun_rrd_path`, and `rerun_viewer_url`; clients should fetch
+`GET /rerun/session/{session_id}` before opening the viewer. Rerun session
+records are persisted under `data/app/rerun_sessions.jsonl` so API and worker
+processes can share queued session results.
 
 ## Exports
 
@@ -430,5 +439,5 @@ the same records are mirrored to `versions.lance`.
   artifacts.
 - Annotation, embedding, export, and version records are persisted under
   `data/`.
-- VLM, visual embedding, and export jobs can run through the optional RQ backend;
-  Rerun session generation remains synchronous.
+- VLM, visual embedding, export, and Rerun session jobs can run through the
+  optional RQ backend.

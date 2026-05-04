@@ -7,6 +7,7 @@ from apps.api.routers import jobs as jobs_router
 from apps.api.schemas.common import ExportFormat, JobStatus
 from apps.api.schemas.exports import ExportCreateRequest
 from apps.api.schemas.jobs import JobRecord, VisualEmbeddingJobCreateRequest
+from apps.api.schemas.rerun import RerunSessionCreate
 
 
 class JobsRouterTest(unittest.TestCase):
@@ -48,10 +49,21 @@ class JobsRouterTest(unittest.TestCase):
         self.assertEqual(fake_jobs.payload, payload)
         self.assertEqual(record.created_export_id, "export-1")
 
+    def test_create_rerun_session_job_routes_to_job_store(self) -> None:
+        fake_jobs = FakeJobs()
+        payload = RerunSessionCreate(dataset_id="dataset-a", episode_index=1)
+
+        with patch.object(jobs_router, "jobs", fake_jobs):
+            record = jobs_router.create_rerun_session_job(payload)
+
+        self.assertEqual(fake_jobs.kind, "rerun_session")
+        self.assertEqual(fake_jobs.payload, payload)
+        self.assertEqual(record.created_rerun_session_id, "session-1")
+
     def test_job_sse_event_includes_progress_payload(self) -> None:
         record = JobRecord(
             job_id="job-1",
-            kind="export",
+            kind="rerun_session",
             status=JobStatus.queued,
             dataset_id="dataset-a",
             episode_indices=[1],
@@ -61,6 +73,9 @@ class JobsRouterTest(unittest.TestCase):
             created_export_id="export-1",
             export_format=ExportFormat.jsonl,
             export_uri="data/exports/export-1/manifest.json",
+            created_rerun_session_id="session-1",
+            rerun_rrd_url="/api/rerun/recordings/session-1.rrd",
+            rerun_rrd_path="data/cache/rerun/session-1.rrd",
         )
 
         event = jobs_router._job_sse_event(record)
@@ -73,6 +88,9 @@ class JobsRouterTest(unittest.TestCase):
         self.assertIn('"created_export_id": "export-1"', event)
         self.assertIn('"export_format": "jsonl"', event)
         self.assertIn('"export_uri": "data/exports/export-1/manifest.json"', event)
+        self.assertIn('"created_rerun_session_id": "session-1"', event)
+        self.assertIn('"rerun_rrd_url": "/api/rerun/recordings/session-1.rrd"', event)
+        self.assertIn('"rerun_rrd_path": "data/cache/rerun/session-1.rrd"', event)
 
     def test_stream_job_events_returns_sse_response(self) -> None:
         fake_jobs = FakeJobs()
@@ -87,27 +105,33 @@ class JobsRouterTest(unittest.TestCase):
 class FakeJobs:
     def __init__(self) -> None:
         self.kind: str | None = None
-        self.payload: VisualEmbeddingJobCreateRequest | ExportCreateRequest | None = None
+        self.payload: VisualEmbeddingJobCreateRequest | ExportCreateRequest | RerunSessionCreate | None = None
 
     def create(
         self,
         kind: str,
-        payload: VisualEmbeddingJobCreateRequest | ExportCreateRequest,
+        payload: VisualEmbeddingJobCreateRequest | ExportCreateRequest | RerunSessionCreate,
     ) -> JobRecord:
         self.kind = kind
         self.payload = payload
+        episode_indices = getattr(payload, "episode_indices", None)
+        if episode_indices is None:
+            episode_indices = [payload.episode_index]
         record = JobRecord(
             job_id="job-1",
             kind=kind,
             status=JobStatus.succeeded,
             dataset_id=payload.dataset_id,
-            episode_indices=payload.episode_indices,
+            episode_indices=episode_indices,
             created_embedding_ids=["embedding-1"],
         )
         if kind == "export":
             record.created_export_id = "export-1"
             record.export_format = ExportFormat.jsonl
             record.export_uri = "data/exports/export-1/manifest.json"
+        if kind == "rerun_session":
+            record.created_rerun_session_id = "session-1"
+            record.rerun_rrd_url = "/api/rerun/recordings/session-1.rrd"
         return record
 
 
