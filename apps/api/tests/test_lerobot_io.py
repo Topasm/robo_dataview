@@ -276,6 +276,54 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertIn("cam_high", data_jsonl_rows[0])
             self.assertNotIn("cam_high", written_tables[data_parquet_path][0])
 
+    def test_lerobot_data_parquet_uses_hf_dataset_features_when_available(self) -> None:
+        written_datasets: dict[str, dict] = {}
+        written_tables: dict[str, list[dict]] = {}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir)
+            with patch.dict(
+                sys.modules,
+                {
+                    **_fake_pyarrow_write_modules(written_tables),
+                    "datasets": _fake_hf_datasets_write_module(written_datasets),
+                    "pandas": None,
+                },
+            ):
+                artifact = write_lerobot_v3_snapshot(
+                    export_dir,
+                    dataset_id="sample-xvla-soft-fold",
+                    episodes=[
+                        EpisodeDetail(
+                            dataset_id="sample-xvla-soft-fold",
+                            episode_index=0,
+                            task_index=3,
+                            length=1,
+                            fps=20.0,
+                            camera_names=["cam high"],
+                        )
+                    ],
+                    annotations_by_episode={},
+                    version_description="unit test",
+                    timeseries_by_episode={
+                        0: {
+                            "timestamps": [0.0],
+                            "states": [[0.0, 1.0]],
+                            "actions": [[2.0]],
+                        }
+                    },
+                    video_blobs_by_episode={0: {"cam high": FAKE_MP4_BYTES}},
+                )
+
+            data_parquet_path = Path(artifact["files"]["data"] or "").as_posix()
+            dataset_payload = written_datasets[data_parquet_path]
+
+            self.assertEqual(dataset_payload["split"], "train")
+            self.assertIn("observation.state", dataset_payload["features"])
+            self.assertIn("action", dataset_payload["features"])
+            self.assertNotIn("cam_high", dataset_payload["features"])
+            self.assertNotIn("cam_high", dataset_payload["columns"])
+            self.assertEqual(dataset_payload["columns"]["episode_index"], [0])
+
     def test_validate_lerobot_snapshot_rejects_total_frame_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             export_dir = Path(tmpdir)
@@ -771,6 +819,67 @@ def _fake_pyarrow_write_modules(written_tables: dict[str, list[dict]]) -> dict[s
         "pyarrow": pyarrow_module,
         "pyarrow.parquet": parquet_module,
     }
+
+
+def _fake_hf_datasets_write_module(written_datasets: dict[str, dict]) -> ModuleType:
+    module = ModuleType("datasets")
+
+    class Dataset:
+        def __init__(self, columns: dict[str, list], features: dict, split: str | None) -> None:
+            self.columns = columns
+            self.features = features
+            self.split = split
+
+        @classmethod
+        def from_dict(
+            cls,
+            columns: dict[str, list],
+            *,
+            features: dict,
+            split: str | None = None,
+        ) -> "Dataset":
+            return cls(columns, features, split)
+
+        def to_parquet(self, path: str) -> None:
+            path_obj = Path(path)
+            path_obj.parent.mkdir(parents=True, exist_ok=True)
+            path_obj.write_text("fake hf dataset parquet", encoding="utf-8")
+            written_datasets[path_obj.as_posix()] = {
+                "columns": self.columns,
+                "features": self.features,
+                "split": self.split,
+            }
+
+    module.Dataset = Dataset
+    module.Features = lambda features: features  # type: ignore[attr-defined]
+    module.Value = lambda dtype: {"kind": "Value", "dtype": dtype}  # type: ignore[attr-defined]
+    module.Sequence = lambda *, length, feature: {  # type: ignore[attr-defined]
+        "kind": "Sequence",
+        "length": length,
+        "feature": feature,
+    }
+    module.Image = lambda: {"kind": "Image"}  # type: ignore[attr-defined]
+    module.Array2D = lambda *, shape, dtype: {  # type: ignore[attr-defined]
+        "kind": "Array2D",
+        "shape": shape,
+        "dtype": dtype,
+    }
+    module.Array3D = lambda *, shape, dtype: {  # type: ignore[attr-defined]
+        "kind": "Array3D",
+        "shape": shape,
+        "dtype": dtype,
+    }
+    module.Array4D = lambda *, shape, dtype: {  # type: ignore[attr-defined]
+        "kind": "Array4D",
+        "shape": shape,
+        "dtype": dtype,
+    }
+    module.Array5D = lambda *, shape, dtype: {  # type: ignore[attr-defined]
+        "kind": "Array5D",
+        "shape": shape,
+        "dtype": dtype,
+    }
+    return module
 
 
 def _fake_parquet_key(path: Path) -> str:

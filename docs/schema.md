@@ -333,7 +333,9 @@ includes an internal video-frame reference under the exported video feature key:
 The optional data Parquet shard omits those video-reference columns. This
 matches LeRobot's Hugging Face feature conversion path, where `dtype="video"`
 features are resolved from episode metadata and skipped in the tabular data
-features.
+features. When the optional `datasets` package is installed, the exporter uses
+that Hugging Face Dataset feature schema path before writing the data Parquet
+shard; otherwise it falls back to direct PyArrow rows.
 
 Episode metadata includes `meta/episodes/chunk_index`,
 `meta/episodes/file_index`, `tasks`, `dataset_from_index`, `dataset_to_index`,

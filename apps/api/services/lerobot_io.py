@@ -100,7 +100,11 @@ def write_lerobot_v3_snapshot(
     parquet_files = {
         "tasks": _write_optional_tasks_parquet(tasks_parquet_path, task_rows),
         "episodes": _write_optional_parquet(episodes_parquet_path, episode_rows),
-        "data": _write_optional_parquet(data_parquet_path, data_parquet_rows),
+        "data": _write_optional_data_parquet(
+            data_parquet_path,
+            data_parquet_rows,
+            features=_feature_schema(frame_rows, video_rows),
+        ),
     }
     materialization_status = _materialization_status(
         frame_rows=frame_rows,
@@ -1115,6 +1119,61 @@ def _write_optional_tasks_parquet(path: Path, rows: list[dict[str, Any]]) -> boo
     except (ImportError, ModuleNotFoundError, ValueError):
         return False
     return True
+
+
+def _write_optional_data_parquet(
+    path: Path,
+    rows: list[dict[str, Any]],
+    *,
+    features: dict[str, dict[str, Any]],
+) -> bool:
+    if not rows:
+        return False
+    try:
+        import datasets
+    except ImportError:
+        return _write_optional_parquet(path, rows)
+    try:
+        hf_features = _hf_features_from_lerobot_features(features, datasets)
+        columns = {
+            key: [row.get(key) for row in rows]
+            for key in hf_features
+        }
+        dataset = datasets.Dataset.from_dict(columns, features=hf_features, split="train")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        dataset.to_parquet(str(path))
+    except Exception:
+        return _write_optional_parquet(path, rows)
+    return True
+
+
+def _hf_features_from_lerobot_features(features: dict[str, dict[str, Any]], datasets: Any) -> Any:
+    hf_features = {}
+    for key, feature in features.items():
+        dtype = feature.get("dtype")
+        shape = tuple(feature.get("shape") or ())
+        if dtype == "video":
+            continue
+        if dtype == "image":
+            hf_features[key] = datasets.Image()
+        elif shape == (1,):
+            hf_features[key] = datasets.Value(dtype=dtype)
+        elif len(shape) == 1:
+            hf_features[key] = datasets.Sequence(
+                length=int(shape[0]),
+                feature=datasets.Value(dtype=dtype),
+            )
+        elif len(shape) == 2:
+            hf_features[key] = datasets.Array2D(shape=shape, dtype=dtype)
+        elif len(shape) == 3:
+            hf_features[key] = datasets.Array3D(shape=shape, dtype=dtype)
+        elif len(shape) == 4:
+            hf_features[key] = datasets.Array4D(shape=shape, dtype=dtype)
+        elif len(shape) == 5:
+            hf_features[key] = datasets.Array5D(shape=shape, dtype=dtype)
+        else:
+            raise ValueError(f"Unsupported LeRobot feature for Hugging Face Dataset: {feature}")
+    return datasets.Features(hf_features)
 
 
 def _read_optional_parquet(path: Path) -> list[dict[str, Any]] | None:

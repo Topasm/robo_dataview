@@ -251,6 +251,9 @@ Implemented:
 - Selected episode export manifest.
 - Metadata-oriented LeRobot v3 snapshot.
 - Frame JSONL and available camera MP4 artifact materialization.
+- Data Parquet writing uses Hugging Face Dataset feature conversion when
+  optional `datasets` is installed, excluding video feature columns from the
+  tabular shard.
 - Export validation report.
 - Optional official LeRobotDataset loader validation.
 - Lance subset export for selected episodes when optional Lance dependencies are
