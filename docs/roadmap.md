@@ -53,7 +53,7 @@ Goal:
 Completion criteria:
 
 - The web UI displays an episode table.
-- Clicking an episode shows camera preview placeholders and state/action summary.
+- Clicking an episode shows the multi-camera viewer and state/action summary.
 
 Current status: done.
 
@@ -77,21 +77,23 @@ Features:
 - Metadata panel
 - Episode label editing
 
-Current status: partial.
+Current status: MVP complete, still needs performance hardening.
 
 Implemented:
 
 - Active/selectable camera `<video>` pane.
+- Synchronized multi-camera focus/grid layout.
+- Frame scrubber and frame jump controls.
+- State/action norm plots with current-frame marker.
 - Loading/error states for video metadata.
 - Browser-compatible MP4 byte-range serving.
 - State/action summary cards.
 
 Next:
 
-- Add simultaneous synchronized multi-camera layout.
-- Add frame scrubber with timestamp/frame synchronization.
-- Add state/action chart visualization instead of summary-only display.
-- Wire play/previous/next controls to the active video/timeline.
+- Add selected-frame metadata panel backed by the frame API.
+- Add thumbnail or keyframe preview cache.
+- Replace in-process range slicing with direct blob/object-store range reads.
 
 ## Phase 3: Rerun Web Viewer
 

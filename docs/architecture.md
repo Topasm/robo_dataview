@@ -82,6 +82,8 @@ Implemented now:
   metadata parquet writes when `pyarrow` is installed.
 - Dataset summary, schema, episode list/detail, state/action summary, and video
   blob endpoints, including HTTP Range support for browser video playback.
+- Frame listing API backed by `frames.lance` when present, with episode
+  time-series fallback, annotation overlays, and bad-frame flags.
 - Annotation CRUD with range validation, persisted JSONL, web edit actions, and
   midpoint split scaffolding.
 - Episode-level label overlay updates for caption, success/failure, failure
@@ -102,9 +104,8 @@ Not implemented yet:
 - Real worker queue such as RQ/Celery plus Redis.
 - Real VLM/video-model inference.
 - LanceDB vector index search.
-- Full frame table browser and frame-level mutation workflow.
+- Full frame table browser UI and frame-level mutation workflow.
 - Full LeRobot Parquet/MP4 materialization.
-- Frame-accurate scrubber, wired playback controls, and real time-series plots.
 - Direct byte-range reads from Lance blobs. The API currently loads the full
   episode-table video blob and slices HTTP ranges in process.
 - `videos.lance` provenance lookup in the video endpoint. Video playback reads

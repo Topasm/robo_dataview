@@ -43,22 +43,23 @@ The repository has moved past a pure skeleton. The current MVP path can:
 1. Open and index the `lance-format/lerobot-xvla-soft-fold` Lance dataset.
 2. Serve dataset summaries, episode lists, episode details, state/action
    summaries, and MP4 blobs with HTTP Range support when available.
-3. Store human and generated annotations as JSONL and mirror them to Lance when
+3. Serve frame-level samples through `GET /frames`, preferring `frames.lance`
+   and falling back to episode time-series arrays with annotation labels and
+   bad-frame flags.
+4. Store human and generated annotations as JSONL and mirror them to Lance when
    optional Lance dependencies are installed.
-4. Generate Rerun `.rrd` cache files for state/action timeline inspection and
+5. Generate Rerun `.rrd` cache files for state/action timeline inspection and
    load them through the Rerun React web viewer.
-5. Run basic filter search and deterministic text-embedding semantic search.
-6. Create heuristic VLM-style annotation proposals for review.
-7. Export selected episodes as a metadata-oriented LeRobot v3 snapshot with
+6. Run basic filter search and deterministic text-embedding semantic search.
+7. Create heuristic VLM-style annotation proposals for review.
+8. Export selected episodes as a metadata-oriented LeRobot v3 snapshot with
    validation and version lineage.
-8. Render the main web operations UI with dataset, episode, video viewer,
+9. Render the main web operations UI with dataset, episode, video viewer,
    annotation editing, search, Rerun, and export panels.
 
 Known MVP gaps:
 
-- The frame API is still a placeholder.
-- Multi-camera video playback exists, but the scrubber, segment skip buttons,
-  and state/action charts are still shallow.
+- Frame mutation and the selected-frame metadata panel are not implemented yet.
 - Rerun is embedded and records scalar timelines plus camera video assets when
   MP4 blobs are available; generation is still synchronous and workerless.
 - VLM labeling is heuristic/local scaffolding, not real model inference.

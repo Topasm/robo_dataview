@@ -64,9 +64,11 @@ human_step_caption: string
 review_status: string
 ```
 
-Current status: frame schema is documented but the frame API is still a
-placeholder. Frame-level sampling, bad-frame labels, and frame mutation are not
-implemented yet.
+Current status: `GET /frames` can read frame rows from `frames.lance` when
+available and falls back to episode-level state/action time series. It returns
+state/action vectors, computed norms, overlapping annotation labels, and
+bad-frame flags. Frame-level mutation and durable raw-frame schema helpers are
+not implemented yet.
 
 ## episodes.lance
 

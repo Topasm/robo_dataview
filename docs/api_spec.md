@@ -76,11 +76,44 @@ Current implementation detail:
 ## Frames
 
 ```text
-GET /frames?dataset_id=...&episode_index=...&limit=...
+GET /frames?dataset_id=...&episode_index=...&start_frame=...&end_frame=...&limit=...
 ```
 
-Current status: placeholder. The endpoint returns an empty `items` array and
-`status = "not_implemented"`.
+Returns frame-level samples for one episode. The backend prefers `frames.lance`
+when available and falls back to episode-level state/action time series. Each
+frame includes timestamp, state/action vectors when present, computed norms,
+overlapping annotation labels, and an `is_bad_frame` flag derived from raw frame
+metadata or non-rejected `bad_frame`, `bad_range`, and `bad_episode`
+annotations.
+
+Response shape:
+
+```json
+{
+  "dataset_id": "xvla-soft-fold",
+  "episode_index": 30,
+  "frame_count": 180,
+  "start_frame": 40,
+  "end_frame": 45,
+  "limit": 100,
+  "returned_count": 6,
+  "items": [
+    {
+      "dataset_id": "xvla-soft-fold",
+      "episode_index": 30,
+      "frame_index": 40,
+      "timestamp": 2.0,
+      "task_index": 3,
+      "observation_state": [0.12, 0.34],
+      "action": [0.0, 0.2],
+      "state_norm": 0.36,
+      "action_norm": 0.2,
+      "is_bad_frame": false,
+      "labels": []
+    }
+  ]
+}
+```
 
 ## Annotations
 

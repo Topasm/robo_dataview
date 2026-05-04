@@ -299,6 +299,101 @@ class LanceDatasetStoreTest(unittest.TestCase):
         self.assertEqual(series.sample_indices[0], 0)
         self.assertEqual(series.sample_indices[-1], 1999)
 
+    def test_list_frames_uses_sample_timeseries_fallback(self) -> None:
+        store = LanceDatasetStore()
+        frames = store.list_frames(
+            "sample-xvla-soft-fold",
+            0,
+            start_frame=2,
+            end_frame=4,
+            limit=2,
+        )
+
+        self.assertIsNotNone(frames)
+        self.assertEqual([frame.frame_index for frame in frames], [2, 3])
+        self.assertEqual(frames[0].task_index, 3)
+        self.assertAlmostEqual(frames[0].timestamp or 0.0, 0.1)
+        self.assertIsNotNone(frames[0].observation_state)
+        self.assertIsNotNone(frames[0].action)
+        self.assertIsNotNone(frames[0].state_norm)
+        self.assertIsNotNone(frames[0].action_norm)
+
+    def test_list_frames_prefers_frames_lance_table(self) -> None:
+        episode_rows = [
+            {
+                "episode_index": 0,
+                "task_index": 9,
+                "fps": 20.0,
+                "timestamps": [0.0, 0.05, 0.1, 0.15],
+            },
+        ]
+        frame_rows = [
+            {
+                "episode_index": 0,
+                "frame_index": 0,
+                "timestamp": 0.0,
+                "task_index": 9,
+                "observation_state": [0.0, 0.0],
+                "action": [0.0, 1.0],
+            },
+            {
+                "episode_index": 0,
+                "frame_index": 1,
+                "timestamp": 0.05,
+                "task_index": 9,
+                "observation_state": [3.0, 4.0],
+                "action": [1.0, 1.0],
+            },
+            {
+                "episode_index": 0,
+                "frame_index": 2,
+                "timestamp": 0.1,
+                "task_index": 9,
+                "observation_state": [0.0, 12.0],
+                "action": [2.0, 0.0],
+                "is_bad_frame": True,
+            },
+            {
+                "episode_index": 1,
+                "frame_index": 0,
+                "timestamp": 0.0,
+                "task_index": 3,
+                "observation_state": [99.0],
+                "action": [99.0],
+            },
+        ]
+        fake_tables = {
+            "/datasets/frames/episodes.lance": FakeDataset(
+                episode_rows,
+                list(episode_rows[0].keys()),
+            ),
+            "/datasets/frames/frames.lance": FakeDataset(
+                frame_rows,
+                [
+                    "episode_index",
+                    "frame_index",
+                    "timestamp",
+                    "task_index",
+                    "observation_state",
+                    "action",
+                    "is_bad_frame",
+                ],
+            ),
+            "/datasets/frames/videos.lance": FakeDataset([], ["camera_angle"]),
+        }
+        sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+
+        store = LanceDatasetStore()
+        record = store.open_dataset(DatasetOpenRequest(uri="/datasets/frames", name="frames"))
+        frames = store.list_frames(record.dataset_id, 0, start_frame=1, end_frame=2, limit=10)
+
+        self.assertIsNotNone(frames)
+        self.assertEqual([frame.frame_index for frame in frames], [1, 2])
+        self.assertEqual(frames[0].task_index, 9)
+        self.assertEqual(frames[0].state_norm, 5.0)
+        self.assertAlmostEqual(frames[0].action_norm or 0.0, 2**0.5)
+        self.assertTrue(frames[1].is_bad_frame)
+
     def test_episode_label_updates_persist_as_overlay(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             storage_root = Path(tmpdir)

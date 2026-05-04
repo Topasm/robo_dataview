@@ -16,6 +16,7 @@ from apps.api.schemas.episodes import (
     EpisodeTimeseries,
     StateActionSummary,
 )
+from apps.api.schemas.frames import FrameRecord
 from apps.api.schemas.search import FilterSearchRequest, SearchResult
 from apps.api.services.lerobot_io import read_lerobot_snapshot_episodes
 from apps.api.services.pydantic_compat import model_dump
@@ -26,6 +27,8 @@ TABLE_NAMES = ("frames", "episodes", "videos")
 STATE_COLUMNS = ("observation_state", "observation.state", "state")
 ACTION_COLUMNS = ("actions", "action")
 TIMESTAMP_COLUMNS = ("timestamps", "timestamp")
+FRAME_INDEX_COLUMNS = ("frame_index", "frame_idx", "index")
+FRAME_TIMESTAMP_COLUMNS = ("timestamp", "timestamps")
 EPISODE_TEXT_COLUMNS = ("episode_caption", "caption", "language_instruction", "instruction")
 FILTER_ALIASES = {
     "success": "success_label",
@@ -164,6 +167,14 @@ def _first_present_name(names: list[str], candidates: tuple[str, ...]) -> str | 
     return None
 
 
+def _unique_columns(schema_names: list[str], candidates: list[str | None]) -> list[str]:
+    columns: list[str] = []
+    for candidate in candidates:
+        if candidate is not None and candidate in schema_names and candidate not in columns:
+            columns.append(candidate)
+    return columns
+
+
 def _numeric_vector(value: Any) -> list[float]:
     if value is None:
         return []
@@ -175,6 +186,32 @@ def _numeric_vector(value: Any) -> list[float]:
         return [float(item) for item in value]
     except (TypeError, ValueError):
         return []
+
+
+def _norm_from_vector(vector: list[float] | None) -> float | None:
+    if not vector:
+        return None
+    return math.sqrt(sum(value * value for value in vector))
+
+
+def _number_or_none(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _int_or_none(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _vector_dim(sequence: Any) -> int | None:
@@ -721,6 +758,41 @@ class LanceDatasetStore:
             action_dim=_vector_dim(actions),
         )
 
+    def list_frames(
+        self,
+        dataset_id: str,
+        episode_index: int,
+        *,
+        start_frame: int = 0,
+        end_frame: int | None = None,
+        limit: int = 100,
+    ) -> list[FrameRecord] | None:
+        episode = self.get_episode(dataset_id, episode_index)
+        if episode is None:
+            return None
+
+        bundle = self._bundles.get(dataset_id)
+        if bundle is not None and bundle.tables.get("frames") is not None:
+            frames = self._list_lance_frames(
+                dataset_id,
+                bundle,
+                episode_index,
+                task_index=episode.task_index,
+                start_frame=start_frame,
+                end_frame=end_frame,
+                limit=limit,
+            )
+            if frames is not None:
+                return frames
+
+        return self._list_timeseries_frames(
+            dataset_id,
+            episode,
+            start_frame=start_frame,
+            end_frame=end_frame,
+            limit=limit,
+        )
+
     def filter_search(self, payload: FilterSearchRequest) -> list[SearchResult]:
         episodes = self.list_episodes(payload.dataset_id, limit=payload.limit, offset=0)
         try:
@@ -935,6 +1007,142 @@ class LanceDatasetStore:
             "states": row.get(state_name) if state_name else None,
             "actions": row.get(action_name) if action_name else None,
         }
+
+    def _list_lance_frames(
+        self,
+        dataset_id: str,
+        bundle: LanceBundle,
+        episode_index: int,
+        *,
+        task_index: int | None,
+        start_frame: int,
+        end_frame: int | None,
+        limit: int,
+    ) -> list[FrameRecord] | None:
+        dataset = bundle.tables.get("frames")
+        if dataset is None or _count_rows(dataset) == 0:
+            return None
+
+        schema = bundle.schemas.get("frames", [])
+        frame_name = _first_present_name(schema, FRAME_INDEX_COLUMNS)
+        timestamp_name = _first_present_name(schema, FRAME_TIMESTAMP_COLUMNS)
+        state_name = _first_present_name(schema, STATE_COLUMNS)
+        action_name = _first_present_name(schema, ACTION_COLUMNS)
+        columns = _unique_columns(
+            schema,
+            [
+                "episode_index",
+                frame_name,
+                timestamp_name,
+                "task_index",
+                state_name,
+                action_name,
+                "state_norm",
+                "action_norm",
+                "is_bad_frame",
+            ],
+        )
+
+        try:
+            scanner = dataset.scanner(
+                columns=columns or None,
+                filter=f"episode_index = {episode_index}",
+            )
+            rows = _rows_from_table(scanner.to_table())
+        except Exception:
+            rows = [
+                row
+                for row in _read_rows(
+                    dataset,
+                    columns=columns or None,
+                    limit=_count_rows(dataset),
+                    offset=0,
+                )
+                if _int_or_none(row.get("episode_index")) == episode_index
+            ]
+        if not rows:
+            return None
+
+        records: list[FrameRecord] = []
+        for fallback_index, row in enumerate(rows):
+            row_episode_index = _int_or_none(row.get("episode_index"))
+            if row_episode_index is not None and row_episode_index != episode_index:
+                continue
+            frame_index = _int_or_none(row.get(frame_name)) if frame_name else None
+            if frame_index is None:
+                frame_index = fallback_index
+            if frame_index < start_frame:
+                continue
+            if end_frame is not None and frame_index > end_frame:
+                continue
+
+            state_vector = _numeric_vector(row.get(state_name)) if state_name else []
+            action_vector = _numeric_vector(row.get(action_name)) if action_name else []
+            state_norm = _number_or_none(row.get("state_norm"))
+            action_norm = _number_or_none(row.get("action_norm"))
+            records.append(
+                FrameRecord(
+                    dataset_id=dataset_id,
+                    episode_index=episode_index,
+                    frame_index=frame_index,
+                    timestamp=_number_or_none(row.get(timestamp_name)) if timestamp_name else None,
+                    task_index=_int_or_none(row.get("task_index")) or task_index,
+                    observation_state=state_vector or None,
+                    action=action_vector or None,
+                    state_norm=state_norm if state_norm is not None else _norm_from_vector(state_vector),
+                    action_norm=action_norm if action_norm is not None else _norm_from_vector(action_vector),
+                    is_bad_frame=bool(row.get("is_bad_frame", False)),
+                )
+            )
+
+        records.sort(key=lambda frame: frame.frame_index)
+        return records[:limit]
+
+    def _list_timeseries_frames(
+        self,
+        dataset_id: str,
+        episode: EpisodeDetail,
+        *,
+        start_frame: int,
+        end_frame: int | None,
+        limit: int,
+    ) -> list[FrameRecord]:
+        timeseries = self.get_episode_timeseries(dataset_id, episode.episode_index)
+        if timeseries is None:
+            return []
+        states = _sequence(timeseries.get("states"))
+        actions = _sequence(timeseries.get("actions"))
+        timestamps = _sequence(timeseries.get("timestamps"))
+        frame_count = max(len(states), len(actions), len(timestamps), episode.length or 0)
+        if frame_count <= 0:
+            return []
+
+        last_frame = min(frame_count - 1, end_frame if end_frame is not None else frame_count - 1)
+        if start_frame > last_frame:
+            return []
+
+        fps = episode.fps or 20.0
+        records: list[FrameRecord] = []
+        for frame_index in range(start_frame, last_frame + 1):
+            if len(records) >= limit:
+                break
+            state_vector = _numeric_vector(states[frame_index]) if frame_index < len(states) else []
+            action_vector = _numeric_vector(actions[frame_index]) if frame_index < len(actions) else []
+            timestamp = _timestamp_at(timestamps, frame_index)
+            records.append(
+                FrameRecord(
+                    dataset_id=dataset_id,
+                    episode_index=episode.episode_index,
+                    frame_index=frame_index,
+                    timestamp=timestamp if timestamp is not None else frame_index / fps,
+                    task_index=episode.task_index,
+                    observation_state=state_vector or None,
+                    action=action_vector or None,
+                    state_norm=_norm_from_vector(state_vector),
+                    action_norm=_norm_from_vector(action_vector),
+                )
+            )
+        return records
 
     def _episode_payload(
         self,

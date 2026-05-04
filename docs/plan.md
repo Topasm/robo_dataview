@@ -45,6 +45,8 @@ Working:
 - VLM-label job endpoint with heuristic pending annotation proposals.
 - Rerun session endpoint that generates `.rrd` cache files.
 - Rerun React viewer embed for ready `.rrd` sessions.
+- Frame listing endpoint with `frames.lance` preference, episode time-series
+  fallback, state/action samples, annotation labels, and bad-frame flags.
 - Export endpoint that writes a manifest and metadata-oriented LeRobot v3
   snapshot.
 - Version lineage JSONL and optional Lance mirror.
@@ -62,19 +64,15 @@ npm --workspace apps/web run build
 
 Known limits:
 
-- `GET /frames` is a placeholder.
 - Jobs run synchronously in-process.
 - Open datasets and sessions are in-memory.
-- Rerun cache generation logs state/action scalar timelines, not full
-  synchronized camera video.
 - VLM labeling is heuristic scaffolding.
 - Semantic search is text-hash based, not LanceDB vector search.
 - Export does not yet materialize full LeRobot Parquet/MP4 artifacts.
-- Episode-level label form fields are visible but not saved.
-- Playback buttons and scrubber are not wired to frame/time state.
 - Video ranges are sliced after loading the full episode blob; direct Lance blob
   range streaming is not implemented.
 - `videos.lance` provenance lookup is not used by playback yet.
+- Frame mutation and full frame-table browser UX are not implemented yet.
 
 ## Next Milestone
 
@@ -133,11 +131,11 @@ Definition of done:
 - [x] Add backend `HEAD`/Range support for browser video playback.
 - [ ] Replace full-blob video loading with true range-aware Lance/object-store
   reads.
-- [ ] Add synchronized N-camera playback layout.
-- [ ] Wire playback controls: play, pause, rate, seek, previous/next segment.
-- [ ] Add frame/time scrubber.
+- [x] Add synchronized N-camera playback layout.
+- [x] Wire playback controls: play, pause, seek, and frame jumps.
+- [x] Add frame/time scrubber.
 - [x] Add state/action summary cards.
-- [ ] Add state/action time-series chart.
+- [x] Add state/action time-series chart.
 - [ ] Add selected-frame metadata panel.
 - [ ] Add thumbnail or keyframe preview cache.
 
@@ -166,6 +164,17 @@ Definition of done:
 - [x] Log camera video or synchronized image frames to Rerun.
 - [x] Add cache key by dataset version, episode index, and visualization config.
 - [ ] Move `.rrd` generation into a worker.
+
+### P4.5: Frame API
+
+- [x] Add `GET /frames` with episode/range/limit query params.
+- [x] Prefer `frames.lance` rows when present.
+- [x] Fall back to episode time-series arrays for Lance datasets without frame
+  rows.
+- [x] Return state/action vectors and norms.
+- [x] Overlay annotation labels and derive bad-frame flags.
+- [ ] Add frame-level mutation endpoints.
+- [ ] Add frame metadata panel in the web UI.
 
 ### P5: Search and Filtering
 
@@ -215,12 +224,11 @@ Definition of done:
 
 ## Recommended Immediate Order
 
-1. Make the basic viewer real: synchronized camera layout, scrubber, state/action plot.
-2. Add episode-level annotation editing.
-3. Add Rerun cache keys and camera logging.
-4. Add export validation report.
-5. Add keyframe extraction and replace heuristic VLM with a real provider path.
-6. Replace deterministic semantic search with LanceDB vector search.
+1. Add selected-frame metadata UI backed by `GET /frames`.
+2. Add keyframe extraction and replace heuristic VLM with a real provider path.
+3. Replace deterministic semantic search with LanceDB vector search.
+4. Materialize full LeRobot Parquet/MP4 export.
+5. Move Rerun/export/VLM work into queue-backed workers.
 
 ## Validation Checklist
 
