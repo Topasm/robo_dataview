@@ -45,7 +45,7 @@ artifacts and run official loader validation. Use `.[queue]` on API and worker
 machines that enqueue or execute Redis/RQ jobs.
 
 The manual GitHub Actions workflow `Official export dependencies` installs
-`.[export,video]` and runs opt-in export checks with real optional
+`.[export,video,dev]` and runs opt-in export checks with real optional
 dependencies, including native Hugging Face Dataset round-trip plus no-video
 and video-backed LeRobotDataset loader validation. The same check can be run
 locally with:
