@@ -104,6 +104,7 @@ def _job_sse_event(record: JobRecord) -> str:
             "created_rerun_session_id": record.created_rerun_session_id,
             "rerun_rrd_url": record.rerun_rrd_url,
             "rerun_rrd_path": record.rerun_rrd_path,
+            "rerun_published_uri": record.rerun_published_uri,
             "rerun_viewer_url": record.rerun_viewer_url,
         },
     )

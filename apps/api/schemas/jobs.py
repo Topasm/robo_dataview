@@ -50,5 +50,6 @@ class JobRecord(BaseModel):
     created_rerun_session_id: str | None = None
     rerun_rrd_url: str | None = None
     rerun_rrd_path: str | None = None
+    rerun_published_uri: str | None = None
     rerun_viewer_url: str | None = None
     queue_job_id: str | None = None

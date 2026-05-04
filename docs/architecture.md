@@ -132,6 +132,8 @@ Implemented now:
   dependencies are installed.
 - JSONL caption export and VLA-style JSONL trajectory export.
 - Optional export artifact publishing to local or `fsspec` destinations.
+- Optional Rerun cache artifact publishing to local or `fsspec`
+  destinations.
 - Export scope controls for selected episode or current train/val/test split.
 - Queue-backed export and Rerun session jobs using the shared job progress
   event stream.
@@ -144,7 +146,8 @@ Not implemented yet:
 - Local VLM/video-model inference.
 - Larger strict real-dataset LeRobot Parquet/MP4 smoke runs with video
   materialization.
-- Object storage publishing for cache artifacts.
+- Keyframe and preview cache artifact publishing beyond Rerun `.rrd`
+  recordings.
 
 ## Design Principles
 

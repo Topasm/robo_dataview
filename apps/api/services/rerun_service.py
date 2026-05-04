@@ -4,11 +4,18 @@ import hashlib
 from importlib import import_module
 import json
 from pathlib import Path
+import re
 from uuid import uuid4
 
 from fastapi import HTTPException
 
 from apps.api.schemas.rerun import RerunSessionCreate, RerunSessionRecord
+from apps.api.services.artifact_storage import (
+    ArtifactPublishDependencyError,
+    ArtifactPublishError,
+    configured_rerun_cache_publish_uri,
+    publish_file,
+)
 from apps.api.services.lance_store import store
 from apps.api.services.pydantic_compat import model_dump
 from workers.rerun_cache_worker import (
@@ -36,6 +43,7 @@ class RerunSessionStore:
         session_id = str(uuid4())
         cache_key = _cache_key(payload.dataset_id, payload.episode_index, payload.mode)
         rrd_path = RERUN_CACHE_DIR / f"{payload.dataset_id}_episode_{payload.episode_index:06d}_{cache_key}.rrd"
+        publish_uri = payload.publish_uri or configured_rerun_cache_publish_uri()
         record = RerunSessionRecord(
             session_id=session_id,
             dataset_id=payload.dataset_id,
@@ -46,8 +54,10 @@ class RerunSessionStore:
             viewer_url=None,
             rrd_url=f"/api/rerun/recordings/{session_id}.rrd",
             rrd_path=str(rrd_path),
+            publish_uri=publish_uri,
         )
         record = self._generate_rrd(record, rrd_path)
+        record = self._publish_recording(record, rrd_path)
         self._save(record)
         return record
 
@@ -77,6 +87,36 @@ class RerunSessionStore:
             import_module_fn=import_module,
         )
 
+    @staticmethod
+    def _publish_recording(record: RerunSessionRecord, rrd_path: Path) -> RerunSessionRecord:
+        if record.status != "ready" or not record.publish_uri:
+            return record
+        try:
+            artifact = publish_file(
+                rrd_path,
+                record.publish_uri,
+                relative_path=_published_recording_relative_path(record, rrd_path),
+            )
+        except (ArtifactPublishDependencyError, ArtifactPublishError) as exc:
+            return RerunSessionRecord(
+                **{
+                    **model_dump(record),
+                    "status": "publish_failed",
+                    "published_uri": None,
+                    "publish_size_bytes": None,
+                    "message": f"Rerun recording publishing failed: {exc}",
+                }
+            )
+        message = record.message or "Rerun recording is ready."
+        return RerunSessionRecord(
+            **{
+                **model_dump(record),
+                "published_uri": str(artifact["uri"]),
+                "publish_size_bytes": int(artifact["size_bytes"]),
+                "message": f"{message} Published to {artifact['uri']}.",
+            }
+        )
+
     def _save(self, record: RerunSessionRecord) -> None:
         self._records[record.session_id] = record
         if self.record_path is None:
@@ -97,6 +137,11 @@ class RerunSessionStore:
             except (TypeError, ValueError, json.JSONDecodeError):
                 continue
             self._records[record.session_id] = record
+
+
+def _published_recording_relative_path(record: RerunSessionRecord, rrd_path: Path) -> str:
+    dataset = re.sub(r"[^A-Za-z0-9_.-]+", "_", record.dataset_id).strip("_") or "dataset"
+    return f"rerun/{dataset}/{rrd_path.name}"
 
 
 rerun_sessions = RerunSessionStore(record_path=RERUN_SESSION_RECORD_PATH)

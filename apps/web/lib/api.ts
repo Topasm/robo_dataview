@@ -105,6 +105,8 @@ type RerunSessionResponse = {
   camera_count: number;
   viewer_url: string | null;
   rrd_url: string | null;
+  published_uri: string | null;
+  publish_size_bytes: number | null;
   message: string | null;
 };
 
@@ -131,6 +133,7 @@ type JobRecordResponse = {
   created_rerun_session_id: string | null;
   rerun_rrd_url: string | null;
   rerun_rrd_path: string | null;
+  rerun_published_uri: string | null;
   rerun_viewer_url: string | null;
   queue_job_id: string | null;
 };
@@ -148,6 +151,7 @@ type JobProgressEventResponse = {
   created_rerun_session_id: string | null;
   rerun_rrd_url: string | null;
   rerun_rrd_path: string | null;
+  rerun_published_uri: string | null;
   rerun_viewer_url: string | null;
 };
 
@@ -583,14 +587,19 @@ export async function deleteAnnotation(annotationId: string): Promise<void> {
 export async function createRerunSession(
   datasetId: string,
   episodeIndex: number,
+  publishUri?: string,
 ): Promise<RerunSession> {
+  const body: Record<string, object | string | number | null> = {
+    dataset_id: datasetId,
+    episode_index: episodeIndex,
+    mode: "rrd_cache"
+  };
+  if (publishUri !== undefined) {
+    body.publish_uri = publishUri || null;
+  }
   const row = await request<RerunSessionResponse>("/rerun/session", {
     method: "POST",
-    body: JSON.stringify({
-      dataset_id: datasetId,
-      episode_index: episodeIndex,
-      mode: "rrd_cache"
-    })
+    body: JSON.stringify(body)
   });
   return toRerunSession(row);
 }
@@ -603,14 +612,19 @@ export async function fetchRerunSession(sessionId: string): Promise<RerunSession
 export async function createRerunSessionJob(
   datasetId: string,
   episodeIndex: number,
+  publishUri?: string,
 ): Promise<JobRecord> {
+  const body: Record<string, object | string | number | null> = {
+    dataset_id: datasetId,
+    episode_index: episodeIndex,
+    mode: "rrd_cache"
+  };
+  if (publishUri !== undefined) {
+    body.publish_uri = publishUri || null;
+  }
   const row = await request<JobRecordResponse>("/jobs/rerun-session", {
     method: "POST",
-    body: JSON.stringify({
-      dataset_id: datasetId,
-      episode_index: episodeIndex,
-      mode: "rrd_cache"
-    })
+    body: JSON.stringify(body)
   });
   return toJobRecord(row);
 }
@@ -874,6 +888,7 @@ function parseJobSseEvent(rawEvent: string): JobProgressEvent | null {
     createdRerunSessionId: payload.created_rerun_session_id,
     rerunRrdUrl: payload.rerun_rrd_url,
     rerunRrdPath: payload.rerun_rrd_path,
+    rerunPublishedUri: payload.rerun_published_uri,
     rerunViewerUrl: payload.rerun_viewer_url
   };
 }
@@ -1024,6 +1039,8 @@ function toRerunSession(raw: RerunSessionResponse): RerunSession {
     cameraCount: raw.camera_count,
     viewerUrl: raw.viewer_url,
     rrdUrl: raw.rrd_url ? `${API_ROOT_URL}${raw.rrd_url}` : null,
+    publishedUri: raw.published_uri,
+    publishSizeBytes: raw.publish_size_bytes,
     message: raw.message
   };
 }
@@ -1052,6 +1069,7 @@ function toJobRecord(raw: JobRecordResponse): JobRecord {
     createdRerunSessionId: raw.created_rerun_session_id,
     rerunRrdUrl: raw.rerun_rrd_url,
     rerunRrdPath: raw.rerun_rrd_path,
+    rerunPublishedUri: raw.rerun_published_uri,
     rerunViewerUrl: raw.rerun_viewer_url,
     queueJobId: raw.queue_job_id
   };

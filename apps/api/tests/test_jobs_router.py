@@ -76,6 +76,7 @@ class JobsRouterTest(unittest.TestCase):
             created_rerun_session_id="session-1",
             rerun_rrd_url="/api/rerun/recordings/session-1.rrd",
             rerun_rrd_path="data/cache/rerun/session-1.rrd",
+            rerun_published_uri="s3://bucket/rerun/session-1.rrd",
         )
 
         event = jobs_router._job_sse_event(record)
@@ -91,6 +92,7 @@ class JobsRouterTest(unittest.TestCase):
         self.assertIn('"created_rerun_session_id": "session-1"', event)
         self.assertIn('"rerun_rrd_url": "/api/rerun/recordings/session-1.rrd"', event)
         self.assertIn('"rerun_rrd_path": "data/cache/rerun/session-1.rrd"', event)
+        self.assertIn('"rerun_published_uri": "s3://bucket/rerun/session-1.rrd"', event)
 
     def test_stream_job_events_returns_sse_response(self) -> None:
         fake_jobs = FakeJobs()
@@ -132,6 +134,7 @@ class FakeJobs:
         if kind == "rerun_session":
             record.created_rerun_session_id = "session-1"
             record.rerun_rrd_url = "/api/rerun/recordings/session-1.rrd"
+            record.rerun_published_uri = "s3://bucket/rerun/session-1.rrd"
         return record
 
 

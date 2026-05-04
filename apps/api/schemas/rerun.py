@@ -5,6 +5,7 @@ class RerunSessionCreate(BaseModel):
     dataset_id: str
     episode_index: int
     mode: str = "rrd_cache"
+    publish_uri: str | None = None
 
 
 class RerunSessionRecord(BaseModel):
@@ -19,4 +20,7 @@ class RerunSessionRecord(BaseModel):
     viewer_url: str | None = None
     rrd_url: str | None = None
     rrd_path: str | None = None
+    publish_uri: str | None = None
+    published_uri: str | None = None
+    publish_size_bytes: int | None = None
     message: str | None = None

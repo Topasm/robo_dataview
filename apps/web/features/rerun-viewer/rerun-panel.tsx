@@ -46,6 +46,11 @@ export function RerunPanel({ job, session, viewerUrl, onCreateSession }: RerunPa
               .rrd
             </a>
           ) : null}
+          {session.publishedUri ? (
+            <a href={session.publishedUri} rel="noreferrer" target="_blank">
+              published
+            </a>
+          ) : null}
           {session.message ? <span className="muted">{session.message}</span> : null}
           <span className="muted">
             {session.cacheHit ? "cache hit" : "cache miss"} / cameras {session.cameraCount}

@@ -437,6 +437,7 @@ class JobStore:
                 "created_rerun_session_id": session.session_id,
                 "rerun_rrd_url": session.rrd_url,
                 "rerun_rrd_path": session.rrd_path,
+                "rerun_published_uri": session.published_uri,
                 "rerun_viewer_url": session.viewer_url,
                 "artifact_count": 1 if status == JobStatus.succeeded and session.rrd_path else 0,
             },

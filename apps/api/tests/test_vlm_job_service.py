@@ -188,6 +188,7 @@ class VlmJobServiceTest(unittest.TestCase):
                 status="ready",
                 rrd_url="/api/rerun/recordings/session-1.rrd",
                 rrd_path="data/cache/rerun/session-1.rrd",
+                published_uri="s3://bucket/rerun/session-1.rrd",
                 message="Generated Rerun recording.",
             )
         )
@@ -201,6 +202,7 @@ class VlmJobServiceTest(unittest.TestCase):
         self.assertEqual(result.created_rerun_session_id, "session-1")
         self.assertEqual(result.rerun_rrd_url, "/api/rerun/recordings/session-1.rrd")
         self.assertEqual(result.rerun_rrd_path, "data/cache/rerun/session-1.rrd")
+        self.assertEqual(result.rerun_published_uri, "s3://bucket/rerun/session-1.rrd")
         self.assertEqual(fake_sessions.payload, payload)
 
     def test_job_store_persists_records_to_sqlite(self) -> None:
@@ -385,6 +387,7 @@ class VlmJobServiceTest(unittest.TestCase):
                 status="ready",
                 rrd_url="/api/rerun/recordings/session-1.rrd",
                 rrd_path="data/cache/rerun/session-1.rrd",
+                published_uri="s3://bucket/rerun/session-1.rrd",
             )
         )
 
@@ -395,6 +398,7 @@ class VlmJobServiceTest(unittest.TestCase):
         self.assertEqual(result.progress, 1.0)
         self.assertEqual(result.created_rerun_session_id, "session-1")
         self.assertEqual(jobs.get(queued.job_id).rerun_rrd_path, "data/cache/rerun/session-1.rrd")
+        self.assertEqual(jobs.get(queued.job_id).rerun_published_uri, "s3://bucket/rerun/session-1.rrd")
 
     def test_job_store_reports_queue_enqueue_failure(self) -> None:
         jobs = JobStore(queue_backend=FakeQueueBackend(error="redis unavailable"))

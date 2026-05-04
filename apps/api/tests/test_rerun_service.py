@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import sys
+import shutil
 import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from apps.api.schemas.rerun import RerunSessionCreate
+from apps.api.services.artifact_storage import ArtifactPublishError
 from apps.api.services import rerun_service
 from apps.api.services.rerun_service import RerunSessionStore
 
@@ -76,6 +78,7 @@ class RerunSessionStoreTest(unittest.TestCase):
         self.previous_import_module = rerun_service.import_module
         self.previous_cache_dir = rerun_service.RERUN_CACHE_DIR
         self.cache_dir = Path("/tmp/robot-data-studio-test-rerun")
+        self.publish_dir = Path("/tmp/robot-data-studio-test-rerun-publish")
         rerun_service.RERUN_CACHE_DIR = self.cache_dir
 
     def tearDown(self) -> None:
@@ -89,6 +92,7 @@ class RerunSessionStoreTest(unittest.TestCase):
             path.unlink()
         if self.cache_dir.exists():
             self.cache_dir.rmdir()
+        shutil.rmtree(self.publish_dir, ignore_errors=True)
 
     def test_create_generates_rrd_when_rerun_is_available(self) -> None:
         fake_rerun = FakeRerunModule()
@@ -159,6 +163,54 @@ class RerunSessionStoreTest(unittest.TestCase):
         self.assertEqual(loaded.session_id, created.session_id)
         self.assertEqual(loaded.status, "ready")
         self.assertEqual(loaded.rrd_path, created.rrd_path)
+
+    def test_create_publishes_ready_recording_when_publish_uri_is_set(self) -> None:
+        fake_rerun = FakeRerunModule()
+        sys.modules["rerun"] = fake_rerun
+
+        with patch.object(rerun_service, "store", FakeRerunStore()):
+            sessions = RerunSessionStore()
+            record = sessions.create(
+                RerunSessionCreate(
+                    dataset_id="dataset-a",
+                    episode_index=3,
+                    publish_uri=str(self.publish_dir),
+                )
+            )
+
+        self.assertEqual(record.status, "ready")
+        self.assertEqual(record.publish_uri, str(self.publish_dir))
+        self.assertIsNotNone(record.published_uri)
+        self.assertIsNotNone(record.publish_size_bytes)
+        self.assertTrue(Path(str(record.published_uri)).exists())
+        self.assertIn("/rerun/dataset-a/", str(record.published_uri))
+
+    def test_create_reports_publish_failure_after_ready_recording(self) -> None:
+        fake_rerun = FakeRerunModule()
+        sys.modules["rerun"] = fake_rerun
+
+        with (
+            patch.object(rerun_service, "store", FakeRerunStore()),
+            patch.object(
+                rerun_service,
+                "publish_file",
+                side_effect=ArtifactPublishError("permission denied"),
+            ),
+        ):
+            sessions = RerunSessionStore()
+            record = sessions.create(
+                RerunSessionCreate(
+                    dataset_id="dataset-a",
+                    episode_index=3,
+                    publish_uri=str(self.publish_dir),
+                )
+            )
+
+        self.assertEqual(record.status, "publish_failed")
+        self.assertIsNone(record.published_uri)
+        self.assertIn("permission denied", record.message or "")
+        self.assertIsNotNone(record.rrd_path)
+        self.assertTrue(Path(record.rrd_path).exists())
 
     def test_create_reports_missing_dependency(self) -> None:
         def raise_import_error(name: str) -> object:

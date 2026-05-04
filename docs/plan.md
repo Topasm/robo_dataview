@@ -272,7 +272,7 @@ Definition of done:
 - [x] Add auth and user identities.
 - [x] Add multi-user review assignment.
 - [x] Add object storage publishing for export artifacts.
-- [ ] Add object storage publishing for cache artifacts.
+- [x] Add object storage publishing for Rerun cache artifacts.
 - [x] Add deployment docs.
 
 ## Recommended Immediate Order
@@ -281,7 +281,8 @@ Definition of done:
    and larger representative downloaded or `hf://` Lance subsets.
 2. Run a real CLIP/SigLIP text-to-image search smoke with generated visual
    embeddings.
-3. Add object storage publishing for cache artifacts.
+3. Add keyframe and preview cache artifact publishing beyond Rerun `.rrd`
+   recordings.
 
 ## Validation Checklist
 

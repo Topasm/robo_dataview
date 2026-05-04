@@ -121,3 +121,11 @@ def _local_path(uri: str) -> Path:
 
 def configured_export_publish_uri() -> str | None:
     return os.getenv("ROBOT_DATA_STUDIO_EXPORT_PUBLISH_URI") or None
+
+
+def configured_rerun_cache_publish_uri() -> str | None:
+    return (
+        os.getenv("ROBOT_DATA_STUDIO_RERUN_CACHE_PUBLISH_URI")
+        or os.getenv("ROBOT_DATA_STUDIO_CACHE_PUBLISH_URI")
+        or None
+    )

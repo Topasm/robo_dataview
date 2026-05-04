@@ -304,7 +304,8 @@ GET  /rerun/recordings/{session_id}.rrd
 {
   "dataset_id": "xvla-soft-fold",
   "episode_index": 30,
-  "mode": "rrd_cache"
+  "mode": "rrd_cache",
+  "publish_uri": "s3://robot-data-studio/cache"
 }
 ```
 
@@ -313,8 +314,13 @@ GET  /rerun/recordings/{session_id}.rrd
 scalar timeline data for timestamps, state norm, and action norm. When episode
 camera MP4 blobs are available, the recording also logs Rerun `AssetVideo`
 entries and per-frame `VideoFrameReference` rows. Responses include `cache_key`,
-`cache_hit`, and `camera_count`; the same dataset, episode, mode, and
-visualization config reuses the existing `.rrd` file.
+`cache_hit`, `camera_count`, and local `rrd_url`/`rrd_path`; the same dataset,
+episode, mode, and visualization config reuses the existing `.rrd` file.
+`publish_uri` is optional. When present, the ready `.rrd` file is copied to the
+destination through local filesystem or optional `fsspec` storage and the
+response includes `published_uri` and `publish_size_bytes`. If omitted,
+`ROBOT_DATA_STUDIO_RERUN_CACHE_PUBLISH_URI` or
+`ROBOT_DATA_STUDIO_CACHE_PUBLISH_URI` can provide the same default.
 
 ## Jobs
 
@@ -376,7 +382,7 @@ long-running LeRobot, Lance, JSONL, or VLA exports without blocking the request.
 `POST /jobs/rerun-session` accepts the same payload as `POST /rerun/session`,
 returns a `JobRecord`, and runs `.rrd` generation through the configured job
 backend. The completed job records `created_rerun_session_id`, `rerun_rrd_url`,
-`rerun_rrd_path`, and `rerun_viewer_url`; clients should fetch
+`rerun_rrd_path`, `rerun_published_uri`, and `rerun_viewer_url`; clients should fetch
 `GET /rerun/session/{session_id}` before opening the viewer. Rerun session
 records are persisted under `data/app/rerun_sessions.jsonl` so API and worker
 processes can share queued session results.

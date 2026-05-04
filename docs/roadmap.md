@@ -96,7 +96,8 @@ Implemented:
 Next:
 
 - Add thumbnail or keyframe preview cache.
-- Add object-storage publishing for cache artifacts.
+- Add object-storage publishing for thumbnail and keyframe preview cache
+  artifacts.
 
 ## Phase 3: Rerun Web Viewer
 
@@ -289,6 +290,10 @@ Implemented:
 - Queue-backed Rerun session jobs with persisted session records.
 - Optional export artifact publishing to local or `fsspec` destinations through
   `publish_uri` or `ROBOT_DATA_STUDIO_EXPORT_PUBLISH_URI`.
+- Optional Rerun cache artifact publishing to local or `fsspec`
+  destinations through `publish_uri`,
+  `ROBOT_DATA_STUDIO_RERUN_CACHE_PUBLISH_URI`, or
+  `ROBOT_DATA_STUDIO_CACHE_PUBLISH_URI`.
 - Accepted annotations only.
 - Version lineage JSONL plus optional Lance mirror.
 
@@ -296,4 +301,5 @@ Next:
 
 - Run the real-dataset export smoke workflow with video materialization and on
   larger representative multi-camera subsets.
-- Add object storage publishing for cache artifacts.
+- Add keyframe and preview cache artifact publishing beyond Rerun `.rrd`
+  recordings.

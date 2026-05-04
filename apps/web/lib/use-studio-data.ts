@@ -103,6 +103,7 @@ function mergeJobEvent(record: JobRecord, event: JobProgressEvent): JobRecord {
     createdRerunSessionId: event.createdRerunSessionId,
     rerunRrdUrl: event.rerunRrdUrl,
     rerunRrdPath: event.rerunRrdPath,
+    rerunPublishedUri: event.rerunPublishedUri,
     rerunViewerUrl: event.rerunViewerUrl
   };
 }

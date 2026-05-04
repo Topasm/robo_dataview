@@ -136,6 +136,8 @@ export type RerunSession = {
   cameraCount: number;
   viewerUrl: string | null;
   rrdUrl: string | null;
+  publishedUri: string | null;
+  publishSizeBytes: number | null;
   message: string | null;
 };
 
@@ -162,6 +164,7 @@ export type JobRecord = {
   createdRerunSessionId: string | null;
   rerunRrdUrl: string | null;
   rerunRrdPath: string | null;
+  rerunPublishedUri: string | null;
   rerunViewerUrl: string | null;
   queueJobId: string | null;
 };
@@ -179,6 +182,7 @@ export type JobProgressEvent = {
   createdRerunSessionId: string | null;
   rerunRrdUrl: string | null;
   rerunRrdPath: string | null;
+  rerunPublishedUri: string | null;
   rerunViewerUrl: string | null;
 };
 
