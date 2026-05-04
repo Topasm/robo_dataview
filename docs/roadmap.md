@@ -267,6 +267,8 @@ Implemented:
   exports.
 - Manual official-dependency workflow can verify native HF Dataset export with
   real `datasets.save_to_disk()` / `load_from_disk()`.
+- Manual official-dependency workflow can verify a no-video LeRobot snapshot
+  with `LeRobotDataset(repo_id, root=...)`.
 - Queue-backed export jobs through the shared job progress event stream.
 - Queue-backed Rerun session jobs with persisted session records.
 - Accepted annotations only.
@@ -275,4 +277,4 @@ Implemented:
 Next:
 
 - Materialize fully LeRobot-loadable Parquet/MP4 artifacts.
-- Add official-dependency CI coverage for full LeRobotDataset loading.
+- Extend official loader coverage to video-backed LeRobot snapshots.
