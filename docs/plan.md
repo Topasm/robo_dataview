@@ -101,8 +101,9 @@ Known limits:
 - The manual official-dependency workflow has verified native Hugging Face
   Dataset export and tiny no-video/video-backed LeRobot snapshots against the
   real `datasets` and `lerobot` loaders.
-- A separate opt-in real-dataset export smoke workflow has opened the default
-  `xvla-soft-fold` `hf://` Lance URI, exported one episode, and verified the
+- A separate opt-in real-dataset export smoke workflow can open a configured
+  `hf://` Lance URI, export up to 64 episodes from a selected offset,
+  optionally materialize videos, require all selected cameras, and verify the
   result with the official LeRobot loader.
 - File-backed video ranges stream directly from disk. Embedded Lance video blobs
   stream byte ranges directly when Lance exposes a seekable `take_blobs` reader;

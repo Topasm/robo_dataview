@@ -92,12 +92,14 @@ Implemented:
 - State/action summary cards.
 - Selected-frame metadata panel backed by the frame API.
 - Annotation-backed selected-frame exact-label mutation.
+- Thumbnail/preview cache generation for episode camera frames.
+- Optional keyframe and preview cache artifact publishing to local or
+  `fsspec` destinations.
 
 Next:
 
-- Add thumbnail or keyframe preview cache.
-- Add object-storage publishing for thumbnail and keyframe preview cache
-  artifacts.
+- Add list-level preview precompute and cache eviction controls for larger
+  datasets.
 
 ## Phase 3: Rerun Web Viewer
 
@@ -284,7 +286,6 @@ Implemented:
 - Manual official-dependency workflow can generate a tiny MP4 and verify a
   video-backed LeRobot snapshot with the official loader when optional video
   dependencies are installed.
-- Latest manual official-dependency workflow passed against commit `e0c476d`.
 - Opt-in real-dataset export smoke workflow can open a configured `hf://` Lance
   URI, export up to 64 episodes from a selected offset, optionally materialize
   videos, require all selected cameras, and validate the snapshot with the
