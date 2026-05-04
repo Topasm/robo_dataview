@@ -35,10 +35,7 @@ class ExportStore:
 
     def create(self, payload: ExportCreateRequest) -> ExportRecord:
         export_id = str(uuid4())
-        episode_indices = payload.episode_indices or [
-            episode.episode_index
-            for episode in store.list_episodes(payload.dataset_id, limit=1000, offset=0)
-        ]
+        episode_indices = payload.episode_indices or self._episode_indices_for_splits(payload)
         export_dir = EXPORT_ROOT / export_id
         manifest_path = export_dir / "manifest.json"
         record = ExportRecord(
@@ -207,6 +204,7 @@ class ExportStore:
             "export_id": record.export_id,
             "dataset_id": record.dataset_id,
             "format": record.format,
+            "splits": payload.splits,
             "version_description": payload.version_description,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "num_episodes": len(episodes),
@@ -251,6 +249,18 @@ class ExportStore:
             if blob is not None:
                 blobs[camera] = blob
         return blobs
+
+    @staticmethod
+    def _episode_indices_for_splits(payload: ExportCreateRequest) -> list[int]:
+        episodes = store.list_episodes(payload.dataset_id, limit=1000, offset=0)
+        if not payload.splits:
+            return [episode.episode_index for episode in episodes]
+        wanted = {split for split in payload.splits if split}
+        return [
+            episode.episode_index
+            for episode in episodes
+            if episode.split is not None and episode.split in wanted
+        ]
 
     @staticmethod
     def _frame_records(dataset_id: str, episode: EpisodeDetail) -> list[FrameRecord]:

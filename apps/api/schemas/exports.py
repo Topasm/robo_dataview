@@ -6,6 +6,7 @@ from apps.api.schemas.common import ExportFormat, JobStatus
 class ExportCreateRequest(BaseModel):
     dataset_id: str
     episode_indices: list[int] = Field(default_factory=list)
+    splits: list[str] = Field(default_factory=list)
     format: ExportFormat = ExportFormat.lerobot
     version_description: str | None = None
 

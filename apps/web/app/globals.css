@@ -1629,6 +1629,15 @@ textarea {
   justify-content: flex-end;
 }
 
+.export-scope-control {
+  height: 34px;
+}
+
+.export-scope-control button {
+  font-size: 12px;
+  padding: 0 9px;
+}
+
 @media (max-width: 1280px) {
   .studio-shell {
     min-width: 0;

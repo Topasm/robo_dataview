@@ -1,14 +1,20 @@
 import { Download, PackageCheck } from "lucide-react";
+import { useState } from "react";
 
 import type { ExportRecord } from "@/lib/types";
 
 type ExportStripProps = {
   episodeIndex: number;
   exportRecord: ExportRecord | null;
-  onCreateExport: (format?: "lerobot" | "lance" | "jsonl" | "vla") => Promise<void>;
+  onCreateExport: (
+    format?: "lerobot" | "lance" | "jsonl" | "vla",
+    scope?: "episode" | "split",
+  ) => Promise<void>;
+  split: string | null;
 };
 
-export function ExportStrip({ episodeIndex, exportRecord, onCreateExport }: ExportStripProps) {
+export function ExportStrip({ episodeIndex, exportRecord, onCreateExport, split }: ExportStripProps) {
+  const [scope, setScope] = useState<"episode" | "split">("episode");
   const lerobotArtifact = exportRecord?.artifacts?.lerobot_v3;
   const lanceArtifact = exportRecord?.artifacts?.lance_subset;
   const jsonlArtifact = exportRecord?.artifacts?.jsonl;
@@ -80,19 +86,36 @@ export function ExportStrip({ episodeIndex, exportRecord, onCreateExport }: Expo
         ) : null}
       </div>
       <div className="export-actions">
-        <button className="text-button" onClick={() => void onCreateExport("lerobot")} type="button">
+        <div className="segmented-control export-scope-control">
+          <button
+            className={scope === "episode" ? "active" : ""}
+            onClick={() => setScope("episode")}
+            type="button"
+          >
+            Episode
+          </button>
+          <button
+            className={scope === "split" ? "active" : ""}
+            disabled={!split}
+            onClick={() => setScope("split")}
+            type="button"
+          >
+            Split {split ?? ""}
+          </button>
+        </div>
+        <button className="text-button" onClick={() => void onCreateExport("lerobot", scope)} type="button">
           <Download size={15} />
           LeRobot
         </button>
-        <button className="text-button" onClick={() => void onCreateExport("lance")} type="button">
+        <button className="text-button" onClick={() => void onCreateExport("lance", scope)} type="button">
           <Download size={15} />
           Lance
         </button>
-        <button className="text-button" onClick={() => void onCreateExport("jsonl")} type="button">
+        <button className="text-button" onClick={() => void onCreateExport("jsonl", scope)} type="button">
           <Download size={15} />
           JSONL
         </button>
-        <button className="text-button" onClick={() => void onCreateExport("vla")} type="button">
+        <button className="text-button" onClick={() => void onCreateExport("vla", scope)} type="button">
           <Download size={15} />
           VLA
         </button>

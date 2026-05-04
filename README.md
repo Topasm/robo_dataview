@@ -64,7 +64,8 @@ The repository has moved past a pure skeleton. The current MVP path can:
    frame JSONL, optional Parquet, available camera MP4 artifacts, validation,
    and version lineage, or as a Lance subset when optional `pyarrow` and
    `lance` dependencies are installed. Lightweight JSONL caption and VLA-style
-   trajectory exports are also available.
+   trajectory exports are also available, and exports can target the selected
+   episode or the current train/val/test split.
 9. Render the main web operations UI with dataset, episode, video viewer,
    annotation editing, search, Rerun, and export panels.
 

@@ -416,8 +416,14 @@ export function useStudioData() {
     setFilterPresets((current) => current.filter((preset) => preset.presetId !== presetId));
   }
 
-  async function handleCreateExport(format: "lerobot" | "lance" | "jsonl" | "vla" = "lerobot") {
-    const record = await createExport(selectedEpisode.datasetId, [selectedEpisode.episodeIndex], format);
+  async function handleCreateExport(
+    format: "lerobot" | "lance" | "jsonl" | "vla" = "lerobot",
+    scope: "episode" | "split" = "episode",
+  ) {
+    const split = selectedEpisode.split || null;
+    const splits = scope === "split" && split ? [split] : [];
+    const episodeIndices = splits.length > 0 ? [] : [selectedEpisode.episodeIndex];
+    const record = await createExport(selectedEpisode.datasetId, episodeIndices, format, splits);
     setExportRecord(record);
   }
 

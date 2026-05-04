@@ -251,10 +251,10 @@ Implemented:
 - Lance subset export for selected episodes when optional Lance dependencies are
   installed.
 - JSONL caption export and VLA-style JSONL trajectory export.
+- Export scope controls for selected episode or current train/val/test split.
 - Accepted annotations only.
 - Version lineage JSONL plus optional Lance mirror.
 
 Next:
 
 - Materialize fully LeRobot-loadable Parquet/MP4 artifacts.
-- Add train/val/test split controls.

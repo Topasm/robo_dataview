@@ -109,6 +109,7 @@ Implemented now:
 - Lance subset export for selected episodes when optional `pyarrow` and `lance`
   dependencies are installed.
 - JSONL caption export and VLA-style JSONL trajectory export.
+- Export scope controls for selected episode or current train/val/test split.
 - Web UI orchestration via `useStudioData`.
 
 Not implemented yet:

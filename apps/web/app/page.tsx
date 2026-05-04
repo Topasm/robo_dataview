@@ -149,6 +149,7 @@ export default function Home() {
             episodeIndex={selectedEpisode.episodeIndex}
             exportRecord={exportRecord}
             onCreateExport={handleCreateExport}
+            split={selectedEpisode.split}
           />
         </div>
         <EpisodeList

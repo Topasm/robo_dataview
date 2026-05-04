@@ -9,6 +9,7 @@ from pathlib import Path
 
 from apps.api.schemas.annotations import AnnotationCreate
 from apps.api.schemas.common import ExportFormat, JobStatus, ReviewStatus
+from apps.api.schemas.episodes import EpisodeDetail
 from apps.api.schemas.exports import ExportCreateRequest
 from apps.api.services.annotation_service import annotation_store
 from apps.api.services import export_service
@@ -122,6 +123,29 @@ class ExportServiceTest(unittest.TestCase):
         self.assertEqual(loaded.episode_indices, [0, 2])
         self.assertEqual(loaded.output_uri, created.output_uri)
         self.assertEqual(loaded.artifacts, created.artifacts)
+
+    def test_export_without_explicit_indices_can_filter_by_split(self) -> None:
+        fake_store = _FakeSplitStore()
+        versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
+        exports = ExportStore(versions=versions)
+
+        with patch.object(export_service, "store", fake_store):
+            record = exports.create(
+                ExportCreateRequest(
+                    dataset_id="split-dataset",
+                    splits=["val"],
+                    format=ExportFormat.jsonl,
+                    version_description="val split export",
+                )
+            )
+
+        manifest = json.loads(Path(record.output_uri or "").read_text(encoding="utf-8"))
+
+        self.assertEqual(record.status, JobStatus.succeeded)
+        self.assertEqual(record.episode_indices, [1])
+        self.assertEqual(manifest["episode_indices"], [1])
+        self.assertEqual(manifest["splits"], ["val"])
+        self.assertEqual(manifest["episodes"][0]["split"], "val")
 
     def test_lance_export_fails_when_dependencies_are_missing(self) -> None:
         versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
@@ -303,6 +327,52 @@ def _fake_lance_module() -> tuple[ModuleType, list[str]]:
 
     module.write_dataset = write_dataset
     return module, written_paths
+
+
+class _FakeSplitStore:
+    def __init__(self) -> None:
+        self.episodes = [
+            EpisodeDetail(
+                dataset_id="split-dataset",
+                episode_index=0,
+                task_index=1,
+                length=10,
+                split="train",
+                fps=20.0,
+                camera_names=[],
+            ),
+            EpisodeDetail(
+                dataset_id="split-dataset",
+                episode_index=1,
+                task_index=1,
+                length=11,
+                split="val",
+                fps=20.0,
+                camera_names=[],
+            ),
+            EpisodeDetail(
+                dataset_id="split-dataset",
+                episode_index=2,
+                task_index=1,
+                length=12,
+                split="test",
+                fps=20.0,
+                camera_names=[],
+            ),
+        ]
+
+    def list_episodes(self, dataset_id: str, limit: int, offset: int) -> list[EpisodeDetail]:
+        if dataset_id != "split-dataset":
+            return []
+        return self.episodes[offset : offset + limit]
+
+    def get_episode(self, dataset_id: str, episode_index: int) -> EpisodeDetail | None:
+        if dataset_id != "split-dataset":
+            return None
+        return next(
+            (episode for episode in self.episodes if episode.episode_index == episode_index),
+            None,
+        )
 
 
 if __name__ == "__main__":

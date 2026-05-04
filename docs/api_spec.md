@@ -254,10 +254,14 @@ GET  /versions?dataset_id=...
 {
   "dataset_id": "xvla-soft-fold",
   "episode_indices": [1, 2, 3],
+  "splits": [],
   "format": "lerobot",
   "version_description": "accepted successful episodes"
 }
 ```
+
+When `episode_indices` is empty, `splits` can select all episodes whose saved
+split matches values such as `train`, `val`, or `test`.
 
 For `format=lerobot`, the response `output_uri` points to the export manifest.
 The manifest contains an `artifacts.lerobot_v3` object with the metadata snapshot
