@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Save, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import { FileText, Plus, Save, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 
 import type { FilterPreset, SearchResult } from "@/lib/types";
 
@@ -9,6 +9,7 @@ type SearchFilterBarProps = {
   onCreateFilterPreset: (name: string, query: string) => Promise<void>;
   onDeleteFilterPreset: (presetId: string) => Promise<void>;
   onFilterSearch: (query: string) => Promise<void>;
+  onFullTextSearch: (text: string) => Promise<void>;
   onSelectResult: (episodeIndex: number) => void;
   onSemanticSearch: (text: string) => Promise<void>;
 };
@@ -50,6 +51,7 @@ export function SearchFilterBar({
   onCreateFilterPreset,
   onDeleteFilterPreset,
   onFilterSearch,
+  onFullTextSearch,
   results,
   onSelectResult,
   onSemanticSearch
@@ -75,6 +77,18 @@ export function SearchFilterBar({
     setIsSearching(true);
     try {
       await onSemanticSearch(semanticText.trim());
+    } finally {
+      setIsSearching(false);
+    }
+  }
+
+  async function handleFullTextSearch() {
+    if (!semanticText.trim()) {
+      return;
+    }
+    setIsSearching(true);
+    try {
+      await onFullTextSearch(semanticText.trim());
     } finally {
       setIsSearching(false);
     }
@@ -182,6 +196,15 @@ export function SearchFilterBar({
           type="button"
         >
           <Search size={16} />
+        </button>
+        <button
+          className="icon-button"
+          disabled={isSearching || !semanticText.trim()}
+          onClick={handleFullTextSearch}
+          title="Full-text search"
+          type="button"
+        >
+          <FileText size={16} />
         </button>
       </div>
 

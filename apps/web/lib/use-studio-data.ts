@@ -16,6 +16,7 @@ import {
   fetchFilterPresets,
   fetchFrameRecord,
   filterSearch,
+  fullTextSearch,
   openDataset,
   semanticSearch,
   updateEpisodeLabels,
@@ -392,6 +393,11 @@ export function useStudioData() {
     setSearchResults(results);
   }
 
+  async function handleFullTextSearch(text: string) {
+    const results = await fullTextSearch(selectedDatasetId, text);
+    setSearchResults(results);
+  }
+
   async function handleFilterSearch(query: string) {
     const results = await filterSearch(selectedDatasetId, query);
     setSearchResults(results);
@@ -456,6 +462,7 @@ export function useStudioData() {
     handleDeleteSegment,
     handleDeleteFilterPreset,
     handleFilterSearch,
+    handleFullTextSearch,
     handleMergeSegments,
     handleOpenDataset,
     handleRunVlmLabel,

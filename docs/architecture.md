@@ -97,6 +97,7 @@ Implemented now:
 - Text-embedding semantic search with deterministic fallback, optional
   OpenAI-compatible text inference, and optional LanceDB table mirror/query when
   `lancedb` is installed.
+- Full-text search over episode metadata and annotation text.
 - VLM provider routing with heuristic fallback and optional OpenAI-compatible
   HTTP inference.
 - Generated-label review queue for pending VLM/heuristic proposals.

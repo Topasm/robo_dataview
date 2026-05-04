@@ -41,6 +41,7 @@ Working:
 - Annotation CRUD with JSONL persistence and optional Lance mirroring.
 - Segment edit and midpoint split actions in the web UI.
 - Search filter endpoint.
+- Full-text search endpoint and web action.
 - Typed filter builder UI for common episode fields.
 - Text-embedding semantic search endpoint with deterministic fallback, optional
   OpenAI-compatible embedding provider, and optional LanceDB vector table
@@ -197,7 +198,7 @@ Definition of done:
 - [x] Add saved filter presets.
 - [x] Add optional LanceDB vector table mirror/query path.
 - [x] Add optional OpenAI-compatible text embedding provider.
-- [ ] Add full-text search.
+- [x] Add full-text search.
 - [ ] Add CLIP, SigLIP, DINOv2, or video-VLM embeddings.
 - [ ] Combine structured filters with semantic ranking.
 
@@ -245,7 +246,7 @@ Definition of done:
 2. Add general frame-level mutation endpoints.
 3. Materialize fully LeRobot-loadable Parquet/MP4 export.
 4. Move Rerun/export/VLM work into queue-backed workers.
-5. Add full-text search.
+5. Add background job progress events.
 
 ## Validation Checklist
 

@@ -150,6 +150,7 @@ DELETE /annotations/{annotation_id}
 ```text
 POST /search/filter
 POST /search/semantic
+POST /search/full-text
 GET  /search/filter-presets?dataset_id=...
 POST /search/filter-presets
 DELETE /search/filter-presets/{preset_id}
@@ -180,6 +181,10 @@ OpenAI-compatible `/embeddings` endpoint, with
 `ROBOT_DATA_STUDIO_EMBEDDING_TIMEOUT_SECONDS` as needed. When `lancedb` is
 installed, rows are mirrored to a local LanceDB table and queried there first;
 otherwise the API falls back to an in-memory cosine scorer.
+
+`POST /search/full-text` tokenizes episode metadata and annotation text, then
+returns ranked `full_text_episode` and `full_text_annotation` matches with
+frame indices when the matching annotation is exact-frame.
 
 Filter presets persist reusable structured filter queries to
 `data/lance/filter_presets/filter_presets.jsonl`.

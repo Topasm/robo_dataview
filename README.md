@@ -51,9 +51,9 @@ The repository has moved past a pure skeleton. The current MVP path can:
 5. Generate Rerun `.rrd` cache files for state/action timeline inspection and
    load them through the Rerun React web viewer.
 6. Run basic filter search through a typed builder with saved presets, plus
-   text-embedding semantic search with deterministic fallback, optional
-   OpenAI-compatible embedding inference, and optional LanceDB vector table
-   persistence/query when `lancedb` is installed.
+   full-text search and text-embedding semantic search with deterministic
+   fallback, optional OpenAI-compatible embedding inference, and optional
+   LanceDB vector table persistence/query when `lancedb` is installed.
 7. Create VLM-style annotation proposals for review, including
    deterministic keyframe index sampling, versioned prompt tracking, and a
    provider interface with heuristic fallback, optional OpenAI-compatible model

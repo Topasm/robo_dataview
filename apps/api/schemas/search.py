@@ -15,6 +15,12 @@ class SemanticSearchRequest(BaseModel):
     limit: int = Field(default=20, ge=1, le=100)
 
 
+class FullTextSearchRequest(BaseModel):
+    dataset_id: str
+    text: str
+    limit: int = Field(default=50, ge=1, le=500)
+
+
 class SearchResult(BaseModel):
     dataset_id: str
     episode_index: int

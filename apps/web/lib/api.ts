@@ -484,6 +484,18 @@ export async function semanticSearch(datasetId: string, text: string): Promise<S
   return rows.map(toSearchResult);
 }
 
+export async function fullTextSearch(datasetId: string, text: string): Promise<SearchResult[]> {
+  const rows = await request<SearchResultResponse[]>("/search/full-text", {
+    method: "POST",
+    body: JSON.stringify({
+      dataset_id: datasetId,
+      text,
+      limit: 50
+    })
+  });
+  return rows.map(toSearchResult);
+}
+
 export async function filterSearch(datasetId: string, query: string): Promise<SearchResult[]> {
   const rows = await request<SearchResultResponse[]>("/search/filter", {
     method: "POST",

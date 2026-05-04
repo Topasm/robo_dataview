@@ -36,6 +36,7 @@ export default function Home() {
     handleDeleteSegment,
     handleDeleteFilterPreset,
     handleFilterSearch,
+    handleFullTextSearch,
     handleMergeSegments,
     handleOpenDataset,
     handleRunVlmLabel,
@@ -96,6 +97,7 @@ export default function Home() {
             onCreateFilterPreset={handleCreateFilterPreset}
             onDeleteFilterPreset={handleDeleteFilterPreset}
             onFilterSearch={handleFilterSearch}
+            onFullTextSearch={handleFullTextSearch}
             onSelectResult={handleSelectEpisode}
             onSemanticSearch={handleSemanticSearch}
             results={searchResults}

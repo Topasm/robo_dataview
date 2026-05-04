@@ -214,6 +214,7 @@ Implemented:
 - Basic `AND` filter syntax.
 - Typed web filter builder for common episode fields.
 - Saved filter presets.
+- Full-text search over episode metadata and annotations.
 - Deterministic text-embedding semantic search over episode text and
   annotations.
 - Optional LanceDB vector table mirror/query path for deterministic embeddings.
@@ -221,7 +222,6 @@ Implemented:
 
 Next:
 
-- Add full-text search.
 - Add real visual/video embedding models.
 - Add combined filter + semantic ranking.
 
