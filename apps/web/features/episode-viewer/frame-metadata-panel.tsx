@@ -7,13 +7,21 @@ import type { FrameRecord } from "@/lib/types";
 type FrameMetadataPanelProps = {
   frame: FrameRecord | null;
   onSetBadFrame: (isBadFrame: boolean) => Promise<void>;
+  onSetFrameLabel: (labelType: string, labelValue: string, enabled: boolean) => Promise<void>;
   selectedFrame: number;
   status: "idle" | "loading" | "ready" | "error";
 };
 
+const QUICK_FRAME_LABELS = [
+  { label: "Important", type: "important_frame", value: "important_frame" },
+  { label: "Occlusion", type: "occlusion", value: "occlusion" },
+  { label: "Contact", type: "gripper_contact", value: "gripper_contact" }
+];
+
 export function FrameMetadataPanel({
   frame,
   onSetBadFrame,
+  onSetFrameLabel,
   selectedFrame,
   status
 }: FrameMetadataPanelProps) {
@@ -34,6 +42,15 @@ export function FrameMetadataPanel({
     setIsSaving(true);
     try {
       await onSetBadFrame(isBadFrame);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleSetFrameLabel(labelType: string, labelValue: string, enabled: boolean) {
+    setIsSaving(true);
+    try {
+      await onSetFrameLabel(labelType, labelValue, enabled);
     } finally {
       setIsSaving(false);
     }
@@ -79,6 +96,22 @@ export function FrameMetadataPanel({
             <MetaCell label="State norm" value={formatMaybeNumber(frame.stateNorm, 3)} />
             <MetaCell label="Action norm" value={formatMaybeNumber(frame.actionNorm, 3)} />
           </div>
+          <div className="frame-quick-labels">
+            {QUICK_FRAME_LABELS.map((item) => {
+              const isActive = hasActiveLabel(frame, item.type);
+              return (
+                <button
+                  className={`quick-label-button${isActive ? " active" : ""}`}
+                  disabled={isSaving}
+                  key={item.type}
+                  onClick={() => void handleSetFrameLabel(item.type, item.value, !isActive)}
+                  type="button"
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
           <VectorPreview label="State" values={frame.observationState} />
           <VectorPreview label="Action" values={frame.action} />
           <div className="frame-labels">
@@ -107,6 +140,12 @@ export function FrameMetadataPanel({
         <div className="empty-state compact-empty-state">{statusText(status)}</div>
       )}
     </section>
+  );
+}
+
+function hasActiveLabel(frame: FrameRecord, labelType: string): boolean {
+  return frame.labels.some(
+    (label) => label.labelType === labelType && label.reviewStatus !== "rejected"
   );
 }
 

@@ -1347,6 +1347,32 @@ button:disabled {
   width: 100%;
 }
 
+.frame-quick-labels {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.quick-label-button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  height: 30px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-label-button.active {
+  background: #e7f4f5;
+  border-color: #8cc9d0;
+  color: var(--accent);
+}
+
 .frame-meta-cell {
   background: var(--surface-2);
   border: 1px solid var(--border);

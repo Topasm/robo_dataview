@@ -252,6 +252,46 @@ class FramesEndpointTest(unittest.TestCase):
 
         self.assertEqual(context.exception.status_code, 400)
 
+    def test_update_frame_creates_exact_frame_label(self) -> None:
+        annotation_store = MutableAnnotationStore()
+        with (
+            patch.object(frames_router, "store", FakeFrameStore()),
+            patch.object(frames_router, "annotation_store", annotation_store),
+        ):
+            response = frames_router.update_frame(
+                dataset_id="dataset-a",
+                episode_index=3,
+                frame_index=4,
+                payload=FrameUpdate(
+                    label_type="important_frame",
+                    label_value="edge contact",
+                    label_enabled=True,
+                ),
+            )
+
+        self.assertFalse(response.is_bad_frame)
+        self.assertEqual(response.labels[0].label_type, "important_frame")
+        self.assertEqual(response.labels[0].label_value, "edge contact")
+        self.assertEqual(annotation_store.created_payloads[0].label_type, "important_frame")
+
+    def test_update_frame_rejects_exact_frame_label(self) -> None:
+        annotation_store = MutableAnnotationStore(
+            [make_annotation(annotation_id="important", frame_index=4, label_type="important_frame")]
+        )
+        with (
+            patch.object(frames_router, "store", FakeFrameStore()),
+            patch.object(frames_router, "annotation_store", annotation_store),
+        ):
+            response = frames_router.update_frame(
+                dataset_id="dataset-a",
+                episode_index=3,
+                frame_index=4,
+                payload=FrameUpdate(label_type="important_frame", label_enabled=False),
+            )
+
+        self.assertFalse(response.is_bad_frame)
+        self.assertEqual(response.labels[0].review_status, ReviewStatus.rejected)
+
 
 if __name__ == "__main__":
     unittest.main()

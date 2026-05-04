@@ -87,7 +87,7 @@ Implemented now:
 - Frame listing API backed by `frames.lance` when present, with episode
   time-series fallback, annotation overlays, and bad-frame flags.
 - Selected-frame web metadata panel backed by the frame API.
-- Annotation-backed selected-frame bad-frame mutation.
+- Annotation-backed selected-frame exact-label mutation.
 - Annotation CRUD with range validation, persisted JSONL, web edit actions, and
   midpoint split scaffolding.
 - Episode-level label overlay updates for caption, success/failure, failure
@@ -114,7 +114,7 @@ Not implemented yet:
 - Real worker queue such as RQ/Celery plus Redis.
 - Local VLM/video-model inference.
 - Real visual/video model embeddings.
-- Full frame table browser UI and general frame-level mutation workflow.
+- Full frame table browser UI and raw frame mutation workflow.
 - Full LeRobot Parquet/MP4 materialization.
 - Direct byte-range reads from Lance blobs. The API currently loads the full
   episode-table video blob and slices HTTP ranges in process.

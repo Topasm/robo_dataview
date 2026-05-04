@@ -30,7 +30,9 @@ class FrameRecord(BaseModel):
 
 class FrameUpdate(BaseModel):
     is_bad_frame: bool | None = None
+    label_type: str | None = Field(default=None, min_length=1)
     label_value: str | None = Field(default=None, min_length=1)
+    label_enabled: bool | None = None
     updated_by: str = "local"
 
 

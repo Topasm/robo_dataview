@@ -72,8 +72,10 @@ review_status: string
 Current status: `GET /frames` can read frame rows from `frames.lance` when
 available and falls back to episode-level state/action time series. It returns
 state/action vectors, computed norms, overlapping annotation labels, and
-bad-frame flags. Frame-level mutation and durable raw-frame schema helpers are
-not implemented yet.
+bad-frame flags. `PATCH /frames/{frame_index}` can add, accept, or reject
+annotation-backed exact-frame labels such as `bad_frame`, `important_frame`,
+`occlusion`, and `gripper_contact`. Full raw-frame mutation and durable
+raw-frame schema helpers are not implemented yet.
 
 ## episodes.lance
 

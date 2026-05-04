@@ -45,6 +45,7 @@ export default function Home() {
     handleSemanticSearch,
     handleSplitSegment,
     handleUpdateEpisodeLabels,
+    handleUpdateSelectedFrameLabel,
     handleUpdateSelectedFrameBadFlag,
     handleUpdateSegment,
     handleUpdateReviewStatus
@@ -134,6 +135,7 @@ export default function Home() {
               onRunVlmLabel={handleRunVlmLabel}
               onSplitSegment={handleSplitSegment}
               onUpdateEpisodeLabels={handleUpdateEpisodeLabels}
+              onUpdateSelectedFrameLabel={handleUpdateSelectedFrameLabel}
               onUpdateSelectedFrameBadFlag={handleUpdateSelectedFrameBadFlag}
               onUpdateSegment={handleUpdateSegment}
               onUpdateReviewStatus={handleUpdateReviewStatus}

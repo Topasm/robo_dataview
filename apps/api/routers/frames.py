@@ -60,7 +60,7 @@ def update_frame(
     dataset_id: str = Query(...),
     episode_index: int = Query(..., ge=0),
 ) -> FrameRecord:
-    if payload.is_bad_frame is None:
+    if payload.is_bad_frame is None and payload.label_type is None:
         raise HTTPException(status_code=400, detail="No frame mutation requested")
 
     episode = store.get_episode(dataset_id, episode_index)
@@ -79,7 +79,18 @@ def update_frame(
     if frames is None or not frames:
         raise HTTPException(status_code=404, detail="Frame not found")
 
-    _set_bad_frame_annotation(dataset_id, episode_index, frame_index, payload)
+    if payload.is_bad_frame is not None:
+        _set_bad_frame_annotation(dataset_id, episode_index, frame_index, payload)
+    if payload.label_type is not None:
+        _set_exact_frame_annotation(
+            dataset_id=dataset_id,
+            episode_index=episode_index,
+            frame_index=frame_index,
+            label_type=payload.label_type,
+            label_value=payload.label_value or payload.label_type,
+            enabled=True if payload.label_enabled is None else payload.label_enabled,
+            updated_by=payload.updated_by,
+        )
     annotations = annotation_store.list(dataset_id=dataset_id, episode_index=episode_index)
     return _with_annotation_labels(frames[0], annotations)
 
@@ -122,23 +133,43 @@ def _set_bad_frame_annotation(
     frame_index: int,
     payload: FrameUpdate,
 ) -> None:
+    _set_exact_frame_annotation(
+        dataset_id=dataset_id,
+        episode_index=episode_index,
+        frame_index=frame_index,
+        label_type="bad_frame",
+        label_value=payload.label_value or "bad_frame",
+        enabled=bool(payload.is_bad_frame),
+        updated_by=payload.updated_by,
+    )
+
+
+def _set_exact_frame_annotation(
+    *,
+    dataset_id: str,
+    episode_index: int,
+    frame_index: int,
+    label_type: str,
+    label_value: str,
+    enabled: bool,
+    updated_by: str,
+) -> None:
     annotations = annotation_store.list(dataset_id=dataset_id, episode_index=episode_index)
     existing = [
         annotation
         for annotation in annotations
         if annotation.start_frame == frame_index
         and annotation.end_frame == frame_index
-        and annotation.label_type == "bad_frame"
+        and annotation.label_type == label_type
     ]
-    if payload.is_bad_frame:
-        label_value = payload.label_value or "bad_frame"
+    if enabled:
         if existing:
             annotation_store.update(
                 existing[0].annotation_id,
                 AnnotationUpdate(
                     label_value=label_value,
                     review_status=ReviewStatus.accepted,
-                    updated_by=payload.updated_by,
+                    updated_by=updated_by,
                 ),
             )
             return
@@ -148,12 +179,12 @@ def _set_bad_frame_annotation(
                 episode_index=episode_index,
                 start_frame=frame_index,
                 end_frame=frame_index,
-                label_type="bad_frame",
+                label_type=label_type,
                 label_value=label_value,
                 source=AnnotationSource.human,
                 confidence=1.0,
                 review_status=ReviewStatus.accepted,
-                created_by=payload.updated_by,
+                created_by=updated_by,
             )
         )
         return
@@ -163,6 +194,6 @@ def _set_bad_frame_annotation(
             annotation.annotation_id,
             AnnotationUpdate(
                 review_status=ReviewStatus.rejected,
-                updated_by=payload.updated_by,
+                updated_by=updated_by,
             ),
         )

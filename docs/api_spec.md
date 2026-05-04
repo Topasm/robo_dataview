@@ -87,9 +87,10 @@ overlapping annotation labels, and an `is_bad_frame` flag derived from raw frame
 metadata or non-rejected `bad_frame`, `bad_range`, and `bad_episode`
 annotations.
 
-`PATCH /frames/{frame_index}` currently supports the `is_bad_frame` mutation.
-It writes through `annotations` by creating or accepting an exact-frame
-`bad_frame` label, or rejecting that exact-frame label when clearing the flag.
+`PATCH /frames/{frame_index}` supports annotation-backed exact-frame labels. Use
+`is_bad_frame` for the bad-frame shortcut, or send `label_type`, `label_value`,
+and `label_enabled` to create/accept or reject a label whose `start_frame` and
+`end_frame` both match the selected frame.
 
 Response shape:
 

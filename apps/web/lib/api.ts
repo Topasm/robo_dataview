@@ -219,7 +219,9 @@ export type EpisodeLabelUpdate = {
 
 export type FrameUpdate = {
   isBadFrame?: boolean | null;
+  labelType?: string | null;
   labelValue?: string | null;
+  labelEnabled?: boolean | null;
 };
 
 export async function fetchDatasetSummaries(): Promise<DatasetSummary[]> {
@@ -304,8 +306,14 @@ export async function updateFrameRecord(
   if (payload.isBadFrame !== undefined) {
     body.is_bad_frame = payload.isBadFrame;
   }
+  if (payload.labelType !== undefined) {
+    body.label_type = payload.labelType;
+  }
   if (payload.labelValue !== undefined) {
     body.label_value = payload.labelValue;
+  }
+  if (payload.labelEnabled !== undefined) {
+    body.label_enabled = payload.labelEnabled;
   }
   const row = await request<FrameRecordResponse>(`/frames/${frameIndex}?${query}`, {
     method: "PATCH",

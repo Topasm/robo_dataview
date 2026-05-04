@@ -422,6 +422,14 @@ export function useStudioData() {
   }
 
   async function handleUpdateSelectedFrameBadFlag(isBadFrame: boolean) {
+    await handleUpdateSelectedFrameLabel("bad_frame", "bad_frame", isBadFrame);
+  }
+
+  async function handleUpdateSelectedFrameLabel(
+    labelType: string,
+    labelValue: string,
+    labelEnabled: boolean,
+  ) {
     const maxFrame = Math.max(0, selectedEpisode.length - 1);
     const frameIndex = Math.max(0, Math.min(maxFrame, Math.round(selectedFrameIndex)));
     const updated = await updateFrameRecord(
@@ -429,8 +437,9 @@ export function useStudioData() {
       selectedEpisode.episodeIndex,
       frameIndex,
       {
-        isBadFrame,
-        labelValue: isBadFrame ? "bad_frame" : null
+        labelType,
+        labelValue,
+        labelEnabled
       }
     );
     setSelectedFrameRecord(updated);
@@ -471,6 +480,7 @@ export function useStudioData() {
     handleSemanticSearch,
     handleSplitSegment,
     handleUpdateEpisodeLabels,
+    handleUpdateSelectedFrameLabel,
     handleUpdateSelectedFrameBadFlag,
     handleUpdateReviewStatus,
     handleUpdateSegment
