@@ -8,6 +8,8 @@ class JobCreateRequest(BaseModel):
     episode_indices: list[int] = Field(default_factory=list)
     model: str = "vlm-default"
     prompt_template: str = "episode_autolabel_v1"
+    min_keyframes: int = Field(default=8, ge=1, le=128)
+    max_keyframes: int = Field(default=16, ge=1, le=256)
 
 
 class VisualEmbeddingJobCreateRequest(BaseModel):

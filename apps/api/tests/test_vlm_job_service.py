@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -62,6 +63,42 @@ class VlmJobServiceTest(unittest.TestCase):
             8,
         )
         self.assertIn("Generated", record.message or "")
+
+        for annotation_id in record.created_annotation_ids:
+            annotation_store.delete(annotation_id)
+        Path(record.raw_response_uri or "").unlink(missing_ok=True)
+
+    def test_vlm_label_job_uses_requested_keyframe_window(self) -> None:
+        jobs = JobStore()
+        with patch.dict(os.environ, {"ROBOT_DATA_STUDIO_VLM_PROVIDER": ""}, clear=False):
+            record = jobs.create(
+                kind="vlm_label",
+                payload=JobCreateRequest(
+                    dataset_id="sample-xvla-soft-fold",
+                    episode_indices=[0],
+                    model="test-vlm",
+                    prompt_template="episode_autolabel_v1",
+                    min_keyframes=3,
+                    max_keyframes=3,
+                ),
+            )
+        created = annotation_store.list("sample-xvla-soft-fold", episode_index=0)
+        created_by_job = [
+            annotation
+            for annotation in created
+            if annotation.annotation_id in set(record.created_annotation_ids)
+        ]
+        response_rows = [
+            json.loads(line)
+            for line in Path(record.raw_response_uri or "").read_text(encoding="utf-8").splitlines()
+        ]
+
+        self.assertEqual(record.status, JobStatus.succeeded)
+        self.assertEqual(response_rows[0]["raw_response"]["keyframes"], [0, 90, 179])
+        self.assertEqual(
+            sum(1 for annotation in created_by_job if annotation.label_type == "important_frame"),
+            3,
+        )
 
         for annotation_id in record.created_annotation_ids:
             annotation_store.delete(annotation_id)

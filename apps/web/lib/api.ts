@@ -24,6 +24,8 @@ const API_ROOT_URL = API_BASE_URL.endsWith("/api")
   : API_BASE_URL;
 const VLM_MODEL = process.env.NEXT_PUBLIC_VLM_MODEL ?? "heuristic-vlm-fallback";
 const VLM_PROMPT_TEMPLATE = process.env.NEXT_PUBLIC_VLM_PROMPT_TEMPLATE ?? "episode_autolabel_v1";
+const VLM_MIN_KEYFRAMES = Number(process.env.NEXT_PUBLIC_VLM_MIN_KEYFRAMES ?? "8");
+const VLM_MAX_KEYFRAMES = Number(process.env.NEXT_PUBLIC_VLM_MAX_KEYFRAMES ?? "16");
 const API_KEY = process.env.NEXT_PUBLIC_ROBOT_DATA_STUDIO_API_KEY ?? "";
 const REVIEW_USER = process.env.NEXT_PUBLIC_ROBOT_DATA_STUDIO_USER ?? "";
 
@@ -639,7 +641,9 @@ export async function createVlmLabelJob(
       dataset_id: datasetId,
       episode_indices: episodeIndices,
       model: VLM_MODEL,
-      prompt_template: VLM_PROMPT_TEMPLATE
+      prompt_template: VLM_PROMPT_TEMPLATE,
+      min_keyframes: VLM_MIN_KEYFRAMES,
+      max_keyframes: VLM_MAX_KEYFRAMES
     })
   });
   return toJobRecord(row);

@@ -54,6 +54,7 @@ Working:
   extraction, and image embedding persistence.
 - VLM-label job endpoint with heuristic pending annotation proposals and
   optional OpenAI-compatible or local Ollama-compatible provider routing.
+- Configurable VLM keyframe window from API and web environment.
 - Generated-label review queue in the annotation panel.
 - Deterministic keyframe index sampling for VLM prompt inputs.
 - Rerun session endpoint that generates `.rrd` cache files.
@@ -244,6 +245,7 @@ Definition of done:
 - [x] Add decoded keyframe image extraction from video blobs.
 - [x] Add optional OpenAI-compatible model/API integration.
 - [x] Add optional local Ollama-compatible VLM integration.
+- [x] Expose VLM keyframe sampling controls through job payloads.
 - [x] Store raw response and model metadata.
 - [x] Add review queue for generated labels.
 

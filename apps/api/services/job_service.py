@@ -270,6 +270,8 @@ class JobStore:
             prompt_template=payload.prompt_template,
             prompt_version=prompt_version,
             prompt_body=prompt_body,
+            min_keyframes=payload.min_keyframes,
+            max_keyframes=payload.max_keyframes,
         )
         provider = get_vlm_provider(payload.model)
         created_annotation_ids: list[str] = []

@@ -345,6 +345,19 @@ JSONL and return `raw_response_ids` plus `raw_response_uri`. When camera MP4
 blobs are available and optional video dependencies are installed, raw responses
 include decoded keyframe JPEG artifact metadata.
 
+`POST /jobs/vlm-label`
+
+```json
+{
+  "dataset_id": "xvla-soft-fold",
+  "episode_indices": [30],
+  "model": "ollama:llava:latest",
+  "prompt_template": "episode_autolabel_v1",
+  "min_keyframes": 8,
+  "max_keyframes": 16
+}
+```
+
 The default model route uses the heuristic fallback provider. Set
 `model = "openai-compatible:<model-name>"` or
 `ROBOT_DATA_STUDIO_VLM_PROVIDER=openai-compatible` to use the optional
