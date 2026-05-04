@@ -271,6 +271,7 @@ the existing `.rrd` file.
 ```text
 GET  /jobs/vlm-prompts
 POST /jobs/vlm-label
+POST /jobs/visual-embeddings
 GET  /jobs/{job_id}
 ```
 
@@ -290,6 +291,27 @@ OpenAI-compatible `/chat/completions` provider. Configure
 `ROBOT_DATA_STUDIO_VLM_BASE_URL`, `ROBOT_DATA_STUDIO_VLM_API_KEY`, and
 `ROBOT_DATA_STUDIO_VLM_TIMEOUT_SECONDS` as needed. The web VLM button can be
 pointed at this route with `NEXT_PUBLIC_VLM_MODEL`.
+
+`POST /jobs/visual-embeddings`
+
+```json
+{
+  "dataset_id": "xvla-soft-fold",
+  "episode_indices": [1, 2, 3],
+  "model": "clip:openai/clip-vit-base-patch32",
+  "camera_names": ["cam_high"],
+  "min_keyframes": 8,
+  "max_keyframes": 16
+}
+```
+
+This local worker path samples keyframes, decodes cached JPEGs, writes image
+embedding rows to the shared embedding store, and returns
+`created_embedding_ids`, `artifact_count`, and `provider`. The default model
+uses deterministic image hashing for local development. Use
+`ROBOT_DATA_STUDIO_VISUAL_EMBEDDING_PROVIDER=transformers` or a model prefix
+such as `clip:`, `siglip:`, `dino:`, or `transformers:` to route images through
+an optional Transformers vision model.
 
 ## Exports
 

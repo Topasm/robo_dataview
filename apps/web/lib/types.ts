@@ -147,6 +147,8 @@ export type JobRecord = {
   provider: string | null;
   rawResponseIds: string[];
   rawResponseUri: string | null;
+  createdEmbeddingIds: string[];
+  artifactCount: number;
 };
 
 export type ExportRecord = {

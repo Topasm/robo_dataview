@@ -49,6 +49,9 @@ Working:
 - Text-embedding semantic search endpoint with deterministic fallback, optional
   OpenAI-compatible embedding provider, and optional LanceDB vector table
   persistence/query.
+- Visual embedding job endpoint with deterministic local fallback,
+  optional Transformers CLIP/SigLIP/DINO-style provider, keyframe JPEG
+  extraction, and image embedding persistence.
 - VLM-label job endpoint with heuristic pending annotation proposals and
   optional OpenAI-compatible provider routing.
 - Generated-label review queue in the annotation panel.
@@ -81,8 +84,9 @@ Known limits:
 - Open datasets and sessions are in-memory.
 - VLM labeling defaults to heuristic scaffolding unless an OpenAI-compatible
   provider is configured.
-- Semantic search is still text-only; OpenAI-compatible text embedding and
-  LanceDB paths are optional, not a real visual/video embedding pipeline yet.
+- Text semantic search and visual image embedding generation are separate paths;
+  cross-modal text-to-image search still requires a compatible visual/text model
+  route.
 - Export writes frame JSONL and available MP4 artifacts; training-ready Parquet
   shards require optional `pyarrow`/LeRobot dependencies.
 - Video ranges are sliced after loading the full episode blob; direct Lance blob
@@ -208,7 +212,7 @@ Definition of done:
 - [x] Add optional OpenAI-compatible text embedding provider.
 - [x] Add full-text search.
 - [x] Combine structured filters with semantic ranking.
-- [ ] Add CLIP, SigLIP, DINOv2, or video-VLM embeddings.
+- [x] Add CLIP, SigLIP, DINOv2, or video-VLM embeddings.
 
 ### P6: VLM Auto-Labeling
 
@@ -251,11 +255,11 @@ Definition of done:
 
 ## Recommended Immediate Order
 
-1. Add visual/video embedding models.
-2. Add full frame-table browser and raw frame mutation workflow.
-3. Materialize fully LeRobot-loadable Parquet/MP4 export.
-4. Move Rerun/export/VLM work into queue-backed workers.
-5. Add train/val/test split controls and JSONL/VLA export variants.
+1. Materialize fully LeRobot-loadable Parquet/MP4 export.
+2. Move Rerun/export/VLM/embedding work into queue-backed workers.
+3. Add cross-modal visual search over compatible CLIP/SigLIP records.
+4. Add direct Lance/object-store byte-range reads for video blobs.
+5. Add production metadata store and deployment docs.
 
 ## Validation Checklist
 

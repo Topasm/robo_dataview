@@ -54,6 +54,9 @@ EMBEDDINGS_COLUMNS: tuple[ColumnSpec, ...] = (
     ColumnSpec("text", "string"),
     ColumnSpec("source_model", "string", nullable=False),
     ColumnSpec("created_at", "timestamp_us_utc", nullable=False),
+    ColumnSpec("camera", "string"),
+    ColumnSpec("source_uri", "string"),
+    ColumnSpec("content_hash", "string"),
 )
 
 VERSIONS_COLUMNS: tuple[ColumnSpec, ...] = (

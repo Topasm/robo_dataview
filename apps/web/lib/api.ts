@@ -112,6 +112,8 @@ type JobRecordResponse = {
   provider: string | null;
   raw_response_ids: string[];
   raw_response_uri: string | null;
+  created_embedding_ids: string[];
+  artifact_count: number;
 };
 
 type ExportRecordResponse = {
@@ -555,6 +557,22 @@ export async function createVlmLabelJob(
   return toJobRecord(row);
 }
 
+export async function createVisualEmbeddingJob(
+  datasetId: string,
+  episodeIndices: number[],
+  model = "deterministic-visual",
+): Promise<JobRecord> {
+  const row = await request<JobRecordResponse>("/jobs/visual-embeddings", {
+    method: "POST",
+    body: JSON.stringify({
+      dataset_id: datasetId,
+      episode_indices: episodeIndices,
+      model
+    })
+  });
+  return toJobRecord(row);
+}
+
 export async function createExport(
   datasetId: string,
   episodeIndices: number[],
@@ -824,7 +842,9 @@ function toJobRecord(raw: JobRecordResponse): JobRecord {
     promptVersion: raw.prompt_version,
     provider: raw.provider,
     rawResponseIds: raw.raw_response_ids,
-    rawResponseUri: raw.raw_response_uri
+    rawResponseUri: raw.raw_response_uri,
+    createdEmbeddingIds: raw.created_embedding_ids,
+    artifactCount: raw.artifact_count
   };
 }
 

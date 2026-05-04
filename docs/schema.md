@@ -218,6 +218,9 @@ embedding: fixed/list<float32>
 text: string
 source_model: string
 created_at: timestamp
+camera: string
+source_uri: string
+content_hash: string
 ```
 
 The source-of-truth code definition lives in
@@ -235,9 +238,18 @@ are mirrored to `embeddings.lance`. When `lancedb` is installed, rows are also
 mirrored to `data/lance/embeddings/<dataset>/lancedb` and semantic search tries
 that vector table before falling back to the in-memory cosine scorer.
 
-Current status: embeddings are text-only, with deterministic fallback,
-optional OpenAI-compatible text inference, and optional LanceDB
-persistence/query. This is not the final visual or video embedding system.
+Visual embedding jobs append image records generated from sampled keyframe JPEGs.
+The default visual provider is deterministic for local testing. Set
+`ROBOT_DATA_STUDIO_VISUAL_EMBEDDING_PROVIDER=transformers`, or use a job model
+prefix such as `clip:openai/clip-vit-base-patch32`,
+`siglip:<model-name>`, `dino:<model-name>`, or `transformers:<model-name>`, to
+route keyframes through an optional Transformers vision model. Visual rows store
+`camera`, `source_uri`, and `content_hash` so multi-camera frame embeddings are
+traceable.
+
+Current status: text semantic search and visual image embedding generation are
+implemented as separate paths. Cross-modal text-to-image search should only rank
+visual rows when the query and image vectors come from a compatible model family.
 
 ## versions.lance
 

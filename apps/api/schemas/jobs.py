@@ -10,6 +10,15 @@ class JobCreateRequest(BaseModel):
     prompt_template: str = "episode_autolabel_v1"
 
 
+class VisualEmbeddingJobCreateRequest(BaseModel):
+    dataset_id: str
+    episode_indices: list[int] = Field(default_factory=list)
+    model: str = "deterministic-visual"
+    camera_names: list[str] = Field(default_factory=list)
+    min_keyframes: int = Field(default=8, ge=1, le=128)
+    max_keyframes: int = Field(default=16, ge=1, le=256)
+
+
 class PromptTemplateRecord(BaseModel):
     prompt_id: str
     version: str
@@ -33,3 +42,5 @@ class JobRecord(BaseModel):
     provider: str | None = None
     raw_response_ids: list[str] = Field(default_factory=list)
     raw_response_uri: str | None = None
+    created_embedding_ids: list[str] = Field(default_factory=list)
+    artifact_count: int = 0

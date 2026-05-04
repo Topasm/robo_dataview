@@ -6,21 +6,30 @@ from fastapi import HTTPException
 
 from apps.api.schemas.common import JobStatus
 from apps.api.schemas.episodes import EpisodeDetail
-from apps.api.schemas.jobs import JobCreateRequest, JobRecord
+from apps.api.schemas.jobs import JobCreateRequest, JobRecord, VisualEmbeddingJobCreateRequest
 from apps.api.services.annotation_service import annotation_store
+from apps.api.services.embedding_service import embedding_index
 from apps.api.services.lance_store import store
 from apps.api.services.pydantic_compat import model_copy
 from apps.api.services.vlm_response_service import vlm_response_store
 from packages.prompts import UnknownPromptTemplateError, get_prompt_template
 from workers.vlm_autolabel import AutoLabelConfig
 from workers.vlm_provider import get_vlm_provider
+from workers.visual_embedding_worker import (
+    VisualEmbeddingConfig,
+    build_visual_embedding_records,
+)
 
 
 class JobStore:
     def __init__(self) -> None:
         self._records: dict[str, JobRecord] = {}
 
-    def create(self, kind: str, payload: JobCreateRequest) -> JobRecord:
+    def create(
+        self,
+        kind: str,
+        payload: JobCreateRequest | VisualEmbeddingJobCreateRequest,
+    ) -> JobRecord:
         job_id = str(uuid4())
         prompt = None
         if kind == "vlm_label":
@@ -36,7 +45,7 @@ class JobStore:
             episode_indices=payload.episode_indices,
             progress=0.0,
             model=payload.model,
-            prompt_template=payload.prompt_template,
+            prompt_template=getattr(payload, "prompt_template", None),
             prompt_version=prompt.version if prompt is not None else None,
         )
         if kind == "vlm_label":
@@ -46,6 +55,8 @@ class JobStore:
                 prompt_body=prompt.body,
                 prompt_version=prompt.version,
             )
+        elif kind == "visual_embedding":
+            record = self._run_visual_embedding_job(record, payload)
         else:
             record = model_copy(
                 record,
@@ -66,7 +77,7 @@ class JobStore:
     def _run_vlm_label_job(
         self,
         record: JobRecord,
-        payload: JobCreateRequest,
+        payload: JobCreateRequest | VisualEmbeddingJobCreateRequest,
         *,
         prompt_body: str,
         prompt_version: str,
@@ -145,6 +156,63 @@ class JobStore:
                 )
                 if raw_response_ids
                 else None,
+            }
+        )
+
+    def _run_visual_embedding_job(
+        self,
+        record: JobRecord,
+        payload: JobCreateRequest | VisualEmbeddingJobCreateRequest,
+    ) -> JobRecord:
+        if not isinstance(payload, VisualEmbeddingJobCreateRequest):
+            payload = VisualEmbeddingJobCreateRequest(
+                dataset_id=payload.dataset_id,
+                episode_indices=payload.episode_indices,
+                model=payload.model,
+            )
+        config = VisualEmbeddingConfig(
+            model=payload.model,
+            camera_names=tuple(payload.camera_names),
+            min_keyframes=payload.min_keyframes,
+            max_keyframes=payload.max_keyframes,
+        )
+        try:
+            result = build_visual_embedding_records(
+                dataset_store=store,
+                dataset_id=payload.dataset_id,
+                episode_indices=payload.episode_indices,
+                config=config,
+            )
+        except (RuntimeError, ValueError) as exc:
+            return model_copy(
+                record,
+                update={
+                    "status": JobStatus.failed,
+                    "progress": 1.0,
+                    "message": str(exc),
+                }
+            )
+
+        if result.records:
+            embedding_index.upsert_records(payload.dataset_id, result.records)
+        status = JobStatus.succeeded if result.records else JobStatus.failed
+        message = (
+            f"Generated {len(result.records)} visual embedding records from "
+            f"{result.artifact_count} keyframe images."
+            if result.records
+            else "No visual embedding records were generated."
+        )
+        if result.skipped:
+            message = f"{message} Skipped: {result.skipped[:5]}."
+        return model_copy(
+            record,
+            update={
+                "status": status,
+                "progress": 1.0,
+                "message": message,
+                "provider": result.provider,
+                "created_embedding_ids": [item.embedding_id for item in result.records],
+                "artifact_count": result.artifact_count,
             }
         )
 

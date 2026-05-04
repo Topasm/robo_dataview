@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from workers.keyframe_extractor import extract_keyframes_from_blob
+from workers.keyframe_extractor import extract_keyframes_from_blob, extract_keyframes_from_path
 
 
 class KeyframeExtractorTest(unittest.TestCase):
@@ -41,6 +41,36 @@ class KeyframeExtractorTest(unittest.TestCase):
             self.assertEqual({artifact.camera for artifact in artifacts}, {"cam high"})
             self.assertEqual({artifact.width for artifact in artifacts}, {32})
             self.assertEqual({artifact.height for artifact in artifacts}, {24})
+
+    def test_extract_keyframes_from_mp4_path(self) -> None:
+        cv2 = _cv2_or_skip(self)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            video_path = Path(tmpdir) / "sample.mp4"
+            writer = cv2.VideoWriter(
+                str(video_path),
+                cv2.VideoWriter_fourcc(*"mp4v"),
+                10.0,
+                (32, 24),
+            )
+            if not writer.isOpened():
+                self.skipTest("OpenCV MP4 writer is not available")
+            try:
+                for index in range(4):
+                    frame = _solid_frame(cv2, width=32, height=24, value=index * 40)
+                    writer.write(frame)
+            finally:
+                writer.release()
+
+            output_dir = Path(tmpdir) / "keyframes"
+            artifacts = extract_keyframes_from_path(
+                path=video_path,
+                camera="cam_high",
+                frame_indices=[0, 2],
+                output_dir=output_dir,
+            )
+
+            self.assertEqual([artifact.frame_index for artifact in artifacts], [0, 2])
+            self.assertTrue(all(Path(artifact.uri).exists() for artifact in artifacts))
 
     def test_invalid_blob_returns_no_artifacts(self) -> None:
         _cv2_or_skip(self)

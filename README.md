@@ -55,32 +55,31 @@ The repository has moved past a pure skeleton. The current MVP path can:
    full-text search and text-embedding semantic search with deterministic
    fallback, optional OpenAI-compatible embedding inference, and optional
    LanceDB vector table persistence/query when `lancedb` is installed.
-7. Create VLM-style annotation proposals for review, including
+7. Generate keyframe image embeddings through a visual embedding job with a
+   deterministic fallback provider, optional Transformers CLIP/SigLIP/DINO-style
+   model route, cached JPEG keyframes, and Lance-compatible embedding metadata.
+8. Create VLM-style annotation proposals for review, including
    deterministic keyframe index sampling, versioned prompt tracking, and a
    provider interface with heuristic fallback, optional OpenAI-compatible model
    routing, raw-response/keyframe artifact persistence, and a generated-label
    review queue.
-8. Export selected episodes as a LeRobot v3-oriented snapshot with metadata,
+9. Export selected episodes as a LeRobot v3-oriented snapshot with metadata,
    frame JSONL, optional Parquet, available camera MP4 artifacts, validation,
    and version lineage, or as a Lance subset when optional `pyarrow` and
    `lance` dependencies are installed. Lightweight JSONL caption and VLA-style
    trajectory exports are also available, and exports can target the selected
    episode or the current train/val/test split.
-9. Render the main web operations UI with dataset, episode, video viewer,
+10. Render the main web operations UI with dataset, episode, video viewer,
    annotation editing, search, Rerun, and export panels.
 
 Known MVP gaps:
 
-- General frame-table editing is not implemented yet; selected-frame exact
-  labels such as bad-frame, important-frame, occlusion, and gripper-contact
-  markers are available through annotation-backed frame mutation.
-- Rerun is embedded and records scalar timelines plus camera video assets when
-  MP4 blobs are available; generation is still synchronous and workerless.
+- Expensive jobs still run synchronously in the API process; Rerun and visual
+  embedding generation have worker modules, but no Redis/RQ/Celery queue yet.
 - VLM labeling defaults to heuristic/local scaffolding; OpenAI-compatible model
   inference is available only when configured with environment variables.
-- Semantic search is still text-only. OpenAI-compatible text embeddings and
-  LanceDB persistence/query are optional; real visual/video model embeddings are
-  not implemented yet.
+- Text semantic search and visual image embedding generation are separate paths.
+  Cross-modal text-to-image search requires a compatible CLIP/SigLIP route.
 - LeRobot export writes frame JSONL and available MP4 artifacts; training-ready
   Parquet shards still require optional `pyarrow`/LeRobot dependencies. When
   `lerobot` is installed, validation records the official loader result.

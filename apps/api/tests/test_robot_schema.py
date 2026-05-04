@@ -48,6 +48,9 @@ class RobotSchemaTest(unittest.TestCase):
                 "text",
                 "source_model",
                 "created_at",
+                "camera",
+                "source_uri",
+                "content_hash",
             ],
         )
 

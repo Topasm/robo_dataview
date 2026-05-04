@@ -37,6 +37,9 @@ class EmbeddingRecord:
     text: str
     source_model: str
     created_at: datetime
+    camera: str | None = None
+    source_uri: str | None = None
+    content_hash: str | None = None
 
 
 @dataclass(frozen=True)
@@ -246,7 +249,11 @@ class EmbeddingIndex:
             for source, embedded in zip(sources, embeddings)
         ]
         if persist_records:
-            self._records[dataset_id] = records
+            retained_records = [
+                record for record in self.records(dataset_id)
+                if record.modality != "text"
+            ]
+            self._records[dataset_id] = retained_records + records
             self._persist_dataset(dataset_id)
         return records
 
@@ -264,12 +271,15 @@ class EmbeddingIndex:
             annotations,
             persist_records=persist_records,
         )
-        query_embedding = self._embed_text(payload.text).embedding
+        query = self._embed_text(payload.text)
+        query_embedding = query.embedding
         if persist_records:
             lancedb_results = self._search_lancedb(
                 payload.dataset_id,
                 query_embedding=query_embedding,
                 limit=payload.limit,
+                modality="text",
+                source_model=query.source_model,
             )
             if lancedb_results is not None:
                 return lancedb_results
@@ -291,6 +301,24 @@ class EmbeddingIndex:
             for score, record in scored[: payload.limit]
             if score > 0
         ]
+
+    def upsert_records(self, dataset_id: str, records: list[EmbeddingRecord]) -> list[EmbeddingRecord]:
+        existing = {record.embedding_id: record for record in self.records(dataset_id)}
+        for record in records:
+            existing[record.embedding_id] = record
+        merged = sorted(
+            existing.values(),
+            key=lambda record: (
+                record.episode_index,
+                record.frame_index if record.frame_index is not None else -1,
+                record.modality,
+                record.camera or "",
+                record.embedding_id,
+            ),
+        )
+        self._records[dataset_id] = merged
+        self._persist_dataset(dataset_id)
+        return merged
 
     def _embed_text(self, text: str) -> EmbeddedText:
         return self._embed_texts([text])[0]
@@ -333,6 +361,9 @@ class EmbeddingIndex:
                     continue
                 row = json.loads(line)
                 row["created_at"] = datetime.fromisoformat(row["created_at"])
+                row.setdefault("camera", None)
+                row.setdefault("source_uri", None)
+                row.setdefault("content_hash", None)
                 records.append(EmbeddingRecord(**row))
             if records:
                 dataset_id = json.loads((jsonl_path.parent / "dataset.json").read_text(encoding="utf-8"))[
@@ -400,6 +431,8 @@ class EmbeddingIndex:
         *,
         query_embedding: list[float],
         limit: int,
+        modality: str | None = None,
+        source_model: str | None = None,
     ) -> list[SearchResult] | None:
         database_path = self._dataset_dir(dataset_id) / "lancedb"
         if not database_path.exists():
@@ -415,8 +448,14 @@ class EmbeddingIndex:
                 query = table.search(query_embedding, vector_column_name="embedding")
             except TypeError:
                 query = table.search(query_embedding)
-            rows = query.limit(limit).to_list()
+            rows = query.limit(max(limit, limit * 5)).to_list()
         except Exception:
+            return None
+        if modality is not None:
+            rows = [row for row in rows if row.get("modality") == modality]
+        if source_model is not None:
+            rows = [row for row in rows if row.get("source_model") == source_model]
+        if not rows:
             return None
         return [
             SearchResult(
@@ -427,7 +466,7 @@ class EmbeddingIndex:
                 match_type="lancedb_vector",
                 label=row.get("text"),
             )
-            for row in rows
+            for row in rows[:limit]
         ]
 
     def _dataset_dir(self, dataset_id: str) -> Path:
@@ -504,6 +543,10 @@ def _score_from_distance(distance: object) -> float | None:
     except (TypeError, ValueError):
         return None
     return 1.0 / (1.0 + max(0.0, value))
+
+
+def create_embedding_id(payload_dataset_id: str, scope: str, text: str) -> str:
+    return _embedding_id(payload_dataset_id=payload_dataset_id, scope=scope, text=text)
 
 
 def _embedding_id(payload_dataset_id: str, scope: str, text: str) -> str:

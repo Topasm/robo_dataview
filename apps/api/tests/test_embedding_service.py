@@ -5,6 +5,7 @@ import os
 import tempfile
 import sys
 import types
+from datetime import datetime, timezone
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -13,6 +14,7 @@ from apps.api.schemas.episodes import EpisodeListItem
 from apps.api.schemas.search import SemanticSearchRequest
 from apps.api.services.embedding_service import (
     DeterministicTextEmbeddingProvider,
+    EmbeddingRecord,
     EmbeddingIndex,
     OpenAICompatibleEmbeddingProvider,
     embed_text,
@@ -108,6 +110,90 @@ class EmbeddingServiceTest(unittest.TestCase):
             self.assertTrue(paths["lance"].endswith("/embeddings.lance"))
             self.assertTrue(paths["lancedb"].endswith("/lancedb"))
 
+    def test_embedding_index_upserts_visual_records_with_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage_root = Path(tmpdir)
+            record = EmbeddingRecord(
+                embedding_id="visual-1",
+                episode_index=7,
+                frame_index=12,
+                clip_start_frame=12,
+                clip_end_frame=12,
+                modality="image",
+                embedding=[1.0, 0.0],
+                text="cam_high frame 12 visual keyframe",
+                source_model="fake-vision",
+                created_at=datetime.now(timezone.utc),
+                camera="cam_high",
+                source_uri="/tmp/keyframe.jpg",
+                content_hash="abc123",
+            )
+            first_index = EmbeddingIndex(
+                storage_root=storage_root,
+                embedding_provider=DeterministicTextEmbeddingProvider(),
+                mirror_lance=False,
+                mirror_lancedb=False,
+            )
+            first_index.upsert_records("sample", [record])
+
+            second_index = EmbeddingIndex(
+                storage_root=storage_root,
+                embedding_provider=DeterministicTextEmbeddingProvider(),
+                mirror_lance=False,
+                mirror_lancedb=False,
+            )
+            loaded = second_index.records("sample")
+
+        self.assertEqual(len(loaded), 1)
+        self.assertEqual(loaded[0].modality, "image")
+        self.assertEqual(loaded[0].camera, "cam_high")
+        self.assertEqual(loaded[0].source_uri, "/tmp/keyframe.jpg")
+        self.assertEqual(loaded[0].content_hash, "abc123")
+
+    def test_text_reindex_preserves_visual_records(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            index = EmbeddingIndex(
+                storage_root=Path(tmpdir),
+                embedding_provider=DeterministicTextEmbeddingProvider(),
+                mirror_lance=False,
+                mirror_lancedb=False,
+            )
+            visual_record = EmbeddingRecord(
+                embedding_id="visual-1",
+                episode_index=1,
+                frame_index=4,
+                clip_start_frame=4,
+                clip_end_frame=4,
+                modality="image",
+                embedding=[1.0, 0.0],
+                text="cam_high frame 4 visual keyframe",
+                source_model="fake-vision",
+                created_at=datetime.now(timezone.utc),
+                camera="cam_high",
+                source_uri="/tmp/keyframe.jpg",
+                content_hash="abc123",
+            )
+            index.upsert_records("sample", [visual_record])
+
+            index.index_dataset(
+                "sample",
+                episodes=[
+                    EpisodeListItem(
+                        dataset_id="sample",
+                        episode_index=1,
+                        task_index=3,
+                        length=100,
+                        caption="cloth grasp",
+                    )
+                ],
+                annotations=[],
+            )
+            records = index.records("sample")
+
+        self.assertIn("visual-1", {record.embedding_id for record in records})
+        self.assertIn("image", {record.modality for record in records})
+        self.assertIn("text", {record.modality for record in records})
+
     def test_embedding_index_can_search_without_persisting_filtered_records(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             storage_root = Path(tmpdir)
@@ -168,6 +254,54 @@ class EmbeddingServiceTest(unittest.TestCase):
         self.assertEqual(fake_db.opened_table_name, "embeddings")
         self.assertEqual(results[0].match_type, "lancedb_vector")
         self.assertEqual(results[0].episode_index, 1)
+
+    def test_lancedb_search_filters_to_text_rows(self) -> None:
+        fake_db = FakeLanceDb()
+        sys.modules["lancedb"] = types.SimpleNamespace(connect=lambda path: fake_db)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            index = EmbeddingIndex(
+                storage_root=Path(tmpdir),
+                embedding_provider=DeterministicTextEmbeddingProvider(),
+                mirror_lance=False,
+                mirror_lancedb=True,
+            )
+            index.upsert_records(
+                "sample",
+                [
+                    EmbeddingRecord(
+                        embedding_id="visual-1",
+                        episode_index=99,
+                        frame_index=0,
+                        clip_start_frame=0,
+                        clip_end_frame=0,
+                        modality="image",
+                        embedding=[1.0, 0.0],
+                        text="cam_high frame 0 visual keyframe",
+                        source_model="fake-vision",
+                        created_at=datetime.now(timezone.utc),
+                        camera="cam_high",
+                        source_uri="/tmp/keyframe.jpg",
+                        content_hash="abc123",
+                    )
+                ],
+            )
+
+            results = index.search(
+                SemanticSearchRequest(dataset_id="sample", text="cloth grasp", limit=2),
+                episodes=[
+                    EpisodeListItem(
+                        dataset_id="sample",
+                        episode_index=1,
+                        task_index=3,
+                        length=100,
+                        caption="successful cloth edge grasp",
+                    )
+                ],
+                annotations=[],
+            )
+
+        self.assertEqual([result.episode_index for result in results], [1])
+        self.assertEqual(results[0].match_type, "lancedb_vector")
 
     def test_embedding_index_uses_configured_embedding_provider(self) -> None:
         provider = FakeTextEmbeddingProvider()

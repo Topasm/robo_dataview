@@ -219,11 +219,13 @@ Implemented:
   annotations.
 - Optional LanceDB vector table mirror/query path for deterministic embeddings.
 - Optional OpenAI-compatible text embedding provider.
+- Visual keyframe embedding jobs with deterministic fallback and optional
+  Transformers CLIP/SigLIP/DINO-style image model route.
 
 Next:
 
-- Add real visual/video embedding models.
-- Add combined filter + semantic ranking.
+- Add cross-modal visual search over compatible CLIP/SigLIP records.
+- Move embedding jobs to a queue-backed worker process.
 
 ## Phase 7: Export and Versioning
 

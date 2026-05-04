@@ -97,6 +97,9 @@ Implemented now:
 - Text-embedding semantic search with deterministic fallback, optional
   OpenAI-compatible text inference, and optional LanceDB table mirror/query when
   `lancedb` is installed.
+- Visual keyframe embedding generation with deterministic fallback, optional
+  Transformers CLIP/SigLIP/DINO-style provider, and camera/source/hash metadata
+  in the shared embedding table.
 - Full-text search over episode metadata and annotation text.
 - VLM provider routing with heuristic fallback and optional OpenAI-compatible
   HTTP inference.
@@ -117,8 +120,7 @@ Not implemented yet:
 - Durable external database for jobs, sessions, users, and app settings.
 - Real worker queue such as RQ/Celery plus Redis.
 - Local VLM/video-model inference.
-- Real visual/video model embeddings.
-- Full frame table browser UI and raw frame mutation workflow.
+- Cross-modal visual search over compatible text/image model embeddings.
 - Full LeRobot Parquet/MP4 materialization.
 - Direct byte-range reads from Lance blobs. The API currently loads the full
   episode-table video blob and slices HTTP ranges in process.
