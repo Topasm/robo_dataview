@@ -17,6 +17,22 @@ def open_dataset(payload: DatasetOpenRequest) -> DatasetRecord:
     return store.open_dataset(payload)
 
 
+@router.post("/datasets/{dataset_id}/reload", response_model=DatasetRecord)
+def reload_dataset(dataset_id: str) -> DatasetRecord:
+    record = store.reload_dataset(dataset_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return record
+
+
+@router.delete("/datasets/{dataset_id}", response_model=DatasetRecord)
+def close_dataset(dataset_id: str) -> DatasetRecord:
+    record = store.close_dataset(dataset_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return record
+
+
 @router.get("/datasets/{dataset_id}/summary", response_model=DatasetSummary)
 def dataset_summary(dataset_id: str) -> DatasetSummary:
     summary = store.get_summary(dataset_id)

@@ -24,6 +24,7 @@ from apps.api.services.pydantic_compat import model_dump
 
 NORM_SERIES_MAX_POINTS = 600
 EPISODE_LABEL_STORAGE_ROOT = Path("data/lance/episode_labels")
+DATASET_REGISTRY_PATH = Path("data/lance/dataset_registry.jsonl")
 TABLE_NAMES = ("frames", "episodes", "videos")
 STATE_COLUMNS = ("observation_state", "observation.state", "state")
 ACTION_COLUMNS = ("actions", "action")
@@ -588,11 +589,15 @@ class LanceDatasetStore:
     def __init__(
         self,
         label_storage_root: Path = EPISODE_LABEL_STORAGE_ROOT,
+        dataset_registry_path: Path = DATASET_REGISTRY_PATH,
         *,
         persist_episode_labels: bool = False,
+        persist_dataset_registry: bool = False,
     ) -> None:
         self.label_storage_root = label_storage_root
+        self.dataset_registry_path = dataset_registry_path
         self.persist_episode_labels = persist_episode_labels
+        self.persist_dataset_registry = persist_dataset_registry
         self._datasets: dict[str, DatasetRecord] = {}
         self._summaries: dict[str, DatasetSummary] = {}
         self._episodes: dict[str, list[EpisodeDetail]] = {}
@@ -601,6 +606,8 @@ class LanceDatasetStore:
         if self.persist_episode_labels:
             self._load_episode_label_overrides()
         self._seed_demo_dataset()
+        if self.persist_dataset_registry:
+            self._load_dataset_registry()
 
     def _seed_demo_dataset(self) -> None:
         dataset_id = "sample-xvla-soft-fold"
@@ -652,8 +659,37 @@ class LanceDatasetStore:
         return list(self._datasets.values())
 
     def open_dataset(self, payload: DatasetOpenRequest) -> DatasetRecord:
+        return self._open_dataset(payload, persist_registry=True)
+
+    def reload_dataset(self, dataset_id: str) -> DatasetRecord | None:
+        record = self._datasets.get(dataset_id)
+        if record is None:
+            return None
+        payload = DatasetOpenRequest(uri=record.uri, name=record.name)
+        self._drop_dataset(dataset_id)
+        return self._open_dataset(payload, persist_registry=True)
+
+    def close_dataset(self, dataset_id: str) -> DatasetRecord | None:
+        record = self._datasets.get(dataset_id)
+        if record is None:
+            return None
+        self._drop_dataset(dataset_id)
+        self._persist_dataset_registry()
+        return record
+
+    def _open_dataset(
+        self,
+        payload: DatasetOpenRequest,
+        *,
+        persist_registry: bool,
+    ) -> DatasetRecord:
         name = payload.name or self._name_from_uri(payload.uri)
         dataset_id = _slug(name)
+        if payload.uri.startswith("sample://") and dataset_id == "sample-xvla-soft-fold":
+            self._seed_demo_dataset()
+            if persist_registry:
+                self._persist_dataset_registry()
+            return self._datasets[dataset_id]
         lerobot_episodes = self._try_open_lerobot_snapshot(payload.uri, dataset_id)
         if lerobot_episodes is not None:
             record = DatasetRecord(
@@ -667,6 +703,8 @@ class LanceDatasetStore:
             self._bundles.pop(dataset_id, None)
             self._episodes[dataset_id] = lerobot_episodes
             self._summaries[dataset_id] = self._summary_from_episodes(record, lerobot_episodes)
+            if persist_registry:
+                self._persist_dataset_registry()
             return record
 
         try:
@@ -680,8 +718,11 @@ class LanceDatasetStore:
                 message=str(exc),
             )
             self._datasets[dataset_id] = record
-            self._episodes.setdefault(dataset_id, [])
+            self._bundles.pop(dataset_id, None)
+            self._episodes[dataset_id] = []
             self._summaries[dataset_id] = self._empty_summary(record)
+            if persist_registry:
+                self._persist_dataset_registry()
             return record
         except Exception as exc:
             record = DatasetRecord(
@@ -692,8 +733,11 @@ class LanceDatasetStore:
                 message=str(exc),
             )
             self._datasets[dataset_id] = record
-            self._episodes.setdefault(dataset_id, [])
+            self._bundles.pop(dataset_id, None)
+            self._episodes[dataset_id] = []
             self._summaries[dataset_id] = self._empty_summary(record)
+            if persist_registry:
+                self._persist_dataset_registry()
             return record
 
         record = DatasetRecord(
@@ -707,6 +751,8 @@ class LanceDatasetStore:
         self._bundles[dataset_id] = bundle
         self._episodes.pop(dataset_id, None)
         self._summaries[dataset_id] = self._build_summary(record, bundle)
+        if persist_registry:
+            self._persist_dataset_registry()
         return record
 
     def get_summary(self, dataset_id: str) -> DatasetSummary | None:
@@ -1559,6 +1605,12 @@ class LanceDatasetStore:
         ]
         self._summaries[dataset_id] = self._summary_from_episodes(record, updated)
 
+    def _drop_dataset(self, dataset_id: str) -> None:
+        self._datasets.pop(dataset_id, None)
+        self._summaries.pop(dataset_id, None)
+        self._episodes.pop(dataset_id, None)
+        self._bundles.pop(dataset_id, None)
+
     def _episode_count(self, dataset_id: str) -> int:
         bundle = self._bundles.get(dataset_id)
         if bundle is not None:
@@ -1576,6 +1628,39 @@ class LanceDatasetStore:
             EpisodeListItem(**self._apply_episode_overrides(dataset_id, model_dump(episode)))
             for episode in self._episodes.get(dataset_id, [])
         ]
+
+    def _load_dataset_registry(self) -> None:
+        if not self.dataset_registry_path.exists():
+            return
+        for line in self.dataset_registry_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+                payload = DatasetOpenRequest(uri=row["uri"], name=row.get("name"))
+            except (KeyError, TypeError, json.JSONDecodeError, ValueError):
+                continue
+            if payload.uri.startswith("sample://"):
+                continue
+            self._open_dataset(payload, persist_registry=False)
+
+    def _persist_dataset_registry(self) -> None:
+        if not self.persist_dataset_registry:
+            return
+        rows = [
+            {
+                "dataset_id": record.dataset_id,
+                "name": record.name,
+                "uri": record.uri,
+            }
+            for record in sorted(self._datasets.values(), key=lambda item: item.dataset_id)
+            if not record.uri.startswith("sample://")
+        ]
+        self.dataset_registry_path.parent.mkdir(parents=True, exist_ok=True)
+        self.dataset_registry_path.write_text(
+            "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+            encoding="utf-8",
+        )
 
     def _load_episode_label_overrides(self) -> None:
         if not self.label_storage_root.exists():
@@ -1625,4 +1710,4 @@ class LanceDatasetStore:
         )
 
 
-store = LanceDatasetStore(persist_episode_labels=True)
+store = LanceDatasetStore(persist_episode_labels=True, persist_dataset_registry=True)

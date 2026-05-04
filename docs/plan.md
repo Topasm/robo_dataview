@@ -139,8 +139,8 @@ Definition of done:
 - [x] Load state/action summary.
 - [x] Add server-side pagination metadata.
 - [x] Add sort/filter query params for episode list.
-- [ ] Add dataset reload/close endpoint.
-- [ ] Persist opened dataset registry across API restarts.
+- [x] Add dataset reload/close endpoint.
+- [x] Persist opened dataset registry across API restarts.
 
 ### P2: Basic Viewer
 

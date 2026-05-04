@@ -10,6 +10,8 @@ called out explicitly.
 ```text
 GET  /datasets
 POST /datasets/open
+POST /datasets/{dataset_id}/reload
+DELETE /datasets/{dataset_id}
 GET  /datasets/{dataset_id}/summary
 GET  /datasets/{dataset_id}/schema
 ```
@@ -33,6 +35,12 @@ Response:
   "status": "indexed"
 }
 ```
+
+Opened non-sample datasets are persisted in a local registry and re-opened when
+the API process restarts. `POST /datasets/{dataset_id}/reload` re-indexes an
+opened dataset from its stored URI and display name. `DELETE /datasets/{dataset_id}`
+closes the dataset and removes it from the restart registry without deleting raw
+data or local annotation overlays.
 
 ## Episodes
 

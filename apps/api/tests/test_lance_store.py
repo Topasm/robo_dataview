@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import types
@@ -241,6 +242,112 @@ class LanceDatasetStoreTest(unittest.TestCase):
                 offset=0,
                 sort_by="not_a_column",
             )
+
+    def test_opened_dataset_registry_reloads_across_store_instances(self) -> None:
+        episode_rows = [
+            {
+                "episode_index": 0,
+                "task_index": 3,
+                "fps": 20.0,
+                "timestamps": [0.0, 0.05],
+                "actions": [[0.0], [1.0]],
+                "observation_state": [[0.0], [1.0]],
+            }
+        ]
+        fake_tables = {
+            "/datasets/persisted/episodes.lance": FakeDataset(
+                episode_rows,
+                list(episode_rows[0].keys()),
+            ),
+            "/datasets/persisted/frames.lance": FakeDataset([], ["episode_index"]),
+            "/datasets/persisted/videos.lance": FakeDataset([], ["camera_angle"]),
+        }
+        sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_path = Path(tmpdir) / "dataset_registry.jsonl"
+            first_store = LanceDatasetStore(
+                dataset_registry_path=registry_path,
+                persist_dataset_registry=True,
+            )
+            first_record = first_store.open_dataset(
+                DatasetOpenRequest(uri="/datasets/persisted", name="persisted")
+            )
+
+            second_store = LanceDatasetStore(
+                dataset_registry_path=registry_path,
+                persist_dataset_registry=True,
+            )
+            reloaded = second_store.get_summary(first_record.dataset_id)
+            registry_rows = [
+                json.loads(line)
+                for line in registry_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+
+            self.assertEqual(first_record.status, "indexed")
+            self.assertIsNotNone(reloaded)
+            self.assertEqual(reloaded.episode_count, 1)
+            self.assertEqual(registry_rows[0]["dataset_id"], "persisted")
+            self.assertEqual(registry_rows[0]["uri"], "/datasets/persisted")
+
+    def test_close_dataset_removes_registry_entry(self) -> None:
+        episode_rows = [{"episode_index": 0, "timestamps": [0.0]}]
+        fake_tables = {
+            "/datasets/closable/episodes.lance": FakeDataset(
+                episode_rows,
+                list(episode_rows[0].keys()),
+            ),
+            "/datasets/closable/frames.lance": FakeDataset([], ["episode_index"]),
+            "/datasets/closable/videos.lance": FakeDataset([], ["camera_angle"]),
+        }
+        sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_path = Path(tmpdir) / "dataset_registry.jsonl"
+            store = LanceDatasetStore(
+                dataset_registry_path=registry_path,
+                persist_dataset_registry=True,
+            )
+            record = store.open_dataset(DatasetOpenRequest(uri="/datasets/closable", name="closable"))
+            closed = store.close_dataset(record.dataset_id)
+
+            self.assertIsNotNone(closed)
+            self.assertIsNone(store.get_summary(record.dataset_id))
+            self.assertNotIn(record.dataset_id, [dataset.dataset_id for dataset in store.list_datasets()])
+            self.assertEqual(registry_path.read_text(encoding="utf-8"), "")
+
+    def test_reload_dataset_reindexes_existing_uri(self) -> None:
+        episode_rows = [{"episode_index": 0, "timestamps": [0.0]}]
+        fake_tables = {
+            "/datasets/reloadable/episodes.lance": FakeDataset(
+                episode_rows,
+                list(episode_rows[0].keys()),
+            ),
+            "/datasets/reloadable/frames.lance": FakeDataset([], ["episode_index"]),
+            "/datasets/reloadable/videos.lance": FakeDataset([], ["camera_angle"]),
+        }
+        sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+
+        store = LanceDatasetStore()
+        record = store.open_dataset(DatasetOpenRequest(uri="/datasets/reloadable", name="reloadable"))
+        episode_rows.append({"episode_index": 1, "timestamps": [0.0, 0.05]})
+        reloaded = store.reload_dataset(record.dataset_id)
+        summary = store.get_summary(record.dataset_id)
+
+        self.assertIsNotNone(reloaded)
+        self.assertIsNotNone(summary)
+        self.assertEqual(summary.episode_count, 2)
+
+    def test_reload_keeps_builtin_sample_dataset_available(self) -> None:
+        store = LanceDatasetStore()
+        reloaded = store.reload_dataset("sample-xvla-soft-fold")
+        summary = store.get_summary("sample-xvla-soft-fold")
+
+        self.assertIsNotNone(reloaded)
+        self.assertIsNotNone(summary)
+        self.assertEqual(reloaded.status, "sample")
+        self.assertEqual(summary.episode_count, 3)
 
     def test_video_blob_uses_episode_index_filter_before_row_offset(self) -> None:
         episode_rows = [
