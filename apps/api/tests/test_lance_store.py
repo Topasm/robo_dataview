@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from io import BytesIO
 import sys
 import tempfile
 import types
@@ -49,6 +50,25 @@ class FakeBlobFile:
         self.closed = True
 
 
+class FakeSeekableBlobFile:
+    def __init__(self, payload: bytes) -> None:
+        self._handle = BytesIO(payload)
+        self.closed = False
+
+    def read(self, size: int = -1) -> bytes:
+        return self._handle.read(size)
+
+    def seek(self, offset: int, whence: int = 0) -> int:
+        return self._handle.seek(offset, whence)
+
+    def tell(self) -> int:
+        return self._handle.tell()
+
+    def close(self) -> None:
+        self.closed = True
+        self._handle.close()
+
+
 class FakeDataset:
     def __init__(self, rows: list[dict[str, object]], names: list[str]) -> None:
         self._rows = rows
@@ -87,6 +107,22 @@ class FakeDataset:
         if columns is None:
             return row
         return {column: row[column] for column in columns if column in row}
+
+
+class FakeSeekableBlobDataset(FakeDataset):
+    def __init__(self, rows: list[dict[str, object]], names: list[str], blob_column: str) -> None:
+        super().__init__(rows, names)
+        self.blob_column = blob_column
+        self.blob_take_count = 0
+
+    def take(self, indices: list[int], columns: list[str] | None = None) -> FakeTable:
+        if columns is not None and self.blob_column in columns:
+            raise AssertionError("blob column should be read with take_blobs")
+        return super().take(indices, columns)
+
+    def take_blobs(self, blob_column: str, indices: list[int]) -> list[FakeSeekableBlobFile]:
+        self.blob_take_count += 1
+        return [FakeSeekableBlobFile(self._rows[index][blob_column]) for index in indices]
 
 
 class LanceDatasetStoreTest(unittest.TestCase):
@@ -408,6 +444,40 @@ class LanceDatasetStoreTest(unittest.TestCase):
 
         self.assertEqual(video_blob, b"prefixed-video")
 
+    def test_video_source_uses_seekable_episode_blob_reader_when_available(self) -> None:
+        episode_rows = [
+            {
+                "episode_index": 0,
+                "task_index": 3,
+                "fps": 20.0,
+                "timestamps": [0.0],
+                "cam_high_video_blob": b"seekable-video",
+            },
+        ]
+        episodes = FakeSeekableBlobDataset(
+            episode_rows,
+            list(episode_rows[0].keys()),
+            "cam_high_video_blob",
+        )
+        fake_tables = {
+            "/datasets/seekable/episodes.lance": episodes,
+            "/datasets/seekable/frames.lance": FakeDataset([], ["episode_index"]),
+            "/datasets/seekable/videos.lance": FakeDataset([], ["camera_angle", "video_blob"]),
+        }
+        sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+
+        store = LanceDatasetStore()
+        record = store.open_dataset(DatasetOpenRequest(uri="/datasets/seekable", name="seekable"))
+        source = store.get_video_source(record.dataset_id, 0, "cam_high")
+
+        self.assertIsNotNone(source)
+        assert source is not None
+        self.assertEqual(source.size, len(b"seekable-video"))
+        self.assertIsNone(source.data)
+        self.assertIsNone(source.path)
+        self.assertEqual(source.read_all(), b"seekable-video")
+        self.assertEqual(episodes.blob_take_count, 1)
+
     def test_video_blob_falls_back_to_videos_lance_episode_rows(self) -> None:
         episode_rows = [
             {
@@ -466,6 +536,49 @@ class LanceDatasetStoreTest(unittest.TestCase):
         self.assertEqual(detail.camera_names, ["cam_high", "cam_left_wrist"])
         self.assertEqual(high_blob, b"episode-1-high")
         self.assertEqual(left_blob, b"episode-0-left")
+
+    def test_video_source_uses_seekable_videos_lance_blob_reader_when_available(self) -> None:
+        episode_rows = [
+            {
+                "episode_index": 0,
+                "task_index": 3,
+                "fps": 20.0,
+                "timestamps": [0.0],
+            },
+        ]
+        video_rows = [
+            {
+                "episode_index": 0,
+                "camera_angle": "cam_high",
+                "video_blob": b"seekable-videos-table",
+            },
+        ]
+        videos = FakeSeekableBlobDataset(
+            video_rows,
+            list(video_rows[0].keys()),
+            "video_blob",
+        )
+        fake_tables = {
+            "/datasets/seekable-videos/episodes.lance": FakeDataset(
+                episode_rows,
+                list(episode_rows[0].keys()),
+            ),
+            "/datasets/seekable-videos/frames.lance": FakeDataset([], ["episode_index"]),
+            "/datasets/seekable-videos/videos.lance": videos,
+        }
+        sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+
+        store = LanceDatasetStore()
+        record = store.open_dataset(DatasetOpenRequest(uri="/datasets/seekable-videos", name="seekable-videos"))
+        source = store.get_video_source(record.dataset_id, 0, "cam_high")
+
+        self.assertIsNotNone(source)
+        assert source is not None
+        self.assertEqual(source.size, len(b"seekable-videos-table"))
+        self.assertIsNone(source.data)
+        self.assertIsNone(source.path)
+        self.assertEqual(source.read_all(), b"seekable-videos-table")
+        self.assertEqual(videos.blob_take_count, 1)
 
     def test_video_blob_falls_back_to_videos_lance_shard_refs(self) -> None:
         episode_rows = [

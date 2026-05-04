@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from importlib import import_module
 import json
@@ -134,6 +135,46 @@ def _read_rows(
         return _rows_from_table(dataset.head(limit, columns=columns))
     table = dataset.to_table(columns=columns)
     return _rows_from_table(table)[offset:end]
+
+
+def _iter_binary_range(
+    handle: Any,
+    start: int,
+    end: int,
+    chunk_size: int,
+) -> Iterator[bytes]:
+    if hasattr(handle, "seek"):
+        handle.seek(start)
+    else:
+        remaining_skip = start
+        while remaining_skip > 0:
+            skipped = handle.read(min(chunk_size, remaining_skip))
+            if not skipped:
+                return
+            remaining_skip -= len(skipped)
+    remaining = end - start + 1
+    while remaining > 0:
+        chunk = handle.read(min(chunk_size, remaining))
+        if not chunk:
+            break
+        remaining -= len(chunk)
+        yield chunk
+
+
+def _video_source_from_blob_file(blob_file: Any) -> VideoSource:
+    try:
+        if hasattr(blob_file, "seek") and hasattr(blob_file, "tell"):
+            blob_file.seek(0, 2)
+            size = int(blob_file.tell())
+            blob_file.seek(0)
+            return VideoSource(size=size, reader=blob_file)
+        blob = blob_file.read()
+        blob_file.close()
+        return VideoSource(size=len(blob), data=blob)
+    except Exception:
+        if hasattr(blob_file, "close"):
+            blob_file.close()
+        raise
 
 
 def _read_episode_row_by_index(
@@ -590,13 +631,44 @@ class VideoSource:
     size: int
     data: bytes | None = None
     path: Path | None = None
+    reader: Any | None = None
 
     def read_all(self) -> bytes | None:
-        if self.data is not None:
-            return self.data
-        if self.path is not None:
-            return self.path.read_bytes()
-        return None
+        try:
+            if self.data is not None:
+                return self.data
+            if self.path is not None:
+                return self.path.read_bytes()
+            if self.reader is not None:
+                if hasattr(self.reader, "seek"):
+                    self.reader.seek(0)
+                return self.reader.read()
+            return None
+        finally:
+            self.close()
+
+    def iter_range(
+        self,
+        start: int,
+        end: int,
+        chunk_size: int = 1024 * 1024,
+    ) -> Iterator[bytes]:
+        try:
+            if self.data is not None:
+                yield self.data[start : end + 1]
+                return
+            if self.path is not None:
+                with self.path.open("rb") as handle:
+                    yield from _iter_binary_range(handle, start, end, chunk_size)
+                return
+            if self.reader is not None:
+                yield from _iter_binary_range(self.reader, start, end, chunk_size)
+        finally:
+            self.close()
+
+    def close(self) -> None:
+        if self.reader is not None and hasattr(self.reader, "close"):
+            self.reader.close()
 
 
 class LanceDependencyError(RuntimeError):
@@ -961,6 +1033,11 @@ class LanceDatasetStore:
             episode_index,
             columns=_metadata_columns(schema, include_arrays=False),
         )
+        if column is not None and hasattr(dataset, "take_blobs"):
+            source = self._get_episode_blob_source_by_offset(dataset, episode_index, column)
+            if source is not None:
+                return source
+
         if column is not None:
             row = _read_episode_row_by_index(
                 dataset,
@@ -971,25 +1048,6 @@ class LanceDatasetStore:
                 blob = _blob_to_bytes(row.get(column))
                 if blob is not None:
                     return VideoSource(size=len(blob), data=blob)
-
-        if column is not None and hasattr(dataset, "take_blobs"):
-            try:
-                offset_rows = _read_rows(dataset, columns=["episode_index"], limit=1, offset=episode_index)
-                if not offset_rows or int(offset_rows[0].get("episode_index", -1)) != episode_index:
-                    return self._get_video_source_from_videos_table(
-                        bundle,
-                        episode_row,
-                        episode_index,
-                        camera,
-                    )
-                blob_file = dataset.take_blobs(column, indices=[episode_index])[0]
-                try:
-                    blob = blob_file.read()
-                    return VideoSource(size=len(blob), data=blob)
-                finally:
-                    blob_file.close()
-            except Exception:
-                pass
         return self._get_video_source_from_videos_table(bundle, episode_row, episode_index, camera)
 
     def get_episode_timeseries(
@@ -1530,6 +1588,21 @@ class LanceDatasetStore:
             return None
         return source.read_all()
 
+    def _get_episode_blob_source_by_offset(
+        self,
+        dataset: Any,
+        episode_index: int,
+        column: str,
+    ) -> VideoSource | None:
+        try:
+            offset_rows = _read_rows(dataset, columns=["episode_index"], limit=1, offset=episode_index)
+            if not offset_rows or int(offset_rows[0].get("episode_index", -1)) != episode_index:
+                return None
+            blob_file = dataset.take_blobs(column, indices=[episode_index])[0]
+            return _video_source_from_blob_file(blob_file)
+        except Exception:
+            return None
+
     def _get_video_source_from_videos_table(
         self,
         bundle: LanceBundle,
@@ -1547,6 +1620,7 @@ class LanceDatasetStore:
         if camera_name is None or (blob_name is None and path_name is None):
             return None
 
+        can_take_blobs = blob_name is not None and hasattr(videos, "take_blobs")
         chunk_name = _first_present_name(schema, VIDEO_CHUNK_COLUMNS)
         file_name = _first_present_name(schema, VIDEO_FILE_COLUMNS)
         columns = _unique_columns(
@@ -1557,7 +1631,7 @@ class LanceDatasetStore:
                 chunk_name,
                 file_name,
                 path_name,
-                blob_name,
+                None if can_take_blobs else blob_name,
             ],
         )
         if "episode_index" in schema:
@@ -1567,9 +1641,16 @@ class LanceDatasetStore:
                 columns=columns,
                 filter=f"episode_index = {episode_index}",
                 limit=1000,
+                include_offsets=can_take_blobs,
             )
         else:
-            rows = self._read_video_rows(videos, schema, columns=columns, limit=1000)
+            rows = self._read_video_rows(
+                videos,
+                schema,
+                columns=columns,
+                limit=1000,
+                include_offsets=can_take_blobs,
+            )
 
         shard_ref = _video_shard_ref(episode_row or {}, camera)
         for row in rows:
@@ -1585,6 +1666,14 @@ class LanceDatasetStore:
                     continue
             elif row_episode_index is None:
                 continue
+            if can_take_blobs and blob_name is not None:
+                source = self._get_video_blob_source_by_offset(
+                    videos,
+                    blob_name,
+                    _int_or_none(row.get("__row_offset")),
+                )
+                if source is not None:
+                    return source
             blob = _blob_to_bytes(row.get(blob_name))
             if blob is not None:
                 return VideoSource(size=len(blob), data=blob)
@@ -1601,8 +1690,26 @@ class LanceDatasetStore:
         columns: list[str],
         limit: int,
         filter: str | None = None,
+        include_offsets: bool = False,
     ) -> list[dict[str, Any]]:
         selected_columns = _unique_columns(schema, columns)
+        if include_offsets:
+            rows = _read_rows(
+                dataset,
+                columns=selected_columns or None,
+                limit=_count_rows(dataset),
+                offset=0,
+            )
+            if filter and filter.startswith("episode_index = "):
+                episode_index = int(filter.removeprefix("episode_index = "))
+                rows = [
+                    {**row, "__row_offset": offset}
+                    for offset, row in enumerate(rows)
+                    if _int_or_none(row.get("episode_index")) == episode_index
+                ]
+            else:
+                rows = [{**row, "__row_offset": offset} for offset, row in enumerate(rows)]
+            return rows[:limit]
         if hasattr(dataset, "scanner"):
             try:
                 scanner = dataset.scanner(
@@ -1635,6 +1742,20 @@ class LanceDatasetStore:
                 if _int_or_none(row.get("episode_index")) == episode_index
             ]
         return rows
+
+    def _get_video_blob_source_by_offset(
+        self,
+        dataset: Any,
+        blob_name: str,
+        row_offset: int | None,
+    ) -> VideoSource | None:
+        if row_offset is None or row_offset < 0:
+            return None
+        try:
+            blob_file = dataset.take_blobs(blob_name, indices=[row_offset])[0]
+            return _video_source_from_blob_file(blob_file)
+        except Exception:
+            return None
 
     def _apply_episode_overrides(self, dataset_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         episode_index = int(payload.get("episode_index", 0))

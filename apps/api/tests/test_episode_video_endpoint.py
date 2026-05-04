@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from io import BytesIO
 import tempfile
 from pathlib import Path
 import unittest
@@ -36,6 +37,36 @@ class FakeVideoFileStore:
         if dataset_id != "dataset-a" or episode_index != 3 or camera != "cam_high":
             return None
         return VideoSource(size=self.path.stat().st_size, path=self.path)
+
+
+class FakeSeekableReader:
+    def __init__(self, payload: bytes) -> None:
+        self._handle = BytesIO(payload)
+        self.closed = False
+
+    def read(self, size: int = -1) -> bytes:
+        return self._handle.read(size)
+
+    def seek(self, offset: int, whence: int = 0) -> int:
+        return self._handle.seek(offset, whence)
+
+    def tell(self) -> int:
+        return self._handle.tell()
+
+    def close(self) -> None:
+        self.closed = True
+        self._handle.close()
+
+
+class FakeVideoReaderStore:
+    def __init__(self, payload: bytes) -> None:
+        self.reader = FakeSeekableReader(payload)
+        self.payload = payload
+
+    def get_video_source(self, dataset_id: str, episode_index: int, camera: str) -> VideoSource | None:
+        if dataset_id != "dataset-a" or episode_index != 3 or camera != "cam_high":
+            return None
+        return VideoSource(size=len(self.payload), reader=self.reader)
 
 
 class FakePreviewService:
@@ -181,7 +212,7 @@ class EpisodeVideoEndpointTest(unittest.TestCase):
         self.assertEqual(response.headers["accept-ranges"], "bytes")
         self.assertEqual(response.headers["content-range"], "bytes 2-5/16")
         self.assertEqual(response.headers["content-length"], "4")
-        self.assertEqual(response.body, b"2345")
+        self.assertEqual(_stream_content(response), b"2345")
 
     def test_get_video_supports_open_ended_byte_range(self) -> None:
         with patch.object(episodes, "store", FakeVideoStore(self.blob)):
@@ -196,7 +227,7 @@ class EpisodeVideoEndpointTest(unittest.TestCase):
         self.assertEqual(response.status_code, 206)
         self.assertEqual(response.headers["content-range"], "bytes 10-15/16")
         self.assertEqual(response.headers["content-length"], "6")
-        self.assertEqual(response.body, b"abcdef")
+        self.assertEqual(_stream_content(response), b"abcdef")
 
     def test_get_video_streams_byte_range_from_file_source(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -234,6 +265,24 @@ class EpisodeVideoEndpointTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.headers["content-length"], "16")
             self.assertEqual(_stream_content(response), self.blob)
+
+    def test_get_video_streams_byte_range_from_reader_source(self) -> None:
+        fake_store = FakeVideoReaderStore(self.blob)
+        with patch.object(episodes, "store", fake_store):
+            response = episodes.episode_video(
+                3,
+                "cam_high",
+                _request("GET"),
+                dataset_id="dataset-a",
+                range_header="bytes=4-8",
+            )
+
+        self.assertIsInstance(response, StreamingResponse)
+        self.assertEqual(response.status_code, 206)
+        self.assertEqual(response.headers["content-range"], "bytes 4-8/16")
+        self.assertEqual(response.headers["content-length"], "5")
+        self.assertEqual(_stream_content(response), b"45678")
+        self.assertTrue(fake_store.reader.closed)
 
     def test_head_video_supports_byte_range_headers_without_body(self) -> None:
         with patch.object(episodes, "store", FakeVideoStore(self.blob)):

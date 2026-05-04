@@ -138,10 +138,11 @@ Not implemented yet:
 - Durable external database for app settings.
 - Local VLM/video-model inference.
 - Cross-modal visual search over compatible text/image model embeddings.
-- Full LeRobot Parquet/MP4 materialization.
-- Direct byte-range reads from Lance blobs. The API currently loads the full
-  embedded video blob and slices HTTP ranges in process.
-- Remote object-store/HF video path streaming and SHA256 video validation.
+- Larger strict real-dataset LeRobot Parquet/MP4 smoke runs with video
+  materialization.
+- Remote object-store/HF path byte-range reads. Local file sources and seekable
+  Lance `take_blobs` readers stream ranges without loading the full MP4 first.
+- SHA256 video validation.
 
 ## Design Principles
 

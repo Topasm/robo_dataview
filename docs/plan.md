@@ -102,9 +102,9 @@ Known limits:
 - A separate opt-in real-dataset export smoke workflow has opened the default
   `xvla-soft-fold` `hf://` Lance URI, exported one episode, and verified the
   result with the official LeRobot loader.
-- File-backed video ranges stream directly from disk, but embedded Lance blob
-  ranges are still sliced after loading the full blob; direct Lance blob range
-  streaming is not implemented.
+- File-backed video ranges stream directly from disk. Embedded Lance video blobs
+  stream byte ranges directly when Lance exposes a seekable `take_blobs` reader;
+  non-seekable blob fallbacks still materialize the MP4 before serving it.
 - Remote object-store/HF video path streaming and SHA256 video validation are not
   wired yet.
 - Full frame-table browser UX exists for local frame review, but raw
@@ -166,8 +166,9 @@ Definition of done:
 - [x] Render selectable active camera video pane from API video blob URLs.
 - [x] Add loading/error state per camera.
 - [x] Add backend `HEAD`/Range support for browser video playback.
-- [ ] Replace full-blob video loading with true range-aware Lance/object-store
-  reads.
+- [x] Add range-aware streaming for file-backed videos and seekable Lance blob
+  readers.
+- [ ] Add true remote object-store/HF path byte-range reads.
 - [x] Add synchronized N-camera playback layout.
 - [x] Wire playback controls: play, pause, seek, and frame jumps.
 - [x] Add frame/time scrubber.
@@ -275,7 +276,7 @@ Definition of done:
 1. Run the opt-in real-dataset export smoke workflow with video materialization
    and larger representative downloaded or `hf://` Lance subsets.
 2. Add cross-modal visual search over compatible CLIP/SigLIP records.
-3. Add direct Lance/object-store byte-range reads for embedded Lance video blobs.
+3. Add remote object-store/HF path byte-range reads.
 4. Add object storage support for cache and exports.
 
 ## Validation Checklist

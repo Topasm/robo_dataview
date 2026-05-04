@@ -126,8 +126,10 @@ playback.
 
 Current implementation detail:
 
-- The store reads the full episode-table video blob through `take_blobs` or a
-  row fallback, then the API slices the requested byte range in process.
+- When Lance exposes a seekable `take_blobs` reader for an episode-table or
+  `videos.lance` blob, the API streams the requested byte range from that reader
+  without materializing the full MP4 in memory. Non-seekable row fallbacks still
+  materialize the blob before serving it.
 - Path-only `videos.lance` fallback is local-filesystem only. For local paths,
   the API streams the requested byte range directly from disk without reading the
   whole file first.

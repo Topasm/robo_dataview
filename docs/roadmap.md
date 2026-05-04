@@ -96,7 +96,7 @@ Implemented:
 Next:
 
 - Add thumbnail or keyframe preview cache.
-- Replace in-process range slicing with direct blob/object-store range reads.
+- Add remote object-store/HF path byte-range reads.
 
 ## Phase 3: Rerun Web Viewer
 
