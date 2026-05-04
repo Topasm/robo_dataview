@@ -47,6 +47,7 @@ Working:
   persistence/query.
 - VLM-label job endpoint with heuristic pending annotation proposals and
   optional OpenAI-compatible provider routing.
+- Generated-label review queue in the annotation panel.
 - Deterministic keyframe index sampling for VLM prompt inputs.
 - Rerun session endpoint that generates `.rrd` cache files.
 - Rerun React viewer embed for ready `.rrd` sessions.
@@ -212,7 +213,7 @@ Definition of done:
 - [x] Add decoded keyframe image extraction from video blobs.
 - [x] Add optional OpenAI-compatible model/API integration.
 - [x] Store raw response and model metadata.
-- [ ] Add review queue for generated labels.
+- [x] Add review queue for generated labels.
 
 ### P7: Export and Versioning
 
@@ -240,11 +241,11 @@ Definition of done:
 
 ## Recommended Immediate Order
 
-1. Add generated-label review queue.
-2. Add visual/video embedding models.
-3. Add general frame-level mutation endpoints.
-4. Materialize fully LeRobot-loadable Parquet/MP4 export.
-5. Move Rerun/export/VLM work into queue-backed workers.
+1. Add visual/video embedding models.
+2. Add general frame-level mutation endpoints.
+3. Materialize fully LeRobot-loadable Parquet/MP4 export.
+4. Move Rerun/export/VLM work into queue-backed workers.
+5. Add full-text search.
 
 ## Validation Checklist
 

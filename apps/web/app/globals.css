@@ -1240,6 +1240,40 @@ button:disabled {
   margin-top: 10px;
 }
 
+.proposal-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.proposal-row {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 8px;
+}
+
+.proposal-body {
+  min-width: 0;
+}
+
+.proposal-label {
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proposal-actions {
+  display: flex;
+  gap: 5px;
+}
+
 .segment-save-button {
   grid-column: 1 / -1;
   justify-content: center;

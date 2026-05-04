@@ -185,6 +185,7 @@ Implemented:
 - Optional OpenCV keyframe image extraction from available episode video blobs.
 - Optional OpenAI-compatible provider path selected by model prefix or
   environment configuration.
+- Generated-label review queue with accept/reject actions.
 
 Next:
 

@@ -99,6 +99,7 @@ Implemented now:
   `lancedb` is installed.
 - VLM provider routing with heuristic fallback and optional OpenAI-compatible
   HTTP inference.
+- Generated-label review queue for pending VLM/heuristic proposals.
 - Rerun `.rrd` cache generation for state/action scalar timelines, optional
   camera video assets, deterministic cache keys, and web viewer embedding
   through `@rerun-io/web-viewer-react`.

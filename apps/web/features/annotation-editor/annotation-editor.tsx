@@ -65,6 +65,13 @@ export function AnnotationEditor({
   const [isSavingEpisode, setIsSavingEpisode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isRunningVlm, setIsRunningVlm] = useState(false);
+  const generatedProposals = annotations
+    .filter(
+      (annotation) =>
+        (annotation.source === "vlm" || annotation.source === "heuristic") &&
+        annotation.reviewStatus === "pending"
+    )
+    .sort((left, right) => left.startFrame - right.startFrame);
 
   useEffect(() => {
     setEpisodeDraft(toEpisodeDraft(episode));
@@ -280,6 +287,41 @@ export function AnnotationEditor({
             ) : null}
           </div>
         ) : null}
+        <div className="proposal-list">
+          {generatedProposals.length === 0 ? (
+            <div className="empty-state compact-empty-state">No pending generated labels.</div>
+          ) : (
+            generatedProposals.map((annotation) => (
+              <div className="proposal-row" key={annotation.id}>
+                <div className="proposal-body">
+                  <div className="proposal-label">{annotation.labelValue}</div>
+                  <div className="muted mono">
+                    {annotation.labelType} / f{annotation.startFrame}-{annotation.endFrame} /{" "}
+                    {annotation.confidence.toFixed(2)}
+                  </div>
+                </div>
+                <div className="proposal-actions">
+                  <button
+                    className="icon-button compact"
+                    onClick={() => onUpdateReviewStatus(annotation.id, "accepted")}
+                    title="Accept generated label"
+                    type="button"
+                  >
+                    <Check size={14} />
+                  </button>
+                  <button
+                    className="icon-button compact"
+                    onClick={() => onUpdateReviewStatus(annotation.id, "rejected")}
+                    title="Reject generated label"
+                    type="button"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </section>
 
       <section className="panel-section">

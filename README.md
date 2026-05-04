@@ -57,7 +57,8 @@ The repository has moved past a pure skeleton. The current MVP path can:
 7. Create VLM-style annotation proposals for review, including
    deterministic keyframe index sampling, versioned prompt tracking, and a
    provider interface with heuristic fallback, optional OpenAI-compatible model
-   routing, and raw-response/keyframe artifact persistence.
+   routing, raw-response/keyframe artifact persistence, and a generated-label
+   review queue.
 8. Export selected episodes as a LeRobot v3-oriented snapshot with metadata,
    frame JSONL, optional Parquet, available camera MP4 artifacts, validation,
    and version lineage.
