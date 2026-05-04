@@ -85,8 +85,9 @@ npm --workspace apps/web run build
 
 Known limits:
 
-- Jobs run synchronously in-process.
-- Open datasets and sessions are in-memory.
+- VLM and visual embedding jobs can run through the optional RQ backend, but
+  Rerun session generation and exports still run in-process.
+- Open Rerun sessions and some app settings are in-memory.
 - VLM labeling defaults to heuristic scaffolding unless an OpenAI-compatible
   provider is configured.
 - Text semantic search and visual image embedding generation are separate paths;
@@ -95,8 +96,9 @@ Known limits:
 - Export writes frame JSONL, available MP4 artifacts, and per-frame video
   references; training-ready Parquet shards require optional `export`
   dependencies.
-- Video ranges are sliced after loading the full episode blob; direct Lance blob
-  range streaming is not implemented.
+- File-backed video ranges stream directly from disk, but embedded Lance blob
+  ranges are still sliced after loading the full blob; direct Lance blob range
+  streaming is not implemented.
 - Remote object-store/HF video path streaming and SHA256 video validation are not
   wired yet.
 - Full frame-table browser UX exists for local frame review, but raw

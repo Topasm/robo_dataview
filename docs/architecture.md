@@ -134,10 +134,8 @@ Not implemented yet:
 - Cross-modal visual search over compatible text/image model embeddings.
 - Full LeRobot Parquet/MP4 materialization.
 - Direct byte-range reads from Lance blobs. The API currently loads the full
-  episode-table video blob and slices HTTP ranges in process.
-- `videos.lance` provenance lookup in the video endpoint. Video playback reads
-  episode video blob columns today.
-- Production auth, multi-user review assignment, and audit history.
+  embedded video blob and slices HTTP ranges in process.
+- Remote object-store/HF video path streaming and SHA256 video validation.
 
 ## Design Principles
 

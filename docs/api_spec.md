@@ -393,6 +393,11 @@ For `format=jsonl`, the response contains `artifacts.jsonl` with
 `examples.jsonl` row per selected episode, including instruction/caption,
 state/action time series when available, labels, and accepted annotations.
 
+`format=hf_dataset` is reserved for a future native Hugging Face Dataset
+artifact. Requests fail explicitly until that export path is implemented; use
+`format=lerobot` for LeRobot/HF-compatible snapshot files or `format=jsonl` for
+portable caption data.
+
 Each successful export appends a version record to
 `data/lance/versions/versions.jsonl`; with optional Lance dependencies installed,
 the same records are mirrored to `versions.lance`.

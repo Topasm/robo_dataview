@@ -253,6 +253,8 @@ Implemented:
 - Lance subset export for selected episodes when optional Lance dependencies are
   installed.
 - JSONL caption export and VLA-style JSONL trajectory export.
+- `hf_dataset` export requests fail explicitly until a native Hugging Face
+  Dataset artifact is implemented.
 - Export scope controls for selected episode or current train/val/test split.
 - Accepted annotations only.
 - Version lineage JSONL plus optional Lance mirror.
@@ -260,3 +262,4 @@ Implemented:
 Next:
 
 - Materialize fully LeRobot-loadable Parquet/MP4 artifacts.
+- Implement native Hugging Face Dataset export or remove that public format.

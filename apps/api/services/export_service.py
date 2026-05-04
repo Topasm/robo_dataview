@@ -199,6 +199,28 @@ class ExportStore:
                 timeseries_by_episode=timeseries_by_episode,
                 version_description=payload.version_description,
             )
+        elif payload.format == ExportFormat.hf_dataset:
+            return model_copy(
+                record,
+                update={
+                    "status": JobStatus.failed,
+                    "output_uri": None,
+                    "message": (
+                        "Hugging Face Dataset export is not implemented yet. "
+                        "Use format=lerobot for LeRobot/HF-compatible snapshot artifacts "
+                        "or format=jsonl for portable caption exports."
+                    ),
+                },
+            )
+        else:
+            return model_copy(
+                record,
+                update={
+                    "status": JobStatus.failed,
+                    "output_uri": None,
+                    "message": f"Unsupported export format: {payload.format}",
+                },
+            )
 
         manifest = {
             "export_id": record.export_id,

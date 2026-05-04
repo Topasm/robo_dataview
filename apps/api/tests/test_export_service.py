@@ -147,6 +147,23 @@ class ExportServiceTest(unittest.TestCase):
         self.assertEqual(manifest["splits"], ["val"])
         self.assertEqual(manifest["episodes"][0]["split"], "val")
 
+    def test_hf_dataset_export_fails_until_implemented(self) -> None:
+        versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
+        exports = ExportStore(versions=versions)
+
+        record = exports.create(
+            ExportCreateRequest(
+                dataset_id="sample-xvla-soft-fold",
+                episode_indices=[0],
+                format=ExportFormat.hf_dataset,
+                version_description="hf dataset export",
+            )
+        )
+
+        self.assertEqual(record.status, JobStatus.failed)
+        self.assertIsNone(record.output_uri)
+        self.assertIn("Hugging Face Dataset export is not implemented", record.message or "")
+
     def test_lance_export_fails_when_dependencies_are_missing(self) -> None:
         versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
         exports = ExportStore(versions=versions)
