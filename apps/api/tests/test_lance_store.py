@@ -7,6 +7,7 @@ import tempfile
 import types
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from apps.api.schemas.common import ReviewStatus
 from apps.api.schemas.datasets import DatasetOpenRequest
@@ -103,6 +104,56 @@ class FakeSeekableBlobFile:
         self._handle.close()
 
 
+class FakeHttpResponse:
+    def __init__(
+        self,
+        payload: bytes = b"",
+        *,
+        headers: dict[str, str] | None = None,
+        status_code: int = 200,
+    ) -> None:
+        self._handle = BytesIO(payload)
+        self.headers = headers or {}
+        self.status_code = status_code
+
+    def __enter__(self) -> "FakeHttpResponse":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self._handle.close()
+
+    def read(self, size: int = -1) -> bytes:
+        return self._handle.read(size)
+
+    def getcode(self) -> int:
+        return self.status_code
+
+
+class FakeHfFileSystem:
+    opened_paths: list[str] = []
+
+    def __init__(self, token: str | None = None) -> None:
+        self.token = token
+
+    def info(self, path: str) -> dict[str, object]:
+        return {"size": len(b"hf-remote-video")}
+
+    def open(self, path: str, mode: str) -> BytesIO:
+        self.opened_paths.append(path)
+        return BytesIO(b"hf-remote-video")
+
+
+class FakeObjectStoreFs:
+    opened_paths: list[str] = []
+
+    def info(self, path: str) -> dict[str, object]:
+        return {"size": len(b"object-store-video")}
+
+    def open(self, path: str, mode: str) -> BytesIO:
+        self.opened_paths.append(path)
+        return BytesIO(b"object-store-video")
+
+
 class FakeDataset:
     def __init__(self, rows: list[dict[str, object]], names: list[str]) -> None:
         self._rows = rows
@@ -163,6 +214,7 @@ class LanceDatasetStoreTest(unittest.TestCase):
     def setUp(self) -> None:
         self.previous_lance = sys.modules.get("lance")
         self.previous_pyarrow = sys.modules.get("pyarrow")
+        self.previous_huggingface_hub = sys.modules.get("huggingface_hub")
 
     def tearDown(self) -> None:
         if self.previous_lance is None:
@@ -173,6 +225,10 @@ class LanceDatasetStoreTest(unittest.TestCase):
             sys.modules.pop("pyarrow", None)
         else:
             sys.modules["pyarrow"] = self.previous_pyarrow
+        if self.previous_huggingface_hub is None:
+            sys.modules.pop("huggingface_hub", None)
+        else:
+            sys.modules["huggingface_hub"] = self.previous_huggingface_hub
 
     def test_open_dataset_indexes_episode_summary_and_state_action(self) -> None:
         episode_rows = [
@@ -717,6 +773,140 @@ class LanceDatasetStoreTest(unittest.TestCase):
         self.assertEqual(video_source.size, len(b"file-video"))
         self.assertIsNone(video_source.data)
         self.assertEqual(video_blob, b"file-video")
+
+    def test_video_source_streams_remote_http_relative_file_by_range(self) -> None:
+        episode_rows = [
+            {
+                "episode_index": 3,
+                "task_index": 3,
+                "fps": 20.0,
+                "timestamps": [0.0],
+                "videos/cam_high/chunk_index": 0,
+                "videos/cam_high/file_index": 3,
+            },
+        ]
+        video_rows = [
+            {
+                "camera_angle": "cam_high",
+                "chunk_index": 0,
+                "file_index": 3,
+                "relative_path": "videos/cam_high/episode_000003.mp4",
+                "file_size_bytes": len(b"0123456789abcdef"),
+            },
+        ]
+        base_uri = "https://example.test/datasets/root/data"
+        fake_tables = {
+            f"{base_uri}/episodes.lance": FakeDataset(episode_rows, list(episode_rows[0].keys())),
+            f"{base_uri}/frames.lance": FakeDataset([], ["episode_index"]),
+            f"{base_uri}/videos.lance": FakeDataset(video_rows, list(video_rows[0].keys())),
+        }
+        requests: list[tuple[str, str, str | None]] = []
+
+        def fake_urlopen(request, timeout=0):
+            url = request.full_url
+            method = request.get_method()
+            range_header = request.headers.get("Range")
+            requests.append((method, url, range_header))
+            if method == "HEAD":
+                return FakeHttpResponse(headers={"Content-Length": str(len(b"0123456789abcdef"))})
+            if range_header == "bytes=5-8":
+                return FakeHttpResponse(b"5678", status_code=206)
+            raise AssertionError(f"unexpected HTTP request: {method} {url} {range_header}")
+
+        sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+
+        with patch("apps.api.services.lance_store.urlopen", side_effect=fake_urlopen):
+            store = LanceDatasetStore()
+            record = store.open_dataset(DatasetOpenRequest(uri=base_uri, name="remote-videos"))
+            video_source = store.get_video_source(record.dataset_id, 3, "cam_high")
+            assert video_source is not None
+            chunks = list(video_source.iter_range(5, 8, chunk_size=2))
+
+        self.assertEqual(video_source.size, len(b"0123456789abcdef"))
+        self.assertEqual(b"".join(chunks), b"5678")
+        self.assertEqual(requests[0], ("HEAD", f"{base_uri}/videos/cam_high/episode_000003.mp4", None))
+        self.assertEqual(requests[1], ("GET", f"{base_uri}/videos/cam_high/episode_000003.mp4", "bytes=5-8"))
+
+    def test_video_source_streams_hf_relative_file_by_range_when_available(self) -> None:
+        FakeHfFileSystem.opened_paths = []
+        episode_rows = [
+            {
+                "episode_index": 3,
+                "task_index": 3,
+                "fps": 20.0,
+                "timestamps": [0.0],
+                "videos/cam_high/chunk_index": 0,
+                "videos/cam_high/file_index": 3,
+            },
+        ]
+        video_rows = [
+            {
+                "camera_angle": "cam_high",
+                "chunk_index": 0,
+                "file_index": 3,
+                "relative_path": "videos/cam_high/episode_000003.mp4",
+            },
+        ]
+        base_uri = "hf://datasets/org/repo/data"
+        fake_tables = {
+            f"{base_uri}/episodes.lance": FakeDataset(episode_rows, list(episode_rows[0].keys())),
+            f"{base_uri}/frames.lance": FakeDataset([], ["episode_index"]),
+            f"{base_uri}/videos.lance": FakeDataset(video_rows, list(video_rows[0].keys())),
+        }
+        sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+        sys.modules["huggingface_hub"] = types.SimpleNamespace(HfFileSystem=FakeHfFileSystem)
+
+        store = LanceDatasetStore()
+        record = store.open_dataset(DatasetOpenRequest(uri=base_uri, name="hf-videos"))
+        video_source = store.get_video_source(record.dataset_id, 3, "cam_high")
+        assert video_source is not None
+        chunks = list(video_source.iter_range(3, 8, chunk_size=2))
+
+        self.assertEqual(video_source.size, len(b"hf-remote-video"))
+        self.assertEqual(b"".join(chunks), b"remote")
+        self.assertEqual(
+            FakeHfFileSystem.opened_paths,
+            ["datasets/org/repo/data/videos/cam_high/episode_000003.mp4"],
+        )
+
+    def test_video_source_streams_fsspec_absolute_file_by_range_when_available(self) -> None:
+        fs = FakeObjectStoreFs()
+        FakeObjectStoreFs.opened_paths = []
+        episode_rows = [
+            {
+                "episode_index": 3,
+                "task_index": 3,
+                "fps": 20.0,
+                "timestamps": [0.0],
+            },
+        ]
+        video_rows = [
+            {
+                "episode_index": 3,
+                "camera_angle": "cam_high",
+                "path": "s3://bucket/videos/cam_high/episode_000003.mp4",
+            },
+        ]
+        fake_tables = {
+            "/datasets/object/episodes.lance": FakeDataset(episode_rows, list(episode_rows[0].keys())),
+            "/datasets/object/frames.lance": FakeDataset([], ["episode_index"]),
+            "/datasets/object/videos.lance": FakeDataset(video_rows, list(video_rows[0].keys())),
+        }
+        fsspec_module = types.ModuleType("fsspec")
+        fsspec_core = types.ModuleType("fsspec.core")
+        fsspec_core.url_to_fs = lambda uri: (fs, uri.removeprefix("s3://"))
+        sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+
+        with patch.dict(sys.modules, {"fsspec": fsspec_module, "fsspec.core": fsspec_core}):
+            store = LanceDatasetStore()
+            record = store.open_dataset(DatasetOpenRequest(uri="/datasets/object", name="object-videos"))
+            video_source = store.get_video_source(record.dataset_id, 3, "cam_high")
+            assert video_source is not None
+            chunks = list(video_source.iter_range(7, 11, chunk_size=2))
+
+        self.assertEqual(video_source.size, len(b"object-store-video"))
+        self.assertEqual(b"".join(chunks), b"store")
+        self.assertEqual(FakeObjectStoreFs.opened_paths, ["bucket/videos/cam_high/episode_000003.mp4"])
 
     def test_episode_video_columns_take_precedence_over_videos_lance(self) -> None:
         episode_rows = [

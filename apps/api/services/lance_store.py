@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from importlib import import_module
 import json
 import math
+import os
 import re
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from apps.api.schemas.datasets import DatasetOpenRequest, DatasetRecord, DatasetSummary
 from apps.api.schemas.episodes import (
@@ -434,10 +437,10 @@ def _read_video_file_from_row(
     row: dict[str, Any],
     path_name: str | None,
 ) -> bytes | None:
-    path = _video_file_path_from_row(base_uri, row, path_name)
-    if path is None:
+    source = _video_file_source_from_row(base_uri, row, path_name)
+    if source is None:
         return None
-    return path.read_bytes()
+    return source.read_all()
 
 
 def _video_file_path_from_row(
@@ -454,6 +457,27 @@ def _video_file_path_from_row(
     for candidate in _video_path_candidates(base_uri, path_text):
         if candidate.is_file():
             return candidate
+    return None
+
+
+def _video_file_source_from_row(
+    base_uri: str,
+    row: dict[str, Any],
+    path_name: str | None,
+) -> VideoSource | None:
+    path = _video_file_path_from_row(base_uri, row, path_name)
+    if path is not None:
+        return VideoSource(size=path.stat().st_size, path=path)
+    if path_name is None:
+        return None
+    raw_path = row.get(path_name)
+    if not raw_path:
+        return None
+    path_text = str(raw_path)
+    for candidate in _video_uri_candidates(base_uri, path_text):
+        source = _remote_video_source_from_uri(candidate)
+        if source is not None:
+            return source
     return None
 
 
@@ -489,6 +513,167 @@ def _video_path_candidates(base_uri: str, path_text: str) -> list[Path]:
             seen.add(key)
             unique_candidates.append(candidate)
     return unique_candidates
+
+
+def _video_uri_candidates(base_uri: str, path_text: str) -> list[str]:
+    local_path = _local_path_from_uri(path_text)
+    if local_path is not None and local_path.is_absolute():
+        return []
+    if _has_uri_scheme(path_text):
+        return [path_text]
+    if not _has_uri_scheme(base_uri):
+        return []
+
+    base_dir = _remote_base_dir(base_uri)
+    relative = path_text.strip("/")
+    candidates = [
+        _join_remote_uri(base_dir, relative),
+        _join_remote_uri(_remote_parent_dir(base_dir), relative),
+    ]
+    if "/" not in relative:
+        candidates.extend(
+            [
+                _join_remote_uri(base_dir, f"videos/{relative}"),
+                _join_remote_uri(_remote_parent_dir(base_dir), f"videos/{relative}"),
+            ]
+        )
+
+    unique_candidates: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if candidate not in seen:
+            seen.add(candidate)
+            unique_candidates.append(candidate)
+    return unique_candidates
+
+
+def _remote_base_dir(uri: str) -> str:
+    base = uri.rstrip("/")
+    if base.endswith(".lance"):
+        return base.rsplit("/", 1)[0]
+    return base
+
+
+def _remote_parent_dir(uri: str) -> str:
+    base = uri.rstrip("/")
+    if "/" not in base:
+        return base
+    return base.rsplit("/", 1)[0]
+
+
+def _join_remote_uri(base_uri: str, child: str) -> str:
+    return f"{base_uri.rstrip('/')}/{child.lstrip('/')}"
+
+
+def _remote_video_source_from_uri(uri: str) -> VideoSource | None:
+    if uri.startswith(("http://", "https://")):
+        return _http_video_source_from_uri(uri)
+    if uri.startswith("hf://"):
+        return _hf_video_source_from_uri(uri)
+    return _fsspec_video_source_from_uri(uri)
+
+
+def _http_video_source_from_uri(uri: str) -> VideoSource | None:
+    size = _http_content_length(uri)
+    if size is None:
+        return None
+    return VideoSource(
+        size=size,
+        range_reader=lambda start, end, chunk_size: _http_range_chunks(uri, start, end, chunk_size),
+    )
+
+
+def _http_content_length(uri: str) -> int | None:
+    try:
+        request = Request(uri, headers=_remote_auth_headers(uri), method="HEAD")
+        with urlopen(request, timeout=30) as response:
+            length = response.headers.get("Content-Length")
+            if length is not None:
+                return int(length)
+    except (HTTPError, URLError, OSError, TimeoutError, ValueError):
+        pass
+
+    try:
+        request = Request(
+            uri,
+            headers={**_remote_auth_headers(uri), "Range": "bytes=0-0"},
+            method="GET",
+        )
+        with urlopen(request, timeout=30) as response:
+            content_range = response.headers.get("Content-Range")
+            if content_range and "/" in content_range:
+                return int(content_range.rsplit("/", 1)[1])
+            length = response.headers.get("Content-Length")
+            if length is not None:
+                return int(length)
+    except (HTTPError, URLError, OSError, TimeoutError, ValueError):
+        return None
+    return None
+
+
+def _http_range_chunks(uri: str, start: int, end: int, chunk_size: int) -> Iterator[bytes]:
+    request = Request(
+        uri,
+        headers={**_remote_auth_headers(uri), "Range": f"bytes={start}-{end}"},
+        method="GET",
+    )
+    with urlopen(request, timeout=60) as response:
+        if getattr(response, "getcode", lambda: None)() == 206:
+            remaining = end - start + 1
+            while remaining > 0:
+                chunk = response.read(min(chunk_size, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                yield chunk
+            return
+        yield from _iter_binary_range(response, start, end, chunk_size)
+
+
+def _remote_auth_headers(uri: str) -> dict[str, str]:
+    if "huggingface.co" not in uri and "hf.co" not in uri:
+        return {}
+    token = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_HUB_TOKEN")
+    if not token:
+        return {}
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _hf_video_source_from_uri(uri: str) -> VideoSource | None:
+    try:
+        from huggingface_hub import HfFileSystem
+    except ImportError:
+        return None
+    try:
+        fs = HfFileSystem(token=os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_HUB_TOKEN"))
+        path = uri.removeprefix("hf://").strip("/")
+        size = int(fs.info(path)["size"])
+    except Exception:
+        return None
+
+    def range_reader(start: int, end: int, chunk_size: int) -> Iterator[bytes]:
+        with fs.open(path, "rb") as handle:
+            yield from _iter_binary_range(handle, start, end, chunk_size)
+
+    return VideoSource(size=size, range_reader=range_reader)
+
+
+def _fsspec_video_source_from_uri(uri: str) -> VideoSource | None:
+    try:
+        from fsspec.core import url_to_fs
+    except ImportError:
+        return None
+    try:
+        fs, path = url_to_fs(uri)
+        size = int(fs.info(path)["size"])
+    except Exception:
+        return None
+
+    def range_reader(start: int, end: int, chunk_size: int) -> Iterator[bytes]:
+        with fs.open(path, "rb") as handle:
+            yield from _iter_binary_range(handle, start, end, chunk_size)
+
+    return VideoSource(size=size, range_reader=range_reader)
 
 
 def _blob_to_bytes(value: Any) -> bytes | None:
@@ -634,6 +819,7 @@ class VideoSource:
     data: bytes | None = None
     path: Path | None = None
     reader: Any | None = None
+    range_reader: Callable[[int, int, int], Iterator[bytes]] | None = None
 
     def read_all(self) -> bytes | None:
         try:
@@ -645,6 +831,8 @@ class VideoSource:
                 if hasattr(self.reader, "seek"):
                     self.reader.seek(0)
                 return self.reader.read()
+            if self.range_reader is not None and self.size > 0:
+                return b"".join(self.range_reader(0, self.size - 1, 1024 * 1024))
             return None
         finally:
             self.close()
@@ -665,6 +853,9 @@ class VideoSource:
                 return
             if self.reader is not None:
                 yield from _iter_binary_range(self.reader, start, end, chunk_size)
+                return
+            if self.range_reader is not None:
+                yield from self.range_reader(start, end, chunk_size)
         finally:
             self.close()
 
@@ -1681,9 +1872,9 @@ class LanceDatasetStore:
             blob = _blob_to_bytes(row.get(blob_name))
             if blob is not None:
                 return VideoSource(size=len(blob), data=blob)
-            file_path = _video_file_path_from_row(bundle.base_uri, row, path_name)
-            if file_path is not None:
-                return VideoSource(size=file_path.stat().st_size, path=file_path)
+            file_source = _video_file_source_from_row(bundle.base_uri, row, path_name)
+            if file_source is not None:
+                return file_source
         return None
 
     def _read_video_rows(

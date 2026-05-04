@@ -37,12 +37,13 @@ python3 -m pip install -e ".[dev]"
 Optional production extras:
 
 ```bash
-python3 -m pip install -e ".[lance,rerun,video,export,queue]"
+python3 -m pip install -e ".[lance,rerun,video,export,queue,storage]"
 ```
 
 Use `.[export]` on machines that must write optional LeRobot Parquet/MP4
 artifacts and run official loader validation. Use `.[queue]` on API and worker
-machines that enqueue or execute Redis/RQ jobs.
+services that enqueue Redis/RQ jobs. Use `.[storage]` when `videos.lance` rows
+reference `hf://` or object-store video paths.
 
 The manual GitHub Actions workflow `Official export dependencies` installs
 `.[export,video,dev]` and runs opt-in export checks with real optional

@@ -96,7 +96,7 @@ Implemented:
 Next:
 
 - Add thumbnail or keyframe preview cache.
-- Add remote object-store/HF path byte-range reads.
+- Add object-storage publishing for cache/export artifacts.
 
 ## Phase 3: Rerun Web Viewer
 

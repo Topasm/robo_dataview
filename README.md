@@ -58,6 +58,7 @@ Optional Python extras:
 python3 -m pip install -e ".[lance]"      # Lance/LanceDB + PyArrow mirrors
 python3 -m pip install -e ".[rerun]"      # Rerun .rrd generation
 python3 -m pip install -e ".[video]"      # OpenCV keyframe/preview extraction
+python3 -m pip install -e ".[storage]"    # remote HF/object-store video paths
 python3 -m pip install -e ".[lerobot]"    # official LeRobotDataset validation
 python3 -m pip install -e ".[export]"     # optional LeRobot Parquet/MP4 materialization
 python3 -m pip install -e ".[queue]"      # Redis/RQ background job queue
@@ -96,7 +97,8 @@ The repository has moved past a pure skeleton. The current MVP path can:
 
 1. Open and index the `lance-format/lerobot-xvla-soft-fold` Lance dataset.
 2. Serve dataset summaries, episode lists, episode details, state/action
-   summaries, and MP4 blobs with HTTP Range support when available.
+   summaries, and MP4 blobs with HTTP Range support when available, including
+   local files, HTTP(S), `hf://`, and optional `fsspec` path-backed video rows.
 3. Serve frame-level samples through `GET /frames`, preferring `frames.lance`
    and falling back to episode time-series arrays with annotation labels and
    bad-frame flags, and show/edit selected-frame labels in the web metadata

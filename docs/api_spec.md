@@ -121,8 +121,10 @@ episode table has a matching video blob column, including
 `observation_images_<camera>_video_blob` layouts. If the episode table has no
 matching blob, the store falls back to `videos.lance` rows that can be matched by
 `episode_index` and camera or by LeRobot-style episode shard metadata. Fallback
-rows may provide either a materialized `video_blob` or a local path such as
-`relative_path`/`video_file`. It supports `GET` and `HEAD`, returns
+rows may provide either a materialized `video_blob` or a path such as
+`relative_path`/`video_file`. Local filesystem paths, HTTP(S) URLs, `hf://`
+paths through optional `huggingface_hub`, and other object-store URLs through
+optional `fsspec` are supported. It supports `GET` and `HEAD`, returns
 `Accept-Ranges: bytes`, and handles single byte-range requests for browser video
 playback.
 
@@ -132,10 +134,10 @@ Current implementation detail:
   `videos.lance` blob, the API streams the requested byte range from that reader
   without materializing the full MP4 in memory. Non-seekable row fallbacks still
   materialize the blob before serving it.
-- Path-only `videos.lance` fallback is local-filesystem only. For local paths,
-  the API streams the requested byte range directly from disk without reading the
-  whole file first.
-- Remote object storage/HF path streaming is not implemented yet.
+- Path-only `videos.lance` fallback streams local files directly from disk,
+  HTTP(S) files with `Range` requests, `hf://` files through
+  `huggingface_hub.HfFileSystem`, and other object-store URLs through optional
+  `fsspec`, without reading the whole file first.
 - Suffix byte ranges such as `bytes=-500` are not supported.
 
 ## Frames

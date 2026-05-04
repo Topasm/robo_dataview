@@ -162,11 +162,12 @@ If those are absent, the API can fall back to `videos.lance` rows when they
 carry an `episode_index` plus camera column, or when episode metadata contains
 LeRobot-style `videos/<video_key>/chunk_index` and
 `videos/<video_key>/file_index` shard references. The fallback reads
-materialized `video_blob` values first, then local path provenance such as
-`relative_path` or `video_file` when the referenced MP4 exists under the local
-dataset root. Exported LeRobot video indexes include SHA256 digests, and
-validation rejects materialized MP4 files whose digest no longer matches the
-video index.
+materialized `video_blob` values first, then path provenance such as
+`relative_path` or `video_file`. Local files stream from disk, HTTP(S) paths use
+byte-range requests, `hf://` paths use optional `huggingface_hub`, and other
+object-store paths use optional `fsspec`. Exported LeRobot video indexes include
+SHA256 digests, and validation rejects materialized MP4 files whose digest no
+longer matches the video index.
 
 ## annotations.lance
 

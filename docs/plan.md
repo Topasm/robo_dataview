@@ -38,9 +38,9 @@ Working:
 - Dataset schema endpoint.
 - Episode detail, video blob, and state/action summary endpoints.
 - MP4 video blob serving with `HEAD` and byte-range support.
-- `videos.lance` fallback for episode-indexed video blobs and LeRobot-style
-  video shard references.
-- Local path-only `videos.lance` provenance fallback for downloaded datasets.
+- `videos.lance` fallback for episode-indexed video blobs, LeRobot-style video
+  shard references, local files, HTTP(S), `hf://`, and optional `fsspec`
+  object-store paths.
 - Annotation CRUD with JSONL persistence and optional Lance mirroring.
 - Segment edit and midpoint split actions in the web UI.
 - Search filter endpoint.
@@ -108,7 +108,8 @@ Known limits:
   non-seekable blob fallbacks still materialize the MP4 before serving it.
 - Exported LeRobot video indexes include SHA256 digests, and validation rejects
   materialized MP4 artifacts whose digest does not match the index.
-- Remote object-store/HF video path streaming is not wired yet.
+- Remote path-backed video rows stream byte ranges for HTTP(S), `hf://` through
+  `huggingface_hub`, and object stores through optional `fsspec`.
 - Full frame-table browser UX exists for local frame review, but raw
   `frames.lance` table mutation remains annotation-backed rather than rewriting
   source rows.
@@ -170,7 +171,7 @@ Definition of done:
 - [x] Add backend `HEAD`/Range support for browser video playback.
 - [x] Add range-aware streaming for file-backed videos and seekable Lance blob
   readers.
-- [ ] Add true remote object-store/HF path byte-range reads.
+- [x] Add true remote object-store/HF path byte-range reads.
 - [x] Add synchronized N-camera playback layout.
 - [x] Wire playback controls: play, pause, seek, and frame jumps.
 - [x] Add frame/time scrubber.
@@ -279,8 +280,7 @@ Definition of done:
    and larger representative downloaded or `hf://` Lance subsets.
 2. Run a real CLIP/SigLIP text-to-image search smoke with generated visual
    embeddings.
-3. Add remote object-store/HF path byte-range reads.
-4. Add object storage support for cache and exports.
+3. Add object storage publishing for cache and exports.
 
 ## Validation Checklist
 

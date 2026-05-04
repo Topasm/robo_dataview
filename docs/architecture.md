@@ -143,8 +143,7 @@ Not implemented yet:
 - Local VLM/video-model inference.
 - Larger strict real-dataset LeRobot Parquet/MP4 smoke runs with video
   materialization.
-- Remote object-store/HF path byte-range reads. Local file sources and seekable
-  Lance `take_blobs` readers stream ranges without loading the full MP4 first.
+- Object storage publishing for cache/export artifacts.
 
 ## Design Principles
 
