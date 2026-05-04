@@ -44,7 +44,8 @@ Use `.[export]` on machines that must write optional LeRobot Parquet/MP4
 artifacts and run official loader validation. Use `.[queue]` on API and worker
 services that enqueue Redis/RQ jobs. Use `.[storage]` when `videos.lance` rows
 reference `hf://` or object-store video paths, or when exports should publish to
-an object-store destination.
+an object-store destination. Use `.[ml]` on machines that should run real
+Transformers CLIP/SigLIP-style visual and text embedding smoke checks.
 
 The manual GitHub Actions workflow `Official export dependencies` installs
 `.[export,video,dev]` and runs opt-in export checks with real optional
@@ -128,6 +129,16 @@ For compatible text-to-image search, use the same CLIP/SigLIP model for text and
 visual embeddings, for example `ROBOT_DATA_STUDIO_EMBEDDING_PROVIDER=clip`,
 `ROBOT_DATA_STUDIO_EMBEDDING_MODEL=clip:openai/clip-vit-base-patch32`, and
 `ROBOT_DATA_STUDIO_VISUAL_EMBEDDING_MODEL=openai/clip-vit-base-patch32`.
+
+The manual GitHub Actions workflow `Visual model smoke` installs `.[ml,dev]`
+and runs a real Transformers model through both the visual and text embedding
+providers. The same check can be run locally:
+
+```bash
+RUN_VISUAL_MODEL_SMOKE=1 \
+VISUAL_MODEL_SMOKE_MODEL=openai/clip-vit-base-patch32 \
+python3 -m pytest apps/api/tests/test_visual_model_smoke.py -q
+```
 
 ## Start Commands
 

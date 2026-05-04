@@ -62,6 +62,7 @@ python3 -m pip install -e ".[storage]"    # remote HF/object-store video paths
 python3 -m pip install -e ".[lerobot]"    # official LeRobotDataset validation
 python3 -m pip install -e ".[export]"     # optional LeRobot Parquet/MP4 materialization
 python3 -m pip install -e ".[queue]"      # Redis/RQ background job queue
+python3 -m pip install -e ".[ml]"         # Transformers CLIP/SigLIP smoke checks
 ```
 
 Run API and web together:
@@ -145,7 +146,8 @@ Known MVP gaps:
   with environment variables.
 - Cross-modal text-to-image search requires configuring the text embedding
   provider and visual embedding worker with the same compatible CLIP/SigLIP
-  model.
+  model. A manual visual-model smoke workflow can run a real Transformers model
+  through both providers when optional `.[ml]` dependencies are installed.
 - LeRobot export writes frame JSONL, available MP4 artifacts, and optional
   Parquet shards. Per-frame video references stay in the JSONL readability copy;
   Parquet rows omit video feature columns so video resolution follows LeRobot

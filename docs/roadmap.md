@@ -298,6 +298,9 @@ Implemented:
   `ROBOT_DATA_STUDIO_CACHE_PUBLISH_URI`.
 - Optional keyframe and preview cache artifact publishing to local or
   `fsspec` destinations through cache publish environment variables.
+- Manual visual-model smoke workflow can verify a real Transformers
+  CLIP/SigLIP-compatible model through matching text and image embedding
+  providers.
 - Accepted annotations only.
 - Version lineage JSONL plus optional Lance mirror.
 
@@ -307,3 +310,4 @@ Next:
   larger representative multi-camera subsets.
 - Run configured keyframe/preview cache publishing smoke workflows against
   local or object storage.
+- Run the manual visual-model smoke workflow with the target CLIP/SigLIP model.

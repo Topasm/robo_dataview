@@ -283,8 +283,8 @@ Definition of done:
 
 1. Run the opt-in real-dataset export smoke workflow with video materialization
    and larger representative downloaded or `hf://` Lance subsets.
-2. Run a real CLIP/SigLIP text-to-image search smoke with generated visual
-   embeddings.
+2. Run the opt-in real CLIP/SigLIP text-to-image search smoke workflow with
+   generated visual embeddings.
 3. Run a configured keyframe/preview cache publishing smoke against local or
    object storage.
 

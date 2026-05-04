@@ -1,0 +1,26 @@
+name: Visual model smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "CLIP/SigLIP-compatible Transformers model"
+        required: true
+        default: "openai/clip-vit-base-patch32"
+
+jobs:
+  visual-model-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ML smoke dependencies
+        run: python3 -m pip install -e ".[ml,dev]"
+      - name: Run visual model smoke test
+        env:
+          RUN_VISUAL_MODEL_SMOKE: "1"
+          VISUAL_MODEL_SMOKE_MODEL: ${{ inputs.model }}
+        run: python3 -m pytest apps/api/tests/test_visual_model_smoke.py -q
