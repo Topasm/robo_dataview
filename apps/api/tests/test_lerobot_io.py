@@ -257,11 +257,63 @@ class LeRobotIoTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            validation = validate_lerobot_v3_snapshot(root)
+            with patch.dict(sys.modules, _fake_pyarrow_modules()):
+                validation = validate_lerobot_v3_snapshot(root)
 
             self.assertTrue(validation["present"]["data_parquet"])
+            self.assertTrue(validation["parquet_readability"]["tasks_parquet"]["readable"])
+            self.assertTrue(validation["parquet_readability"]["episodes_parquet"]["readable"])
+            self.assertTrue(validation["parquet_readability"]["data_parquet"]["readable"])
             self.assertTrue(validation["metadata_ok"])
             self.assertTrue(validation["local_lerobot_loadable_heuristic"])
+
+    def test_validate_lerobot_snapshot_rejects_unreadable_parquet(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir)
+            artifact = write_lerobot_v3_snapshot(
+                export_dir,
+                dataset_id="sample-xvla-soft-fold",
+                episodes=[
+                    EpisodeDetail(
+                        dataset_id="sample-xvla-soft-fold",
+                        episode_index=0,
+                        task_index=3,
+                        length=1,
+                        fps=20.0,
+                        camera_names=["cam_high"],
+                    )
+                ],
+                annotations_by_episode={},
+                version_description="unit test",
+                timeseries_by_episode={
+                    0: {
+                        "timestamps": [0.0],
+                        "states": [[0.0, 0.0]],
+                        "actions": [[1.0, 1.0]],
+                    }
+                },
+                video_blobs_by_episode={0: {"cam_high": b"fake mp4"}},
+            )
+            root = Path(artifact["root"])
+            (root / "meta/tasks.parquet").write_text("placeholder", encoding="utf-8")
+            (root / "meta/episodes/chunk-000/file-000.parquet").write_text(
+                "placeholder",
+                encoding="utf-8",
+            )
+            (root / "data/chunk-000/file-000.parquet").write_text(
+                "placeholder",
+                encoding="utf-8",
+            )
+
+            with patch.dict(sys.modules, _fake_pyarrow_modules(error=ValueError("bad magic"))):
+                validation = validate_lerobot_v3_snapshot(root)
+
+            self.assertFalse(validation["metadata_ok"])
+            self.assertFalse(validation["local_lerobot_loadable_heuristic"])
+            self.assertFalse(validation["parquet_readability"]["data_parquet"]["readable"])
+            self.assertTrue(
+                any("not readable as Parquet" in error for error in validation["errors"])
+            )
 
     def test_validate_lerobot_snapshot_requires_video_shard_metadata_for_local_loadable(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -399,6 +451,46 @@ def _fake_lerobot_modules(dataset_class: type) -> dict[str, ModuleType]:
         "lerobot": lerobot_module,
         "lerobot.datasets": datasets_module,
     }
+
+
+class _FakeParquetTable:
+    def __init__(self, rows: list[dict]) -> None:
+        self._rows = rows
+        self.num_rows = len(rows)
+
+    def to_pylist(self) -> list[dict]:
+        return self._rows
+
+
+def _fake_pyarrow_modules(error: Exception | None = None) -> dict[str, ModuleType]:
+    pyarrow_module = ModuleType("pyarrow")
+    parquet_module = ModuleType("pyarrow.parquet")
+
+    def read_table(path: Path) -> _FakeParquetTable:
+        if error is not None:
+            raise error
+        return _FakeParquetTable(_jsonl_rows_for_fake_parquet(Path(path)))
+
+    parquet_module.read_table = read_table  # type: ignore[attr-defined]
+    pyarrow_module.parquet = parquet_module  # type: ignore[attr-defined]
+    return {
+        "pyarrow": pyarrow_module,
+        "pyarrow.parquet": parquet_module,
+    }
+
+
+def _jsonl_rows_for_fake_parquet(path: Path) -> list[dict]:
+    if path.name == "tasks.parquet":
+        jsonl_path = path.with_name("tasks.jsonl")
+    else:
+        jsonl_path = path.with_suffix(".jsonl")
+    if not jsonl_path.exists():
+        return [{"index": 0}]
+    return [
+        json.loads(line)
+        for line in jsonl_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
 
 
 if __name__ == "__main__":

@@ -270,6 +270,7 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
     data_index_rows = _read_jsonl(paths["data_index"]) if present["data_index"] else []
     data_rows = _read_jsonl(paths["data_jsonl"]) if present["data_jsonl"] else []
     video_rows = _read_jsonl(paths["video_index"]) if present["video_index"] else []
+    parquet_readability = _parquet_readability(paths, present)
     materialization_status = str(info.get("materialization_status") or "metadata_only")
 
     if info.get("codebase_version") != LEROBOT_CODEBASE_VERSION:
@@ -316,6 +317,15 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         warnings.append("pyarrow not available or parquet task metadata was not written")
     if not present["episodes_parquet"]:
         warnings.append("pyarrow not available or parquet episode metadata was not written")
+    for name, status in parquet_readability.items():
+        if not status.get("present"):
+            continue
+        label = str(status["label"])
+        readable = status.get("readable")
+        if readable is False:
+            errors.append(f"{label} is not readable as Parquet: {status.get('error')}")
+        elif readable is None:
+            warnings.append(f"{label} could not be verified because {status.get('error')}")
     if materialization_status == "metadata_only":
         warnings.append("metadata-only snapshot is not directly loadable by LeRobotDataset until data/video shards are materialized")
     elif not present["data_parquet"]:
@@ -333,6 +343,7 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         and present["tasks_parquet"]
         and present["episodes_parquet"]
         and present["data_parquet"]
+        and _required_parquet_files_are_readable(parquet_readability)
         and frame_indices_ok
         and _episode_rows_have_data_shard_indices(episode_rows)
         and _episode_rows_have_dataset_offsets(episode_rows)
@@ -359,8 +370,73 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         "materialized_video_count": len(video_rows),
         "files": {name: str(path) for name, path in paths.items()},
         "present": present,
+        "parquet_readability": parquet_readability,
         "errors": errors,
         "warnings": warnings,
+    }
+
+
+def _required_parquet_files_are_readable(parquet_readability: dict[str, dict[str, Any]]) -> bool:
+    return all(
+        parquet_readability.get(name, {}).get("readable") is True
+        for name in ("tasks_parquet", "episodes_parquet", "data_parquet")
+    )
+
+
+def _parquet_readability(
+    paths: dict[str, Path],
+    present: dict[str, bool],
+) -> dict[str, dict[str, Any]]:
+    labels = {
+        "tasks_parquet": "task metadata parquet",
+        "episodes_parquet": "episode metadata parquet",
+        "data_parquet": "frame data parquet",
+    }
+    return {
+        name: _parquet_file_status(paths[name], label=label, present=present[name])
+        for name, label in labels.items()
+    }
+
+
+def _parquet_file_status(path: Path, *, label: str, present: bool) -> dict[str, Any]:
+    if not present:
+        return {
+            "present": False,
+            "checked": False,
+            "readable": False,
+            "row_count": None,
+            "label": label,
+            "error": "file is not present",
+        }
+    try:
+        import pyarrow.parquet as pq
+    except ImportError as exc:
+        return {
+            "present": True,
+            "checked": False,
+            "readable": None,
+            "row_count": None,
+            "label": label,
+            "error": f"pyarrow is unavailable: {exc}",
+        }
+    try:
+        table = pq.read_table(path)
+    except Exception as exc:
+        return {
+            "present": True,
+            "checked": True,
+            "readable": False,
+            "row_count": None,
+            "label": label,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    return {
+        "present": True,
+        "checked": True,
+        "readable": True,
+        "row_count": getattr(table, "num_rows", None),
+        "label": label,
+        "error": None,
     }
 
 
@@ -963,4 +1039,7 @@ def _read_optional_parquet(path: Path) -> list[dict[str, Any]] | None:
         import pyarrow.parquet as pq
     except ImportError:
         return None
-    return pq.read_table(path).to_pylist()
+    try:
+        return pq.read_table(path).to_pylist()
+    except Exception:
+        return None

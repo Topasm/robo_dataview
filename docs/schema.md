@@ -339,9 +339,10 @@ entries so the official `data_path` and `video_path` templates can resolve
 copied artifacts.
 `validation.json` contains both the local loadability heuristic and an
 `official_loader` result. The local heuristic requires Parquet task, episode,
-and frame data plus LeRobot offset metadata, video timestamp metadata, and
-valid per-frame video references when video artifacts are present. When the
-optional `lerobot` package is installed, validation attempts
+and frame data that can be read with `pyarrow`, plus LeRobot offset metadata,
+video timestamp metadata, and valid per-frame video references when video
+artifacts are present. When the optional `lerobot` package is installed,
+validation attempts
 `LeRobotDataset(repo_id, root=<export_root>)` and records success, dataset
 length, or the exact exception.
 
