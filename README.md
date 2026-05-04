@@ -117,8 +117,9 @@ The repository has moved past a pure skeleton. The current MVP path can:
 8. Create VLM-style annotation proposals for review, including
    deterministic keyframe index sampling, versioned prompt tracking, and a
    provider interface with heuristic fallback, optional OpenAI-compatible model
-   routing, raw-response/keyframe artifact persistence, and a generated-label
-   review queue.
+   routing, optional local Ollama-compatible model routing,
+   raw-response/keyframe artifact persistence, and a generated-label review
+   queue.
 9. Export selected episodes as a LeRobot v3-oriented snapshot with metadata,
    frame JSONL, optional Parquet, available camera MP4 artifacts, validation,
    and version lineage, or as a Lance subset when optional `pyarrow` and
@@ -137,8 +138,9 @@ The repository has moved past a pure skeleton. The current MVP path can:
 
 Known MVP gaps:
 
-- VLM labeling defaults to heuristic/local scaffolding; OpenAI-compatible model
-  inference is available only when configured with environment variables.
+- VLM labeling defaults to heuristic/local scaffolding; OpenAI-compatible and
+  local Ollama-compatible model inference are available only when configured
+  with environment variables.
 - Cross-modal text-to-image search requires configuring the text embedding
   provider and visual embedding worker with the same compatible CLIP/SigLIP
   model.

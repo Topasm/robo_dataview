@@ -192,6 +192,103 @@ class VlmProviderTest(unittest.TestCase):
         redacted_url = result.raw_response["request"]["messages"][1]["content"][1]["image_url"]["url"]
         self.assertEqual(redacted_url, "[image-data-url]")
 
+    def test_ollama_provider_posts_chat_images_and_parses_annotations(self) -> None:
+        episode = EpisodeDetail(
+            dataset_id="dataset-a",
+            episode_index=2,
+            task_index=3,
+            length=24,
+            fps=20.0,
+            camera_names=["cam_high"],
+        )
+        captured: dict[str, object] = {}
+
+        with tempfile.NamedTemporaryFile(suffix=".jpg") as image:
+            image.write(b"fake-jpeg")
+            image.flush()
+
+            def fake_extract(**kwargs):
+                return [
+                    KeyframeArtifact(
+                        camera=kwargs["camera"],
+                        frame_index=0,
+                        uri=image.name,
+                        width=32,
+                        height=24,
+                    )
+                ]
+
+            def fake_urlopen(request, timeout):
+                captured["url"] = request.full_url
+                captured["body"] = json.loads(request.data.decode("utf-8"))
+                captured["timeout"] = timeout
+                return FakeHttpResponse(
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": json.dumps(
+                                {
+                                    "episode_caption": "Local model labels the fold.",
+                                    "success_label": "failure",
+                                    "failure_reason": {
+                                        "text": "cloth slipped",
+                                        "confidence": 0.74,
+                                    },
+                                    "object_list": ["cloth", "left gripper"],
+                                    "phases": [
+                                        {
+                                            "label": "slip",
+                                            "start_frame": 9,
+                                            "end_frame": 13,
+                                            "confidence": 0.82,
+                                        }
+                                    ],
+                                }
+                            ),
+                        },
+                        "done": True,
+                    }
+                )
+
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "ROBOT_DATA_STUDIO_VLM_PROVIDER": "ollama",
+                        "ROBOT_DATA_STUDIO_OLLAMA_BASE_URL": "http://ollama.test:11434",
+                    },
+                    clear=False,
+                ),
+                patch("workers.vlm_provider.extract_keyframes_from_blob", side_effect=fake_extract),
+                patch("workers.vlm_provider.urlopen", side_effect=fake_urlopen),
+            ):
+                provider = get_vlm_provider("ollama:llava:latest")
+                result = provider.propose(
+                    dataset_id="dataset-a",
+                    episode=episode,
+                    config=AutoLabelConfig(
+                        model="ollama:llava:latest",
+                        prompt_template="episode_autolabel_v1",
+                        prompt_version="v1",
+                        prompt_body="Return JSON labels.",
+                    ),
+                    video_blobs={"cam_high": b"fake mp4"},
+                )
+
+        self.assertEqual(result.provider, "ollama")
+        self.assertEqual(captured["url"], "http://ollama.test:11434/api/chat")
+        body = captured["body"]
+        self.assertEqual(body["model"], "llava:latest")
+        self.assertFalse(body["stream"])
+        self.assertEqual(body["format"], "json")
+        user_message = body["messages"][1]
+        self.assertEqual(user_message["images"], ["ZmFrZS1qcGVn"])
+        self.assertEqual(result.raw_response["request"]["messages"][1]["images"], ["[image-base64]"])
+        self.assertEqual(result.raw_response["proposal_count"], 5)
+        self.assertEqual(result.proposals[0].label_type, "episode_caption")
+        self.assertEqual(result.proposals[1].label_value, "failure")
+        self.assertEqual(result.proposals[2].label_value, "cloth slipped")
+
 
 class FakeHttpResponse:
     def __init__(self, payload: dict[str, object]) -> None:

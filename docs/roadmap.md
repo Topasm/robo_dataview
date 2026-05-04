@@ -189,12 +189,14 @@ Implemented:
 - Optional OpenCV keyframe image extraction from available episode video blobs.
 - Optional OpenAI-compatible provider path selected by model prefix or
   environment configuration.
+- Optional local Ollama-compatible provider path selected by model prefix or
+  environment configuration.
 - Generated-label review queue with accept/reject actions.
 
 Next:
 
 - Move job execution to RQ/Celery.
-- Add local VLM provider implementations.
+- Add direct in-process local VLM provider implementations beyond Ollama.
 - Add confidence rationale fields to real provider responses.
 
 ## Phase 6: Search and Filtering

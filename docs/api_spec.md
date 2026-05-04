@@ -350,8 +350,12 @@ The default model route uses the heuristic fallback provider. Set
 `ROBOT_DATA_STUDIO_VLM_PROVIDER=openai-compatible` to use the optional
 OpenAI-compatible `/chat/completions` provider. Configure
 `ROBOT_DATA_STUDIO_VLM_BASE_URL`, `ROBOT_DATA_STUDIO_VLM_API_KEY`, and
-`ROBOT_DATA_STUDIO_VLM_TIMEOUT_SECONDS` as needed. The web VLM button can be
-pointed at this route with `NEXT_PUBLIC_VLM_MODEL`.
+`ROBOT_DATA_STUDIO_VLM_TIMEOUT_SECONDS` as needed. Set
+`model = "ollama:<model-name>"` or `ROBOT_DATA_STUDIO_VLM_PROVIDER=ollama` to
+use a local Ollama-compatible `/api/chat` endpoint; configure
+`ROBOT_DATA_STUDIO_OLLAMA_BASE_URL` when it is not running at
+`http://127.0.0.1:11434`. The web VLM button can be pointed at either route
+with `NEXT_PUBLIC_VLM_MODEL`.
 
 `POST /jobs/visual-embeddings`
 

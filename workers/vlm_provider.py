@@ -19,6 +19,7 @@ from workers.vlm_autolabel import AutoLabelConfig, build_vlm_annotation_proposal
 
 KEYFRAME_CACHE_ROOT = Path("data/cache/keyframes")
 OPENAI_COMPATIBLE_BASE_URL = "https://api.openai.com/v1"
+OLLAMA_BASE_URL = "http://127.0.0.1:11434"
 
 
 @dataclass(frozen=True)
@@ -190,9 +191,104 @@ class OpenAICompatibleVlmProvider:
             return json.loads(response.read().decode("utf-8"))
 
 
+class OllamaVlmProvider:
+    name = "ollama"
+
+    def __init__(
+        self,
+        *,
+        base_url: str | None = None,
+        timeout_seconds: float | None = None,
+    ) -> None:
+        self.base_url = (
+            base_url
+            if base_url is not None
+            else os.getenv(
+                "ROBOT_DATA_STUDIO_OLLAMA_BASE_URL",
+                os.getenv("ROBOT_DATA_STUDIO_VLM_BASE_URL", OLLAMA_BASE_URL),
+            )
+        ).rstrip("/")
+        self.timeout_seconds = (
+            timeout_seconds
+            if timeout_seconds is not None
+            else float(os.getenv("ROBOT_DATA_STUDIO_VLM_TIMEOUT_SECONDS", "180"))
+        )
+
+    def propose(
+        self,
+        *,
+        dataset_id: str,
+        episode: EpisodeDetail,
+        config: AutoLabelConfig,
+        video_blobs: dict[str, bytes] | None = None,
+    ) -> VlmProviderResult:
+        keyframes = select_keyframes(
+            max(1, episode.length or 1),
+            min_keyframes=config.min_keyframes,
+            max_keyframes=config.max_keyframes,
+        )
+        artifacts = _extract_keyframe_artifacts(
+            dataset_id=dataset_id,
+            episode=episode,
+            config=config,
+            keyframes=keyframes,
+            video_blobs=video_blobs or {},
+        )
+        request_body = _ollama_request_body(
+            episode=episode,
+            config=config,
+            keyframes=keyframes,
+            artifacts=artifacts,
+        )
+        raw_response: dict[str, object] = {
+            "provider": self.name,
+            "model": _provider_model(config.model),
+            "prompt_template": config.prompt_template,
+            "prompt_version": config.prompt_version,
+            "episode_index": episode.episode_index,
+            "keyframes": keyframes,
+            "keyframe_images": [_artifact_payload(artifact) for artifact in artifacts],
+            "keyframe_image_count": len(artifacts),
+            "request": _redacted_ollama_request_payload(request_body),
+        }
+
+        try:
+            response_payload = self._post_json(request_body)
+            parsed_output = _parse_ollama_output(response_payload)
+            proposals = _annotation_proposals_from_model_output(
+                dataset_id=dataset_id,
+                episode=episode,
+                config=config,
+                output=parsed_output,
+            )
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as exc:
+            raw_response["error"] = str(exc)
+            return VlmProviderResult(provider=self.name, raw_response=raw_response, proposals=[])
+
+        raw_response["response"] = response_payload
+        raw_response["parsed_output"] = parsed_output
+        raw_response["proposal_count"] = len(proposals)
+        return VlmProviderResult(provider=self.name, raw_response=raw_response, proposals=proposals)
+
+    def _post_json(self, body: dict[str, object]) -> dict[str, object]:
+        request = Request(
+            f"{self.base_url}/api/chat",
+            data=json.dumps(body).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            method="POST",
+        )
+        with urlopen(request, timeout=self.timeout_seconds) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+
 def get_vlm_provider(model: str) -> VlmProvider:
     provider_name = os.getenv("ROBOT_DATA_STUDIO_VLM_PROVIDER", "").lower()
     model_name = model.lower()
+    if provider_name == "ollama" or model_name.startswith("ollama:"):
+        return OllamaVlmProvider()
     if (
         provider_name in {"openai", "openai-compatible"}
         or model_name.startswith("openai:")
@@ -240,6 +336,42 @@ def _artifact_payload(artifact: KeyframeArtifact) -> dict[str, object]:
         "width": artifact.width,
         "height": artifact.height,
         "content_type": artifact.content_type,
+    }
+
+
+def _ollama_request_body(
+    *,
+    episode: EpisodeDetail,
+    config: AutoLabelConfig,
+    keyframes: list[int],
+    artifacts: list[KeyframeArtifact],
+) -> dict[str, object]:
+    images = [
+        encoded
+        for artifact in artifacts[: config.max_keyframes]
+        if (encoded := _artifact_base64(artifact)) is not None
+    ]
+    user_message: dict[str, object] = {
+        "role": "user",
+        "content": _vlm_user_prompt(episode=episode, config=config, keyframes=keyframes),
+    }
+    if images:
+        user_message["images"] = images
+    return {
+        "model": _provider_model(config.model),
+        "stream": False,
+        "format": "json",
+        "options": {"temperature": 0.1},
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You label robot learning episodes for dataset curation. "
+                    "Return only valid JSON matching the requested schema."
+                ),
+            },
+            user_message,
+        ],
     }
 
 
@@ -324,11 +456,17 @@ def _vlm_user_prompt(
 
 
 def _artifact_data_url(artifact: KeyframeArtifact) -> str | None:
+    encoded = _artifact_base64(artifact)
+    if encoded is None:
+        return None
+    return f"data:{artifact.content_type};base64,{encoded}"
+
+
+def _artifact_base64(artifact: KeyframeArtifact) -> str | None:
     path = Path(artifact.uri)
     if not path.exists() or not path.is_file():
         return None
-    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-    return f"data:{artifact.content_type};base64,{encoded}"
+    return base64.b64encode(path.read_bytes()).decode("ascii")
 
 
 def _redacted_request_payload(body: dict[str, object]) -> dict[str, object]:
@@ -343,6 +481,17 @@ def _redacted_request_payload(body: dict[str, object]) -> dict[str, object]:
             image_url = item.get("image_url")
             if isinstance(image_url, dict) and isinstance(image_url.get("url"), str):
                 image_url["url"] = "[image-data-url]"
+    return redacted
+
+
+def _redacted_ollama_request_payload(body: dict[str, object]) -> dict[str, object]:
+    redacted = json.loads(json.dumps(body))
+    for message in redacted.get("messages", []):
+        if not isinstance(message, dict) or "images" not in message:
+            continue
+        images = message.get("images")
+        if isinstance(images, list):
+            message["images"] = ["[image-base64]" for _ in images]
     return redacted
 
 
@@ -365,6 +514,20 @@ def _parse_openai_compatible_output(response_payload: dict[str, object]) -> dict
                         if isinstance(item, dict) and item.get("type") == "text"
                     )
                     return _load_json_from_text(text)
+    return response_payload
+
+
+def _parse_ollama_output(response_payload: dict[str, object]) -> dict[str, object]:
+    message = response_payload.get("message")
+    if isinstance(message, dict):
+        content = message.get("content")
+        if isinstance(content, str):
+            return _load_json_from_text(content)
+        if isinstance(content, dict):
+            return content
+    response_text = response_payload.get("response")
+    if isinstance(response_text, str):
+        return _load_json_from_text(response_text)
     return response_payload
 
 
@@ -536,7 +699,7 @@ def _bounded_frame(value: object, last_frame: int) -> int:
 
 
 def _provider_model(model: str) -> str:
-    for prefix in ("openai-compatible:", "openai:"):
+    for prefix in ("openai-compatible:", "openai:", "ollama:"):
         if model.lower().startswith(prefix):
             return model[len(prefix) :]
     return model
