@@ -49,8 +49,8 @@ Working:
 - Rerun React viewer embed for ready `.rrd` sessions.
 - Frame listing endpoint with `frames.lance` preference, episode time-series
   fallback, state/action samples, annotation labels, and bad-frame flags.
-- Export endpoint that writes a manifest and metadata-oriented LeRobot v3
-  snapshot.
+- Export endpoint that writes a manifest and LeRobot v3-oriented snapshot with
+  metadata, frame JSONL, optional Parquet, and available MP4 artifacts.
 - Version lineage JSONL and optional Lance mirror.
 - Main Next.js UI with dataset, episode, viewer, timeline, annotation, search,
   Rerun, and export areas.
@@ -70,7 +70,8 @@ Known limits:
 - Open datasets and sessions are in-memory.
 - VLM labeling is heuristic scaffolding.
 - Semantic search is text-hash based, not LanceDB vector search.
-- Export does not yet materialize full LeRobot Parquet/MP4 artifacts.
+- Export writes frame JSONL and available MP4 artifacts; training-ready Parquet
+  shards require optional `pyarrow`/LeRobot dependencies.
 - Video ranges are sliced after loading the full episode blob; direct Lance blob
   range streaming is not implemented.
 - `videos.lance` provenance lookup is not used by playback yet.
@@ -208,11 +209,12 @@ Definition of done:
 - [x] Export selected episodes.
 - [x] Include accepted annotations only.
 - [x] Write export manifest.
-- [x] Write metadata-oriented LeRobot v3 snapshot.
+- [x] Write LeRobot v3-oriented snapshot.
+- [x] Materialize frame JSONL and available camera MP4 artifacts.
 - [x] Add export validation report.
 - [x] Append version lineage.
 - [ ] Add train/val/test split controls.
-- [ ] Materialize full LeRobot Parquet/MP4 export.
+- [ ] Materialize fully LeRobot-loadable Parquet/MP4 export.
 - [ ] Add Lance subset export.
 - [ ] Add JSONL captions and VLA training format export.
 
@@ -231,7 +233,7 @@ Definition of done:
 1. Add selected-frame metadata UI backed by `GET /frames`.
 2. Add keyframe extraction and replace heuristic VLM with a real provider path.
 3. Replace deterministic semantic search with LanceDB vector search.
-4. Materialize full LeRobot Parquet/MP4 export.
+4. Materialize fully LeRobot-loadable Parquet/MP4 export.
 5. Move Rerun/export/VLM work into queue-backed workers.
 
 ## Validation Checklist

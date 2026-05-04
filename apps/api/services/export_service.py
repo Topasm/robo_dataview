@@ -8,6 +8,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 
 from apps.api.schemas.common import ExportFormat, JobStatus, ReviewStatus
+from apps.api.schemas.episodes import EpisodeDetail
 from apps.api.schemas.exports import ExportCreateRequest, ExportRecord
 from apps.api.services.annotation_service import annotation_store
 from apps.api.services.lance_store import store
@@ -133,12 +134,24 @@ class ExportStore:
 
         artifacts = {}
         if payload.format == ExportFormat.lerobot:
+            timeseries_by_episode = {
+                episode.episode_index: timeseries
+                for episode in episode_records
+                if (timeseries := store.get_episode_timeseries(record.dataset_id, episode.episode_index))
+                is not None
+            }
+            video_blobs_by_episode = {
+                episode.episode_index: self._video_blobs(record.dataset_id, episode)
+                for episode in episode_records
+            }
             artifacts["lerobot_v3"] = write_lerobot_v3_snapshot(
                 manifest_path.parent,
                 dataset_id=record.dataset_id,
                 episodes=episode_records,
                 annotations_by_episode=annotations_by_episode,
                 version_description=payload.version_description,
+                timeseries_by_episode=timeseries_by_episode,
+                video_blobs_by_episode=video_blobs_by_episode,
             )
 
         manifest = {
@@ -180,6 +193,15 @@ class ExportStore:
                 "artifacts": artifacts,
             }
         )
+
+    @staticmethod
+    def _video_blobs(dataset_id: str, episode: EpisodeDetail) -> dict[str, bytes]:
+        blobs: dict[str, bytes] = {}
+        for camera in episode.camera_names:
+            blob = store.get_video_blob(dataset_id, episode.episode_index, camera)
+            if blob is not None:
+                blobs[camera] = blob
+        return blobs
 
 
 exports = ExportStore()

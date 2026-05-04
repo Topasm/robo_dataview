@@ -17,6 +17,9 @@ STATS_JSON_PATH = Path("meta/stats.json")
 EPISODES_PARQUET_PATH = Path("meta/episodes/chunk-000/file-000.parquet")
 EPISODES_JSONL_PATH = Path("meta/episodes/chunk-000/file-000.jsonl")
 DATA_INDEX_JSONL_PATH = Path("data/chunk-000/file-000.index.jsonl")
+DATA_PARQUET_PATH = Path("data/chunk-000/file-000.parquet")
+DATA_JSONL_PATH = Path("data/chunk-000/file-000.jsonl")
+VIDEO_INDEX_JSONL_PATH = Path("videos/video_index.jsonl")
 ANNOTATIONS_JSONL_PATH = Path("annotations/annotations.jsonl")
 VALIDATION_JSON_PATH = Path("validation.json")
 
@@ -28,12 +31,15 @@ def write_lerobot_v3_snapshot(
     episodes: list[EpisodeDetail],
     annotations_by_episode: dict[int, list[AnnotationRecord]],
     version_description: str | None,
+    timeseries_by_episode: dict[int, dict[str, Any]] | None = None,
+    video_blobs_by_episode: dict[int, dict[str, bytes]] | None = None,
 ) -> dict[str, Any]:
-    """Write a deterministic LeRobot v3-oriented metadata snapshot.
+    """Write a deterministic LeRobot v3-oriented snapshot.
 
-    This is not a full Parquet/MP4 materialization. It creates the v3 directory
-    contract and enough metadata for Robot Data Studio to validate selected
-    subsets before the optional `lerobot`/`pyarrow` export path is available.
+    The exporter always writes the v3 metadata contract and accepted annotation
+    rows. When episode time-series and video blobs are provided, it also writes
+    frame rows and camera MP4 artifacts. Frame Parquet is written when optional
+    `pyarrow` is installed; JSONL remains the mandatory fallback.
     """
 
     root = export_dir / "lerobot_v3"
@@ -52,22 +58,37 @@ def write_lerobot_v3_snapshot(
     episodes_jsonl_path = root / EPISODES_JSONL_PATH
     episodes_parquet_path = root / EPISODES_PARQUET_PATH
     data_index_path = root / DATA_INDEX_JSONL_PATH
+    data_jsonl_path = root / DATA_JSONL_PATH
+    data_parquet_path = root / DATA_PARQUET_PATH
+    video_index_path = root / VIDEO_INDEX_JSONL_PATH
     annotations_path = root / ANNOTATIONS_JSONL_PATH
     validation_path = root / VALIDATION_JSON_PATH
 
     task_rows = _task_rows(episodes)
     episode_rows = _episode_rows(episodes, annotations_by_episode)
+    frame_rows = _frame_rows(episodes, timeseries_by_episode or {})
+    video_rows = _write_video_blobs(root, episodes, video_blobs_by_episode or {})
     annotation_rows = [
         _annotation_row(annotation)
         for annotations in annotations_by_episode.values()
         for annotation in annotations
     ]
+    parquet_files = {
+        "tasks": _write_optional_parquet(tasks_parquet_path, task_rows),
+        "episodes": _write_optional_parquet(episodes_parquet_path, episode_rows),
+        "data": _write_optional_parquet(data_parquet_path, frame_rows),
+    }
+    materialization_status = _materialization_status(
+        frame_rows=frame_rows,
+        data_parquet_written=parquet_files["data"],
+        video_rows=video_rows,
+    )
 
     info = {
         "dataset_id": dataset_id,
         "format": LEROBOT_SNAPSHOT_VERSION,
         "codebase_version": LEROBOT_CODEBASE_VERSION,
-        "materialization_status": "metadata_only",
+        "materialization_status": materialization_status,
         "version_description": version_description,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "total_episodes": len(episodes),
@@ -89,8 +110,10 @@ def write_lerobot_v3_snapshot(
         },
         "paths": {
             "data": "data/chunk-000/file-000.parquet",
+            "data_jsonl": "data/chunk-000/file-000.jsonl",
             "data_index": "data/chunk-000/file-000.index.jsonl",
             "videos": "videos/{camera}/chunk-000/file-000.mp4",
+            "video_index": "videos/video_index.jsonl",
             "tasks": "meta/tasks.parquet",
             "tasks_jsonl": "meta/tasks.jsonl",
             "stats": "meta/stats.json",
@@ -103,6 +126,7 @@ def write_lerobot_v3_snapshot(
             "Full LeRobot v3 export requires optional lerobot and pyarrow dependencies.",
             "This snapshot preserves selected episodes, tasks, offsets, and accepted annotations.",
             "The official v3 metadata parquet files are written when pyarrow is installed.",
+            "Frame data JSONL and camera MP4 blobs are materialized when available.",
         ],
     }
 
@@ -111,19 +135,17 @@ def write_lerobot_v3_snapshot(
     _write_jsonl(tasks_jsonl_path, task_rows)
     _write_jsonl(episodes_jsonl_path, episode_rows)
     _write_jsonl(data_index_path, _data_index_rows(episode_rows))
+    _write_jsonl(data_jsonl_path, frame_rows)
+    _write_jsonl(video_index_path, video_rows)
     _write_jsonl(annotations_path, annotation_rows)
 
-    parquet_files = {
-        "tasks": _write_optional_parquet(tasks_parquet_path, task_rows),
-        "episodes": _write_optional_parquet(episodes_parquet_path, episode_rows),
-    }
     validation = validate_lerobot_v3_snapshot(root)
     validation_path.write_text(json.dumps(validation, indent=2, sort_keys=True), encoding="utf-8")
 
     return {
         "format": LEROBOT_SNAPSHOT_VERSION,
         "root": str(root),
-        "materialization_status": "metadata_only",
+        "materialization_status": materialization_status,
         "validation": validation,
         "files": {
             "info": str(info_path),
@@ -132,9 +154,16 @@ def write_lerobot_v3_snapshot(
             "tasks_jsonl": str(tasks_jsonl_path),
             "episodes": str(episodes_parquet_path) if parquet_files["episodes"] else None,
             "episodes_jsonl": str(episodes_jsonl_path),
+            "data": str(data_parquet_path) if parquet_files["data"] else None,
+            "data_jsonl": str(data_jsonl_path),
             "data_index": str(data_index_path),
+            "video_index": str(video_index_path),
             "annotations": str(annotations_path),
             "validation": str(validation_path),
+        },
+        "materialized": {
+            "frame_rows": len(frame_rows),
+            "video_files": len(video_rows),
         },
     }
 
@@ -185,11 +214,7 @@ def read_lerobot_snapshot_episodes(root: Path, dataset_id: str | None = None) ->
 
 
 def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
-    """Validate the local metadata snapshot without requiring LeRobot itself.
-
-    The current exporter intentionally produces a metadata-only snapshot, so the
-    report distinguishes metadata contract health from full LeRobot loadability.
-    """
+    """Validate the local snapshot without requiring LeRobot itself."""
 
     info_path = root / "meta" / "info.json"
     paths = {
@@ -199,7 +224,10 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         "tasks_jsonl": root / "meta" / "tasks.jsonl",
         "episodes_parquet": root / EPISODES_PARQUET_PATH,
         "episodes_jsonl": root / EPISODES_JSONL_PATH,
+        "data_parquet": root / DATA_PARQUET_PATH,
+        "data_jsonl": root / DATA_JSONL_PATH,
         "data_index": root / DATA_INDEX_JSONL_PATH,
+        "video_index": root / VIDEO_INDEX_JSONL_PATH,
         "annotations": root / ANNOTATIONS_JSONL_PATH,
     }
     present = {name: path.exists() for name, path in paths.items()}
@@ -221,6 +249,9 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
     info = json.loads(info_path.read_text(encoding="utf-8"))
     episode_rows = _read_episode_rows(root)
     data_index_rows = _read_jsonl(paths["data_index"]) if present["data_index"] else []
+    data_rows = _read_jsonl(paths["data_jsonl"]) if present["data_jsonl"] else []
+    video_rows = _read_jsonl(paths["video_index"]) if present["video_index"] else []
+    materialization_status = str(info.get("materialization_status") or "metadata_only")
 
     if info.get("codebase_version") != LEROBOT_CODEBASE_VERSION:
         warnings.append(f"codebase_version is {info.get('codebase_version')!r}, expected {LEROBOT_CODEBASE_VERSION!r}")
@@ -234,6 +265,11 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         errors.append("total_episodes does not match episode metadata rows")
     if len(data_index_rows) != len(episode_rows):
         errors.append("data index row count does not match episode metadata rows")
+    frame_materialized_statuses = {"data_jsonl", "data_jsonl_mp4", "parquet", "parquet_mp4"}
+    if materialization_status in frame_materialized_statuses and not (
+        present["data_parquet"] or present["data_jsonl"]
+    ):
+        errors.append("materialized export is missing data rows")
 
     previous_end = 0
     for row in data_index_rows:
@@ -246,19 +282,30 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
             errors.append(f"data index end is before start at episode {row.get('episode_index')}")
             break
         previous_end = end
+    if data_rows and len(data_rows) != previous_end:
+        errors.append("materialized frame row count does not match indexed frame count")
 
     if not present["tasks_parquet"]:
         warnings.append("pyarrow not available or parquet task metadata was not written")
     if not present["episodes_parquet"]:
         warnings.append("pyarrow not available or parquet episode metadata was not written")
-    warnings.append("metadata-only snapshot is not directly loadable by LeRobotDataset until data/video shards are materialized")
+    if materialization_status == "metadata_only":
+        warnings.append("metadata-only snapshot is not directly loadable by LeRobotDataset until data/video shards are materialized")
+    elif not present["data_parquet"]:
+        warnings.append("frame data was written as JSONL only; pyarrow is required for Parquet training shards")
+    if video_rows:
+        missing_videos = [row["video_file"] for row in video_rows if not (root / row["video_file"]).exists()]
+        if missing_videos:
+            errors.append(f"video index references missing files: {missing_videos[:3]}")
 
     return {
         "metadata_ok": not errors,
-        "lerobot_loadable": False,
-        "materialization_status": str(info.get("materialization_status") or "metadata_only"),
+        "lerobot_loadable": bool(not errors and present["data_parquet"]),
+        "materialization_status": materialization_status,
         "episode_count": len(episode_rows),
         "frame_count": sum(int(row.get("length") or 0) for row in episode_rows),
+        "materialized_frame_count": len(data_rows),
+        "materialized_video_count": len(video_rows),
         "files": {name: str(path) for name, path in paths.items()},
         "present": present,
         "errors": errors,
@@ -323,6 +370,87 @@ def _data_index_rows(episode_rows: list[dict[str, Any]]) -> list[dict[str, Any]]
     ]
 
 
+def _frame_rows(
+    episodes: list[EpisodeDetail],
+    timeseries_by_episode: dict[int, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for episode in episodes:
+        timeseries = timeseries_by_episode.get(episode.episode_index)
+        if timeseries is None:
+            continue
+        timestamps = _sequence(timeseries.get("timestamps"))
+        states = _sequence(timeseries.get("states"))
+        actions = _sequence(timeseries.get("actions"))
+        frame_count = max(len(timestamps), len(states), len(actions), episode.length or 0)
+        fps = episode.fps or 20.0
+        for frame_index in range(frame_count):
+            rows.append(
+                {
+                    "episode_index": episode.episode_index,
+                    "frame_index": frame_index,
+                    "timestamp": _timestamp_at(timestamps, frame_index, fps),
+                    "task_index": episode.task_index,
+                    "observation.state": _numeric_list_at(states, frame_index),
+                    "action": _numeric_list_at(actions, frame_index),
+                }
+            )
+    return rows
+
+
+def _write_video_blobs(
+    root: Path,
+    episodes: list[EpisodeDetail],
+    video_blobs_by_episode: dict[int, dict[str, bytes]],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for episode in episodes:
+        camera_blobs = video_blobs_by_episode.get(episode.episode_index, {})
+        for camera, blob in sorted(camera_blobs.items()):
+            if not blob:
+                continue
+            camera_dir = root / "videos" / _safe_path_name(camera) / "chunk-000"
+            camera_dir.mkdir(parents=True, exist_ok=True)
+            relative_path = (
+                Path("videos")
+                / _safe_path_name(camera)
+                / "chunk-000"
+                / f"episode_{episode.episode_index:06d}.mp4"
+            )
+            path = root / relative_path
+            path.write_bytes(blob)
+            rows.append(
+                {
+                    "episode_index": episode.episode_index,
+                    "camera": camera,
+                    "video_file": relative_path.as_posix(),
+                    "file_size_bytes": len(blob),
+                }
+            )
+    return rows
+
+
+def _materialization_status(
+    *,
+    frame_rows: list[dict[str, Any]],
+    data_parquet_written: bool,
+    video_rows: list[dict[str, Any]],
+) -> str:
+    has_frames = bool(frame_rows)
+    has_videos = bool(video_rows)
+    if data_parquet_written and has_videos:
+        return "parquet_mp4"
+    if data_parquet_written:
+        return "parquet"
+    if has_frames and has_videos:
+        return "data_jsonl_mp4"
+    if has_frames:
+        return "data_jsonl"
+    if has_videos:
+        return "mp4_only"
+    return "metadata_only"
+
+
 def _annotation_row(annotation: AnnotationRecord) -> dict[str, Any]:
     row = model_dump(annotation)
     row["source"] = annotation.source.value
@@ -341,9 +469,45 @@ def _common_fps(episodes: list[EpisodeDetail]) -> float | None:
 
 def _empty_stats() -> dict[str, Any]:
     return {
-        "note": "Statistics are not materialized in the metadata-only export.",
+        "note": "Statistics are not materialized by the current exporter.",
         "features": {},
     }
+
+
+def _sequence(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    try:
+        return list(value)
+    except TypeError:
+        return []
+
+
+def _timestamp_at(timestamps: list[Any], frame_index: int, fps: float) -> float:
+    if frame_index < len(timestamps) and isinstance(timestamps[frame_index], (int, float)):
+        return float(timestamps[frame_index])
+    return frame_index / fps
+
+
+def _numeric_list_at(values: list[Any], frame_index: int) -> list[float] | None:
+    if frame_index >= len(values):
+        return None
+    value = values[frame_index]
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return [float(value)]
+    try:
+        return [float(item) for item in value]
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_path_name(value: str) -> str:
+    safe = "".join(char if char.isalnum() or char in "._-" else "_" for char in value.strip())
+    return safe.strip("._-") or "camera"
 
 
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:

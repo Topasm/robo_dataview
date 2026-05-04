@@ -122,10 +122,16 @@ export type ExportArtifacts = {
       lerobot_loadable?: boolean;
       episode_count?: number;
       frame_count?: number;
+      materialized_frame_count?: number;
+      materialized_video_count?: number;
       errors?: string[];
       warnings?: string[];
     };
     files?: Record<string, string | null>;
+    materialized?: {
+      frame_rows?: number;
+      video_files?: number;
+    };
   };
 };
 

@@ -252,7 +252,7 @@ can be resolved from version rows.
 
 ## LeRobot v3 export snapshot
 
-`format=lerobot` exports currently write a metadata-only v3-oriented snapshot:
+`format=lerobot` exports currently write a LeRobot v3-oriented snapshot:
 
 ```text
 lerobot_v3/
@@ -264,15 +264,19 @@ lerobot_v3/
 │  └─ episodes/chunk-000/
 │     ├─ file-000.parquet        # when pyarrow is installed
 │     └─ file-000.jsonl          # fallback/readability copy
-├─ data/chunk-000/file-000.index.jsonl
+├─ data/chunk-000/
+│  ├─ file-000.parquet           # when pyarrow is installed
+│  ├─ file-000.jsonl             # fallback/readability copy
+│  └─ file-000.index.jsonl
 ├─ videos/
+│  ├─ video_index.jsonl
+│  └─ <camera>/chunk-000/episode_<index>.mp4
 ├─ annotations/annotations.jsonl
 └─ validation.json
 ```
 
 The snapshot follows the LeRobot v3 directory contract for selected episodes and
-accepted annotations. It now writes official metadata parquet files when
-`pyarrow` is installed, but it is still not a full Parquet/MP4 materialization:
-`data/chunk-*/file-*.parquet` and `videos/<camera>/chunk-*/file-*.mp4` are not
-materialized yet. Full materialization needs the optional `lerobot`, `pyarrow`,
-and video encoding dependencies.
+accepted annotations. It writes frame JSONL and available camera MP4 blobs, and
+also writes Parquet shards when `pyarrow` is installed. Full official
+`LeRobotDataset` loadability still needs validation against the optional
+`lerobot` package and its exact v3 expectations.

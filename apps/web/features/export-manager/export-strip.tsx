@@ -37,6 +37,12 @@ export function ExportStrip({ episodeIndex, exportRecord, onCreateExport }: Expo
                 {validation.episode_count ?? 0} / frames {validation.frame_count ?? 0}
               </span>
             ) : null}
+            {lerobotArtifact.materialized ? (
+              <span>
+                data rows {lerobotArtifact.materialized.frame_rows ?? 0} / videos{" "}
+                {lerobotArtifact.materialized.video_files ?? 0}
+              </span>
+            ) : null}
           </div>
         ) : null}
       </div>
