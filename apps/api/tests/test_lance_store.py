@@ -68,6 +68,7 @@ class FakeDataset:
         columns: list[str] | None = None,
         filter: str | None = None,
         limit: int | None = None,
+        **_: object,
     ) -> FakeScanner:
         rows = self._rows
         if filter and filter.startswith("episode_index = "):
@@ -229,6 +230,177 @@ class LanceDatasetStoreTest(unittest.TestCase):
         video_blob = store.get_video_blob(record.dataset_id, 42, "cam_high")
 
         self.assertEqual(video_blob, b"sparse-index-video")
+
+    def test_video_blob_resolves_observation_image_camera_suffix(self) -> None:
+        episode_rows = [
+            {
+                "episode_index": 0,
+                "task_index": 3,
+                "fps": 20.0,
+                "timestamps": [0.0],
+                "observation_images_cam_high_video_blob": b"prefixed-video",
+            },
+        ]
+        fake_tables = {
+            "/datasets/prefixed/episodes.lance": FakeDataset(
+                episode_rows,
+                list(episode_rows[0].keys()),
+            ),
+            "/datasets/prefixed/frames.lance": FakeDataset([], ["episode_index"]),
+            "/datasets/prefixed/videos.lance": FakeDataset([], ["camera_angle", "video_blob"]),
+        }
+        sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+
+        store = LanceDatasetStore()
+        record = store.open_dataset(DatasetOpenRequest(uri="/datasets/prefixed", name="prefixed"))
+        video_blob = store.get_video_blob(record.dataset_id, 0, "cam_high")
+
+        self.assertEqual(video_blob, b"prefixed-video")
+
+    def test_video_blob_falls_back_to_videos_lance_episode_rows(self) -> None:
+        episode_rows = [
+            {
+                "episode_index": 0,
+                "task_index": 3,
+                "fps": 20.0,
+                "timestamps": [0.0],
+            },
+            {
+                "episode_index": 1,
+                "task_index": 3,
+                "fps": 20.0,
+                "timestamps": [0.0],
+            },
+        ]
+        video_rows = [
+            {
+                "episode_index": 0,
+                "camera_angle": "cam_high",
+                "video_blob": b"episode-0-high",
+            },
+            {
+                "episode_index": 1,
+                "camera_angle": "cam_high",
+                "video_blob": b"episode-1-high",
+            },
+            {
+                "episode_index": 0,
+                "camera_angle": "cam_left_wrist",
+                "video_blob": b"episode-0-left",
+            },
+        ]
+        fake_tables = {
+            "/datasets/videos/episodes.lance": FakeDataset(
+                episode_rows,
+                list(episode_rows[0].keys()),
+            ),
+            "/datasets/videos/frames.lance": FakeDataset([], ["episode_index"]),
+            "/datasets/videos/videos.lance": FakeDataset(
+                video_rows,
+                list(video_rows[0].keys()),
+            ),
+        }
+        sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+
+        store = LanceDatasetStore()
+        record = store.open_dataset(DatasetOpenRequest(uri="/datasets/videos", name="videos"))
+        summary = store.get_summary(record.dataset_id)
+        detail = store.get_episode(record.dataset_id, 0)
+        high_blob = store.get_video_blob(record.dataset_id, 1, "cam_high")
+        left_blob = store.get_video_blob(record.dataset_id, 0, "cam_left_wrist")
+
+        self.assertIsNotNone(summary)
+        self.assertEqual(summary.camera_names, ["cam_high", "cam_left_wrist"])
+        self.assertIsNotNone(detail)
+        self.assertEqual(detail.camera_names, ["cam_high", "cam_left_wrist"])
+        self.assertEqual(high_blob, b"episode-1-high")
+        self.assertEqual(left_blob, b"episode-0-left")
+
+    def test_video_blob_falls_back_to_videos_lance_shard_refs(self) -> None:
+        episode_rows = [
+            {
+                "episode_index": 3,
+                "task_index": 3,
+                "fps": 20.0,
+                "timestamps": [0.0],
+                "videos/cam_high/chunk_index": 2,
+                "videos/cam_high/file_index": 5,
+            },
+        ]
+        video_rows = [
+            {
+                "camera_angle": "cam_high",
+                "chunk_index": 2,
+                "file_index": 4,
+                "video_blob": b"wrong-file",
+            },
+            {
+                "camera_angle": "cam_high",
+                "chunk_index": 2,
+                "file_index": 5,
+                "video_blob": b"shard-video",
+            },
+            {
+                "camera_angle": "cam_left_wrist",
+                "chunk_index": 2,
+                "file_index": 5,
+                "video_blob": b"wrong-camera",
+            },
+        ]
+        fake_tables = {
+            "/datasets/shards/episodes.lance": FakeDataset(
+                episode_rows,
+                list(episode_rows[0].keys()),
+            ),
+            "/datasets/shards/frames.lance": FakeDataset([], ["episode_index"]),
+            "/datasets/shards/videos.lance": FakeDataset(
+                video_rows,
+                list(video_rows[0].keys()),
+            ),
+        }
+        sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+
+        store = LanceDatasetStore()
+        record = store.open_dataset(DatasetOpenRequest(uri="/datasets/shards", name="shards"))
+        video_blob = store.get_video_blob(record.dataset_id, 3, "cam_high")
+
+        self.assertEqual(video_blob, b"shard-video")
+
+    def test_episode_video_columns_take_precedence_over_videos_lance(self) -> None:
+        episode_rows = [
+            {
+                "episode_index": 0,
+                "task_index": 3,
+                "fps": 20.0,
+                "timestamps": [0.0],
+                "cam_high_video_blob": b"episode-table-video",
+            },
+        ]
+        video_rows = [
+            {
+                "episode_index": 0,
+                "camera_angle": "cam_high",
+                "video_blob": b"videos-table-video",
+            },
+        ]
+        fake_tables = {
+            "/datasets/precedence/episodes.lance": FakeDataset(
+                episode_rows,
+                list(episode_rows[0].keys()),
+            ),
+            "/datasets/precedence/frames.lance": FakeDataset([], ["episode_index"]),
+            "/datasets/precedence/videos.lance": FakeDataset(
+                video_rows,
+                list(video_rows[0].keys()),
+            ),
+        }
+        sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+
+        store = LanceDatasetStore()
+        record = store.open_dataset(DatasetOpenRequest(uri="/datasets/precedence", name="precedence"))
+        video_blob = store.get_video_blob(record.dataset_id, 0, "cam_high")
+
+        self.assertEqual(video_blob, b"episode-table-video")
 
     def test_filter_search_evaluates_basic_episode_predicates(self) -> None:
         store = LanceDatasetStore()

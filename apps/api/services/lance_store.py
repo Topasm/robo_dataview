@@ -29,6 +29,10 @@ ACTION_COLUMNS = ("actions", "action")
 TIMESTAMP_COLUMNS = ("timestamps", "timestamp")
 FRAME_INDEX_COLUMNS = ("frame_index", "frame_idx", "index")
 FRAME_TIMESTAMP_COLUMNS = ("timestamp", "timestamps")
+VIDEO_CAMERA_COLUMNS = ("camera_angle", "camera", "camera_name", "video_key")
+VIDEO_BLOB_COLUMNS = ("video_blob", "blob", "mp4_blob", "video")
+VIDEO_CHUNK_COLUMNS = ("chunk_index", "chunk")
+VIDEO_FILE_COLUMNS = ("file_index", "file")
 EPISODE_TEXT_COLUMNS = ("episode_caption", "caption", "language_instruction", "instruction")
 FILTER_ALIASES = {
     "success": "success_label",
@@ -297,6 +301,7 @@ def _camera_names_from_schema(names: list[str]) -> list[str]:
 
 
 def _video_column_for_camera(names: list[str], camera: str) -> str | None:
+    normalized_camera = _normalize_camera_key(camera)
     candidates = (
         f"{camera}_video_blob",
         f"{camera}_video",
@@ -307,6 +312,63 @@ def _video_column_for_camera(names: list[str], camera: str) -> str | None:
     for candidate in candidates:
         if candidate in names:
             return candidate
+    for name in names:
+        if not _looks_like_video_blob_column(name):
+            continue
+        base = _video_column_base_name(name)
+        if _normalize_camera_key(base) == normalized_camera:
+            return name
+        if _normalize_camera_key(base).endswith(f"_{normalized_camera}"):
+            return name
+    return None
+
+
+def _looks_like_video_blob_column(name: str) -> bool:
+    lower_name = name.lower()
+    return (
+        lower_name.endswith("_video_blob")
+        or lower_name.endswith("_mp4_blob")
+        or lower_name in {"video_blob", "mp4_blob"}
+    )
+
+
+def _video_column_base_name(name: str) -> str:
+    for suffix in ("_video_blob", "_mp4_blob", "_video", "_mp4"):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
+
+def _normalize_camera_key(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    return re.sub(r"[^a-z0-9]+", "_", text).strip("_")
+
+
+def _camera_matches(left: Any, right: str) -> bool:
+    normalized_left = _normalize_camera_key(left)
+    normalized_right = _normalize_camera_key(right)
+    return bool(
+        normalized_left == normalized_right
+        or normalized_left.endswith(f"_{normalized_right}")
+        or normalized_right.endswith(f"_{normalized_left}")
+    )
+
+
+def _video_shard_ref(row: dict[str, Any], camera: str) -> tuple[int, int] | None:
+    camera_keys = {
+        camera,
+        _normalize_camera_key(camera),
+    }
+    for key in list(camera_keys):
+        if key.startswith("observation_images_"):
+            camera_keys.add(key.removeprefix("observation_images_"))
+        else:
+            camera_keys.add(f"observation_images_{key}")
+    for key in camera_keys:
+        chunk = _int_or_none(row.get(f"videos/{key}/chunk_index"))
+        file_index = _int_or_none(row.get(f"videos/{key}/file_index"))
+        if chunk is not None and file_index is not None:
+            return chunk, file_index
     return None
 
 
@@ -647,25 +709,34 @@ class LanceDatasetStore:
             return None
         schema = bundle.schemas["episodes"]
         column = _video_column_for_camera(schema, camera)
-        if column is None:
-            return None
         dataset = bundle.tables["episodes"]
 
-        row = _read_episode_row_by_index(
+        episode_row = _read_episode_row_by_index(
             dataset,
             episode_index,
-            columns=["episode_index", column],
+            columns=_metadata_columns(schema, include_arrays=False),
         )
-        if row is not None:
-            blob = _blob_to_bytes(row.get(column))
-            if blob is not None:
-                return blob
+        if column is not None:
+            row = _read_episode_row_by_index(
+                dataset,
+                episode_index,
+                columns=["episode_index", column],
+            )
+            if row is not None:
+                blob = _blob_to_bytes(row.get(column))
+                if blob is not None:
+                    return blob
 
-        if hasattr(dataset, "take_blobs"):
+        if column is not None and hasattr(dataset, "take_blobs"):
             try:
                 offset_rows = _read_rows(dataset, columns=["episode_index"], limit=1, offset=episode_index)
                 if not offset_rows or int(offset_rows[0].get("episode_index", -1)) != episode_index:
-                    return None
+                    return self._get_video_blob_from_videos_table(
+                        bundle,
+                        episode_row,
+                        episode_index,
+                        camera,
+                    )
                 blob_file = dataset.take_blobs(column, indices=[episode_index])[0]
                 try:
                     return blob_file.read()
@@ -673,7 +744,7 @@ class LanceDatasetStore:
                     blob_file.close()
             except Exception:
                 pass
-        return None
+        return self._get_video_blob_from_videos_table(bundle, episode_row, episode_index, camera)
 
     def get_episode_timeseries(
         self,
@@ -897,7 +968,7 @@ class LanceDatasetStore:
         frames = bundle.tables.get("frames")
         frame_count = _count_rows(frames) if frames is not None else 0
         episode_schema = bundle.schemas["episodes"]
-        camera_names = _camera_names_from_schema(episode_schema)
+        camera_names = self._camera_names_for_bundle(bundle)
         sample = self._get_lance_episode(record.dataset_id, bundle, 0)
         if frame_count == 0 and sample is not None and sample.length is not None:
             frame_count = sum(episode.length or 0 for episode in self._list_lance_episodes(record.dataset_id, bundle, 10000, 0))
@@ -950,6 +1021,7 @@ class LanceDatasetStore:
             dataset_id,
             self._episode_payload(dataset_id, row, bundle.schemas["episodes"]),
         )
+        payload["camera_names"] = self._camera_names_for_bundle(bundle)
         return EpisodeDetail(**payload)
 
     def _get_lance_state_action_summary(
@@ -1172,6 +1244,136 @@ class LanceDatasetStore:
             "duration_seconds": (length / float(fps)) if length is not None and fps else None,
             "language_instruction": row.get("language_instruction") or row.get("instruction"),
         }
+
+    def _camera_names_for_bundle(self, bundle: LanceBundle) -> list[str]:
+        cameras = set(_camera_names_from_schema(bundle.schemas["episodes"]))
+        cameras.update(self._camera_names_from_videos_table(bundle))
+        return sorted(cameras)
+
+    def _camera_names_from_videos_table(self, bundle: LanceBundle) -> list[str]:
+        videos = bundle.tables.get("videos")
+        if videos is None or _count_rows(videos) == 0:
+            return []
+        schema = bundle.schemas.get("videos", [])
+        camera_name = _first_present_name(schema, VIDEO_CAMERA_COLUMNS)
+        if camera_name is None:
+            return []
+        rows = self._read_video_rows(
+            videos,
+            schema,
+            columns=[camera_name],
+            limit=min(_count_rows(videos), 1000),
+        )
+        return sorted(
+            {
+                str(row[camera_name])
+                for row in rows
+                if row.get(camera_name) not in (None, "")
+            }
+        )
+
+    def _get_video_blob_from_videos_table(
+        self,
+        bundle: LanceBundle,
+        episode_row: dict[str, Any] | None,
+        episode_index: int,
+        camera: str,
+    ) -> bytes | None:
+        videos = bundle.tables.get("videos")
+        if videos is None or _count_rows(videos) == 0:
+            return None
+        schema = bundle.schemas.get("videos", [])
+        camera_name = _first_present_name(schema, VIDEO_CAMERA_COLUMNS)
+        blob_name = _first_present_name(schema, VIDEO_BLOB_COLUMNS)
+        if camera_name is None or blob_name is None:
+            return None
+
+        chunk_name = _first_present_name(schema, VIDEO_CHUNK_COLUMNS)
+        file_name = _first_present_name(schema, VIDEO_FILE_COLUMNS)
+        columns = _unique_columns(
+            schema,
+            [
+                "episode_index",
+                camera_name,
+                chunk_name,
+                file_name,
+                "relative_path",
+                "filename",
+                blob_name,
+            ],
+        )
+        if "episode_index" in schema:
+            rows = self._read_video_rows(
+                videos,
+                schema,
+                columns=columns,
+                filter=f"episode_index = {episode_index}",
+                limit=1000,
+            )
+        else:
+            rows = self._read_video_rows(videos, schema, columns=columns, limit=1000)
+
+        shard_ref = _video_shard_ref(episode_row or {}, camera)
+        for row in rows:
+            if not _camera_matches(row.get(camera_name), camera):
+                continue
+            row_episode_index = _int_or_none(row.get("episode_index"))
+            if row_episode_index is not None and row_episode_index != episode_index:
+                continue
+            if row_episode_index is None and shard_ref is not None:
+                row_chunk = _int_or_none(row.get(chunk_name)) if chunk_name else None
+                row_file = _int_or_none(row.get(file_name)) if file_name else None
+                if row_chunk != shard_ref[0] or row_file != shard_ref[1]:
+                    continue
+            elif row_episode_index is None:
+                continue
+            blob = _blob_to_bytes(row.get(blob_name))
+            if blob is not None:
+                return blob
+        return None
+
+    def _read_video_rows(
+        self,
+        dataset: Any,
+        schema: list[str],
+        *,
+        columns: list[str],
+        limit: int,
+        filter: str | None = None,
+    ) -> list[dict[str, Any]]:
+        selected_columns = _unique_columns(schema, columns)
+        if hasattr(dataset, "scanner"):
+            try:
+                scanner = dataset.scanner(
+                    columns=selected_columns or None,
+                    filter=filter,
+                    limit=limit,
+                    blob_handling="all_binary",
+                )
+                return _rows_from_table(scanner.to_table())
+            except TypeError:
+                scanner = dataset.scanner(
+                    columns=selected_columns or None,
+                    filter=filter,
+                    limit=limit,
+                )
+                return _rows_from_table(scanner.to_table())
+            except Exception:
+                pass
+        rows = _read_rows(
+            dataset,
+            columns=selected_columns or None,
+            limit=limit,
+            offset=0,
+        )
+        if filter and filter.startswith("episode_index = "):
+            episode_index = int(filter.removeprefix("episode_index = "))
+            rows = [
+                row
+                for row in rows
+                if _int_or_none(row.get("episode_index")) == episode_index
+            ]
+        return rows
 
     def _apply_episode_overrides(self, dataset_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         episode_index = int(payload.get("episode_index", 0))

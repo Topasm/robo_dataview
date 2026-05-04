@@ -127,9 +127,13 @@ sha256: string
 video_blob: binary
 ```
 
-Current status: `videos.lance` is part of the target architecture, but the
-current playback path reads video blobs directly from `episodes.lance` columns.
-Provenance lookup and SHA256 validation through `videos.lance` are not wired.
+Current status: playback prefers per-episode video blob columns from
+`episodes.lance`, including `observation_images_<camera>_video_blob` layouts.
+If those are absent, the API can fall back to `videos.lance` rows when they
+carry an `episode_index` plus camera column, or when episode metadata contains
+LeRobot-style `videos/<video_key>/chunk_index` and
+`videos/<video_key>/file_index` shard references. SHA256 validation is not wired
+yet.
 
 ## annotations.lance
 
