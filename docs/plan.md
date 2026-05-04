@@ -181,7 +181,7 @@ Definition of done:
 - [x] Add external-open fallback link for generated recordings.
 - [x] Log camera video or synchronized image frames to Rerun.
 - [x] Add cache key by dataset version, episode index, and visualization config.
-- [ ] Move `.rrd` generation into a worker.
+- [x] Move `.rrd` generation into a worker.
 
 ### P4.5: Frame API
 

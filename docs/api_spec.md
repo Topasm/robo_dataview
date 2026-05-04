@@ -258,12 +258,13 @@ GET  /rerun/recordings/{session_id}.rrd
 }
 ```
 
-Current implementation generates `.rrd` cache files synchronously. The Rerun
-recording logs scalar timeline data for timestamps, state norm, and action norm.
-When episode camera MP4 blobs are available, the recording also logs Rerun
-`AssetVideo` entries and per-frame `VideoFrameReference` rows. Responses include
-`cache_key`, `cache_hit`, and `camera_count`; the same dataset, episode, mode,
-and visualization config reuses the existing `.rrd` file.
+Current implementation invokes a local Rerun cache worker synchronously; P8 will
+move that worker behind a real queue. The Rerun recording logs scalar timeline
+data for timestamps, state norm, and action norm. When episode camera MP4 blobs
+are available, the recording also logs Rerun `AssetVideo` entries and per-frame
+`VideoFrameReference` rows. Responses include `cache_key`, `cache_hit`, and
+`camera_count`; the same dataset, episode, mode, and visualization config reuses
+the existing `.rrd` file.
 
 ## Jobs
 
