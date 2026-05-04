@@ -54,6 +54,24 @@ locally with:
 RUN_OFFICIAL_EXPORT_TESTS=1 python3 -m pytest apps/api/tests/test_official_export_dependencies.py -q
 ```
 
+The manual GitHub Actions workflow `Real dataset export smoke` installs
+`.[lance,export,video,dev]`, opens a real Lance dataset URI, exports the first
+N episodes to a LeRobot snapshot, and verifies the artifact with the official
+loader. It defaults to `hf://datasets/lance-format/lerobot-xvla-soft-fold/data`
+with one episode and no video materialization. The same check can be run
+locally with:
+
+```bash
+RUN_REAL_DATASET_EXPORT_SMOKE=1 \
+REAL_DATASET_URI=hf://datasets/lance-format/lerobot-xvla-soft-fold/data \
+REAL_DATASET_EPISODE_LIMIT=1 \
+REAL_DATASET_EXPORT_VIDEOS=0 \
+python3 -m pytest apps/api/tests/test_real_dataset_export_smoke.py -q
+```
+
+Set `REAL_DATASET_EXPORT_VIDEOS=1` only when the runner has enough bandwidth,
+disk, and time to fetch and validate the selected episodes' MP4 payloads.
+
 ## Environment
 
 Minimum web environment:

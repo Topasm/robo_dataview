@@ -125,8 +125,10 @@ The repository has moved past a pure skeleton. The current MVP path can:
    frame-level Hugging Face `Dataset.save_to_disk()` artifact when optional
    export dependencies are installed. The manual official-dependency workflow
    verifies native HF Dataset round-tripping plus no-video and video-backed
-   LeRobot snapshots with the real official loaders. Exports can target the
-   selected episode or the current train/val/test split.
+   LeRobot snapshots with the real official loaders. An opt-in real-dataset
+   export smoke workflow can also open a Lance dataset URI and validate the
+   exported subset with the official loader. Exports can target the selected
+   episode or the current train/val/test split.
 10. Render the main web operations UI with dataset, episode, video viewer,
    annotation editing, search, Rerun, and export panels.
 
@@ -144,7 +146,7 @@ Known MVP gaps:
   the tiny no-video and video-backed loader fixtures.
 - Native Hugging Face Dataset export is frame-level and optional-dependency
   gated; large real-dataset training compatibility still needs dedicated
-  end-to-end smoke tests beyond the tiny official CI fixtures.
+  end-to-end smoke runs beyond the tiny official CI fixtures.
 - Lance subset export requires optional `pyarrow` and `lance` dependencies and
   fails clearly when they are missing.
 

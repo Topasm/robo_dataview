@@ -99,6 +99,9 @@ Known limits:
 - The manual official-dependency workflow has verified native Hugging Face
   Dataset export and tiny no-video/video-backed LeRobot snapshots against the
   real `datasets` and `lerobot` loaders.
+- A separate opt-in real-dataset export smoke workflow can open a Lance dataset
+  URI, export the first N episodes, and verify the result with the official
+  LeRobot loader.
 - File-backed video ranges stream directly from disk, but embedded Lance blob
   ranges are still sliced after loading the full blob; direct Lance blob range
   streaming is not implemented.
@@ -269,8 +272,9 @@ Definition of done:
 
 ## Recommended Immediate Order
 
-1. Run larger end-to-end LeRobot export smoke tests on real downloaded dataset
-   subsets, beyond the tiny official-dependency CI fixtures.
+1. Run the opt-in real-dataset export smoke workflow on representative
+   downloaded or `hf://` Lance subsets, beyond the tiny official-dependency CI
+   fixtures.
 2. Add cross-modal visual search over compatible CLIP/SigLIP records.
 3. Add direct Lance/object-store byte-range reads for embedded Lance video blobs.
 4. Add object storage support for cache and exports.
