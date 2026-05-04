@@ -18,7 +18,7 @@ Phase 3  Rerun Web Viewer             partial
 Phase 4  Annotation System            done
 Phase 5  VLM Auto-Labeling            partial
 Phase 6  Search and Filtering         partial
-Phase 7  Export and Versioning        partial
+Phase 7  Export and Versioning        done
 ```
 
 Current verified baseline:
@@ -244,12 +244,14 @@ Targets:
 - JSONL captions
 - VLA training format
 
-Current status: partial.
+Current status: done for the local MVP path; larger production dataset
+validation remains a hardening task.
 
 Implemented:
 
 - Selected episode export manifest.
-- Metadata-oriented LeRobot v3 snapshot.
+- LeRobot v3 snapshot with metadata, frame JSONL readability copy, Parquet data
+  shard, task/episode metadata shards, and available MP4 artifacts.
 - Frame JSONL and available camera MP4 artifact materialization.
 - Data Parquet writing uses Hugging Face Dataset feature conversion when
   optional `datasets` is installed, excluding video feature columns from the
@@ -276,6 +278,7 @@ Implemented:
 - Manual official-dependency workflow can generate a tiny MP4 and verify a
   video-backed LeRobot snapshot with the official loader when optional video
   dependencies are installed.
+- Latest manual official-dependency workflow passed against commit `e0c476d`.
 - Queue-backed export jobs through the shared job progress event stream.
 - Queue-backed Rerun session jobs with persisted session records.
 - Accepted annotations only.
@@ -283,6 +286,6 @@ Implemented:
 
 Next:
 
-- Materialize fully LeRobot-loadable Parquet/MP4 artifacts.
-- Run the manual official-dependency workflow on GitHub and fix any loader
-  failures surfaced by the real dependency stack.
+- Scale export validation to real downloaded dataset subsets and larger
+  multi-camera episodes.
+- Add object storage publishing for cache/export artifacts.

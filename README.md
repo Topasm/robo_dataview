@@ -123,8 +123,10 @@ The repository has moved past a pure skeleton. The current MVP path can:
    `lance` dependencies are installed. Lightweight JSONL caption and VLA-style
    trajectory exports are also available. `format=hf_dataset` writes a
    frame-level Hugging Face `Dataset.save_to_disk()` artifact when optional
-   export dependencies are installed. Exports can target the selected episode
-   or the current train/val/test split.
+   export dependencies are installed. The manual official-dependency workflow
+   verifies native HF Dataset round-tripping plus no-video and video-backed
+   LeRobot snapshots with the real official loaders. Exports can target the
+   selected episode or the current train/val/test split.
 10. Render the main web operations UI with dataset, episode, video viewer,
    annotation editing, search, Rerun, and export panels.
 
@@ -138,10 +140,11 @@ Known MVP gaps:
   Parquet shards. Per-frame video references stay in the JSONL readability copy;
   Parquet rows omit video feature columns so video resolution follows LeRobot
   episode metadata. When `lerobot` is installed, validation records the official
-  loader result.
+  loader result; GitHub's manual official-dependency workflow currently passes
+  the tiny no-video and video-backed loader fixtures.
 - Native Hugging Face Dataset export is frame-level and optional-dependency
-  gated; full LeRobot training compatibility still depends on the LeRobot
-  snapshot path and official loader validation.
+  gated; large real-dataset training compatibility still needs dedicated
+  end-to-end smoke tests beyond the tiny official CI fixtures.
 - Lance subset export requires optional `pyarrow` and `lance` dependencies and
   fails clearly when they are missing.
 
