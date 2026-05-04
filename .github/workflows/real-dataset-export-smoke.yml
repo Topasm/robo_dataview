@@ -8,9 +8,13 @@ on:
         required: true
         default: "hf://datasets/lance-format/lerobot-xvla-soft-fold/data"
       episode_limit:
-        description: "Number of leading episodes to export"
+        description: "Number of episodes to export from the selected offset"
         required: true
         default: "1"
+      episode_offset:
+        description: "Episode list offset to start from"
+        required: true
+        default: "0"
       export_videos:
         description: "Also materialize available MP4 video blobs"
         required: true
@@ -18,6 +22,11 @@ on:
         default: false
       require_videos:
         description: "Fail instead of skip when video materialization cannot run"
+        required: true
+        type: boolean
+        default: false
+      require_all_cameras:
+        description: "Fail if any selected episode camera cannot be materialized"
         required: true
         type: boolean
         default: false
@@ -38,8 +47,10 @@ jobs:
           RUN_REAL_DATASET_EXPORT_SMOKE: "1"
           REAL_DATASET_URI: ${{ inputs.dataset_uri }}
           REAL_DATASET_EPISODE_LIMIT: ${{ inputs.episode_limit }}
+          REAL_DATASET_EPISODE_OFFSET: ${{ inputs.episode_offset }}
           REAL_DATASET_EXPORT_VIDEOS: ${{ inputs.export_videos }}
           REAL_DATASET_REQUIRE_VIDEOS: ${{ inputs.require_videos }}
+          REAL_DATASET_REQUIRE_ALL_CAMERAS: ${{ inputs.require_all_cameras }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HUGGINGFACE_HUB_TOKEN: ${{ secrets.HF_TOKEN }}
           HUGGING_FACE_HUB_TOKEN: ${{ secrets.HF_TOKEN }}

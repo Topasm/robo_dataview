@@ -285,9 +285,10 @@ Implemented:
   video-backed LeRobot snapshot with the official loader when optional video
   dependencies are installed.
 - Latest manual official-dependency workflow passed against commit `e0c476d`.
-- Latest opt-in real-dataset export smoke workflow passed against commit
-  `25586d8`, opening the default `xvla-soft-fold` `hf://` Lance URI, exporting
-  one episode, and validating the snapshot with the official loader.
+- Opt-in real-dataset export smoke workflow can open a configured `hf://` Lance
+  URI, export up to 64 episodes from a selected offset, optionally materialize
+  videos, require all selected cameras, and validate the snapshot with the
+  official loader.
 - Queue-backed export jobs through the shared job progress event stream.
 - Queue-backed Rerun session jobs with persisted session records.
 - Optional export artifact publishing to local or `fsspec` destinations through

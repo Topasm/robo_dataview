@@ -58,16 +58,17 @@ RUN_OFFICIAL_EXPORT_TESTS=1 python3 -m pytest apps/api/tests/test_official_expor
 ```
 
 The manual GitHub Actions workflow `Real dataset export smoke` installs
-`.[lance,export,video,dev]`, opens a real Lance dataset URI, exports the first
-N episodes to a LeRobot snapshot, and verifies the artifact with the official
-loader. It defaults to `hf://datasets/lance-format/lerobot-xvla-soft-fold/data`
-with one episode and no video materialization. The same check can be run
-locally with:
+`.[lance,export,video,dev]`, opens a real Lance dataset URI, exports a selected
+episode window to a LeRobot snapshot, and verifies the artifact with the
+official loader. It defaults to
+`hf://datasets/lance-format/lerobot-xvla-soft-fold/data` with one episode from
+offset 0 and no video materialization. The same check can be run locally with:
 
 ```bash
 RUN_REAL_DATASET_EXPORT_SMOKE=1 \
 REAL_DATASET_URI=hf://datasets/lance-format/lerobot-xvla-soft-fold/data \
 REAL_DATASET_EPISODE_LIMIT=1 \
+REAL_DATASET_EPISODE_OFFSET=0 \
 REAL_DATASET_EXPORT_VIDEOS=0 \
 python3 -m pytest apps/api/tests/test_real_dataset_export_smoke.py -q
 ```
@@ -78,7 +79,9 @@ disk, and time to fetch and validate the selected episodes' MP4 payloads. For
 unauthenticated video materialization can hit Hugging Face API rate limits and
 will be skipped by the smoke test. Set `REAL_DATASET_REQUIRE_VIDEOS=1` or the
 workflow's `require_videos` input when video materialization must be a hard
-requirement instead of an environment-dependent skip.
+requirement instead of an environment-dependent skip. Set
+`REAL_DATASET_REQUIRE_ALL_CAMERAS=1` or the workflow's `require_all_cameras`
+input to fail when any selected episode camera cannot be materialized.
 
 ## Environment
 

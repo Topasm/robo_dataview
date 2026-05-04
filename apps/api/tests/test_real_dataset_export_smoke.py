@@ -24,9 +24,11 @@ class RealDatasetExportSmokeTest(unittest.TestCase):
     def test_real_lance_dataset_subset_exports_and_loads_with_official_lerobot(self) -> None:
         dataset_uri = os.environ.get("REAL_DATASET_URI", DEFAULT_REAL_DATASET_URI)
         dataset_name = os.environ.get("REAL_DATASET_NAME", "real-export-smoke")
-        episode_limit = _env_int("REAL_DATASET_EPISODE_LIMIT", default=1, minimum=1, maximum=8)
+        episode_limit = _env_int("REAL_DATASET_EPISODE_LIMIT", default=1, minimum=1, maximum=64)
+        episode_offset = _env_int("REAL_DATASET_EPISODE_OFFSET", default=0, minimum=0, maximum=100000)
         export_videos = _env_bool("REAL_DATASET_EXPORT_VIDEOS", default=False)
         require_videos = _env_bool("REAL_DATASET_REQUIRE_VIDEOS", default=False)
+        require_all_cameras = _env_bool("REAL_DATASET_REQUIRE_ALL_CAMERAS", default=False)
         if _missing_hf_video_token(dataset_uri, export_videos):
             message = (
                 "HF_TOKEN is required for video materialization from hf:// Lance datasets "
@@ -45,7 +47,11 @@ class RealDatasetExportSmokeTest(unittest.TestCase):
         assert summary is not None
         self.assertGreater(summary.episode_count, 0)
 
-        page = dataset_store.list_episode_page(record.dataset_id, limit=episode_limit, offset=0)
+        page = dataset_store.list_episode_page(
+            record.dataset_id,
+            limit=episode_limit,
+            offset=episode_offset,
+        )
         self.assertGreater(len(page.items), 0)
 
         episodes: list[EpisodeDetail] = []
@@ -63,18 +69,26 @@ class RealDatasetExportSmokeTest(unittest.TestCase):
             episodes.append(episode)
             timeseries_by_episode[episode.episode_index] = timeseries
             if export_videos:
-                video_blobs = {
-                    camera: blob
-                    for camera in episode.camera_names
-                    if (blob := _get_video_blob_or_skip(
+                video_blobs: dict[str, bytes] = {}
+                missing_cameras: list[str] = []
+                for camera in episode.camera_names:
+                    blob = _get_video_blob_or_skip(
                         self,
                         dataset_store,
                         dataset_id=record.dataset_id,
                         episode_index=episode.episode_index,
                         camera=camera,
-                    ))
-                    is not None
-                }
+                    )
+                    if blob is None:
+                        missing_cameras.append(camera)
+                    else:
+                        video_blobs[camera] = blob
+                if require_all_cameras:
+                    self.assertEqual(
+                        missing_cameras,
+                        [],
+                        f"missing video blobs for episode {episode.episode_index}: {missing_cameras}",
+                    )
                 self.assertGreater(
                     len(video_blobs),
                     0,
@@ -204,6 +218,26 @@ class RealDatasetSmokeConfigTest(unittest.TestCase):
                     export_videos=False,
                 )
             )
+
+
+class RealDatasetSmokePaginationConfigTest(unittest.TestCase):
+    def test_episode_limit_allows_larger_manual_smoke_subsets(self) -> None:
+        with patch.dict(os.environ, {"REAL_DATASET_EPISODE_LIMIT": "64"}, clear=False):
+            self.assertEqual(
+                _env_int("REAL_DATASET_EPISODE_LIMIT", default=1, minimum=1, maximum=64),
+                64,
+            )
+
+    def test_episode_offset_accepts_nonleading_subset_start(self) -> None:
+        with patch.dict(os.environ, {"REAL_DATASET_EPISODE_OFFSET": "128"}, clear=False):
+            self.assertEqual(
+                _env_int("REAL_DATASET_EPISODE_OFFSET", default=0, minimum=0, maximum=100000),
+                128,
+            )
+
+    def test_require_all_cameras_flag_is_boolean(self) -> None:
+        with patch.dict(os.environ, {"REAL_DATASET_REQUIRE_ALL_CAMERAS": "true"}, clear=False):
+            self.assertTrue(_env_bool("REAL_DATASET_REQUIRE_ALL_CAMERAS", default=False))
 
 
 if __name__ == "__main__":
