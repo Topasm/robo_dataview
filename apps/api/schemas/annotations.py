@@ -1,0 +1,51 @@
+from datetime import datetime
+
+from pydantic import BaseModel, Field, root_validator
+
+from apps.api.schemas.common import AnnotationSource, ReviewStatus
+
+
+class AnnotationCreate(BaseModel):
+    dataset_id: str
+    episode_index: int = Field(..., ge=0)
+    start_frame: int = Field(..., ge=0)
+    end_frame: int = Field(..., ge=0)
+    label_type: str
+    label_value: str
+    source: AnnotationSource = AnnotationSource.human
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    review_status: ReviewStatus = ReviewStatus.pending
+    created_by: str = "local"
+
+    @root_validator(skip_on_failure=True)
+    def validate_range(cls, values: dict[str, object]) -> dict[str, object]:
+        if int(values["end_frame"]) < int(values["start_frame"]):
+            raise ValueError("end_frame must be greater than or equal to start_frame")
+        return values
+
+
+class AnnotationUpdate(BaseModel):
+    start_frame: int | None = Field(default=None, ge=0)
+    end_frame: int | None = Field(default=None, ge=0)
+    label_type: str | None = None
+    label_value: str | None = None
+    source: AnnotationSource | None = None
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    review_status: ReviewStatus | None = None
+    updated_by: str | None = None
+
+
+class AnnotationRecord(BaseModel):
+    annotation_id: str
+    dataset_id: str
+    episode_index: int
+    start_frame: int
+    end_frame: int
+    label_type: str
+    label_value: str
+    source: AnnotationSource
+    confidence: float
+    review_status: ReviewStatus
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
