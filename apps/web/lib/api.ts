@@ -5,6 +5,7 @@ import type {
   EpisodeTimeseries,
   ExportRecord,
   FilterPreset,
+  FrameListPage,
   FrameRecord,
   JobRecord,
   RerunSession,
@@ -360,6 +361,17 @@ export async function fetchFrameWindow(
   endFrame: number,
   limit = 32,
 ): Promise<FrameRecord[]> {
+  const page = await fetchFrameWindowPage(datasetId, episodeIndex, startFrame, endFrame, limit);
+  return page.items;
+}
+
+export async function fetchFrameWindowPage(
+  datasetId: string,
+  episodeIndex: number,
+  startFrame: number,
+  endFrame: number,
+  limit = 32,
+): Promise<FrameListPage> {
   const query = new URLSearchParams({
     dataset_id: datasetId,
     episode_index: String(episodeIndex),
@@ -368,7 +380,7 @@ export async function fetchFrameWindow(
     limit: String(limit)
   });
   const row = await request<FrameListResponse>(`/frames?${query}`);
-  return row.items.map(toFrameRecord);
+  return toFrameListPage(row);
 }
 
 export async function updateFrameRecord(
@@ -750,6 +762,19 @@ function toFrameRecord(raw: FrameRecordResponse): FrameRecord {
       confidence: label.confidence,
       reviewStatus: label.review_status
     }))
+  };
+}
+
+function toFrameListPage(raw: FrameListResponse): FrameListPage {
+  return {
+    datasetId: raw.dataset_id,
+    episodeIndex: raw.episode_index,
+    frameCount: raw.frame_count,
+    startFrame: raw.start_frame,
+    endFrame: raw.end_frame,
+    limit: raw.limit,
+    returnedCount: raw.returned_count,
+    items: raw.items.map(toFrameRecord)
   };
 }
 

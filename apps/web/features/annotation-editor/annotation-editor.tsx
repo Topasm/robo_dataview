@@ -4,7 +4,14 @@ import { Bot, Check, GitBranch, Plus, Save, Trash2, X } from "lucide-react";
 import { StatusPill } from "@/components/status-pill";
 import { FrameMetadataPanel } from "@/features/episode-viewer/frame-metadata-panel";
 import { FrameTablePanel } from "@/features/episode-viewer/frame-table-panel";
-import type { Episode, FrameRecord, JobRecord, ReviewStatus, SegmentAnnotation } from "@/lib/types";
+import type {
+  Episode,
+  FrameListPage,
+  FrameRecord,
+  JobRecord,
+  ReviewStatus,
+  SegmentAnnotation
+} from "@/lib/types";
 
 type AnnotationDraft = {
   labelType: string;
@@ -25,6 +32,9 @@ type EpisodeLabelDraft = {
 type AnnotationEditorProps = {
   episode: Episode;
   annotations: SegmentAnnotation[];
+  frameBrowserLimit: number;
+  frameBrowserStart: number;
+  framePage: FrameListPage | null;
   frameRows: FrameRecord[];
   frameRowsStatus: "idle" | "loading" | "ready" | "error";
   selectedFrame: number;
@@ -36,6 +46,9 @@ type AnnotationEditorProps = {
   onRunVlmLabel: () => Promise<void>;
   onSplitSegment: (annotation: SegmentAnnotation) => Promise<void>;
   onUpdateEpisodeLabels: (draft: EpisodeLabelDraft) => Promise<void>;
+  onSetFrameBrowserLimit: (limit: number) => void;
+  onSetFrameBrowserStart: (startFrame: number) => void;
+  onUpdateFrameBadFlag: (frameIndex: number, isBadFrame: boolean) => Promise<void>;
   onUpdateSelectedFrameLabel: (
     labelType: string,
     labelValue: string,
@@ -50,6 +63,9 @@ type AnnotationEditorProps = {
 export function AnnotationEditor({
   episode,
   annotations,
+  frameBrowserLimit,
+  frameBrowserStart,
+  framePage,
   frameRows,
   frameRowsStatus,
   selectedFrame,
@@ -61,6 +77,9 @@ export function AnnotationEditor({
   onRunVlmLabel,
   onSplitSegment,
   onUpdateEpisodeLabels,
+  onSetFrameBrowserLimit,
+  onSetFrameBrowserStart,
+  onUpdateFrameBadFlag,
   onUpdateSelectedFrameLabel,
   onUpdateSelectedFrameBadFlag,
   onUpdateSegment,
@@ -277,8 +296,15 @@ export function AnnotationEditor({
       />
 
       <FrameTablePanel
+        frameCount={framePage?.frameCount ?? episode.length}
+        frameLimit={frameBrowserLimit}
+        frameStart={frameBrowserStart}
         frames={frameRows}
+        onFrameLimitChange={onSetFrameBrowserLimit}
+        onFrameStartChange={onSetFrameBrowserStart}
         onSelectFrame={onSelectFrame}
+        onSetBadFrame={onUpdateFrameBadFlag}
+        returnedCount={framePage?.returnedCount ?? frameRows.length}
         selectedFrame={selectedFrame}
         status={frameRowsStatus}
       />

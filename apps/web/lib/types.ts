@@ -94,6 +94,17 @@ export type FrameRecord = {
   labels: FrameLabel[];
 };
 
+export type FrameListPage = {
+  datasetId: string;
+  episodeIndex: number;
+  frameCount: number;
+  startFrame: number;
+  endFrame: number | null;
+  limit: number;
+  returnedCount: number;
+  items: FrameRecord[];
+};
+
 export type SegmentAnnotation = {
   id: string;
   datasetId: string;

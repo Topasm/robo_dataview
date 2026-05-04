@@ -15,7 +15,7 @@ import {
   fetchEpisodes,
   fetchFilterPresets,
   fetchFrameRecord,
-  fetchFrameWindow,
+  fetchFrameWindowPage,
   filterSearch,
   fullTextSearch,
   openDataset,
@@ -31,6 +31,7 @@ import type {
   Episode,
   ExportRecord,
   FilterPreset,
+  FrameListPage,
   FrameRecord,
   JobRecord,
   RerunSession,
@@ -93,6 +94,9 @@ export function useStudioData() {
   const [selectedFrameIndex, setSelectedFrameIndex] = useState(0);
   const [selectedFrameRecord, setSelectedFrameRecord] = useState<FrameRecord | null>(null);
   const [frameRows, setFrameRows] = useState<FrameRecord[]>([]);
+  const [framePage, setFramePage] = useState<FrameListPage | null>(null);
+  const [frameBrowserStart, setFrameBrowserStart] = useState(0);
+  const [frameBrowserLimit, setFrameBrowserLimit] = useState(32);
   const [frameRowsStatus, setFrameRowsStatus] = useState<"idle" | "loading" | "ready" | "error">(
     "idle"
   );
@@ -190,6 +194,8 @@ export function useStudioData() {
     setSelectedFrameIndex(0);
     setSelectedFrameRecord(null);
     setFrameRows([]);
+    setFramePage(null);
+    setFrameBrowserStart(0);
     setFrameRowsStatus("idle");
     setSelectedFrameStatus("idle");
   }, [selectedEpisode.datasetId, selectedEpisode.episodeIndex]);
@@ -236,34 +242,38 @@ export function useStudioData() {
   useEffect(() => {
     if (selectedEpisode.length <= 0) {
       setFrameRows([]);
+      setFramePage(null);
       setFrameRowsStatus("idle");
       return;
     }
 
     let isMounted = true;
-    const windowSize = 16;
     const maxFrame = Math.max(0, selectedEpisode.length - 1);
-    const centerFrame = Math.max(0, Math.min(maxFrame, Math.round(selectedFrameIndex)));
-    const startFrame = Math.max(0, Math.min(centerFrame - 7, Math.max(0, maxFrame - windowSize + 1)));
-    const endFrame = Math.min(maxFrame, startFrame + windowSize - 1);
+    const startFrame = Math.max(
+      0,
+      Math.min(Math.round(frameBrowserStart), Math.max(0, maxFrame - frameBrowserLimit + 1))
+    );
+    const endFrame = Math.min(maxFrame, startFrame + frameBrowserLimit - 1);
     setFrameRowsStatus("loading");
     const timeoutId = window.setTimeout(() => {
-      fetchFrameWindow(
+      fetchFrameWindowPage(
         selectedEpisode.datasetId,
         selectedEpisode.episodeIndex,
         startFrame,
         endFrame,
-        windowSize
+        frameBrowserLimit
       )
-        .then((frames) => {
+        .then((page) => {
           if (isMounted) {
-            setFrameRows(frames);
+            setFramePage(page);
+            setFrameRows(page.items);
             setFrameRowsStatus("ready");
           }
         })
         .catch(() => {
           if (isMounted) {
             setFrameRows([]);
+            setFramePage(null);
             setFrameRowsStatus("error");
           }
         });
@@ -278,7 +288,8 @@ export function useStudioData() {
     selectedEpisode.episodeIndex,
     selectedEpisode.length,
     annotationRows,
-    selectedFrameIndex
+    frameBrowserLimit,
+    frameBrowserStart
   ]);
 
   useEffect(() => {
@@ -330,6 +341,8 @@ export function useStudioData() {
     setSelectedFrameIndex(0);
     setSelectedFrameRecord(null);
     setFrameRows([]);
+    setFramePage(null);
+    setFrameBrowserStart(0);
     setFrameRowsStatus("idle");
     setSelectedFrameStatus("idle");
     setRerunSession(null);
@@ -340,6 +353,43 @@ export function useStudioData() {
   const handleSelectFrame = useCallback((frameIndex: number) => {
     setSelectedFrameIndex(Math.max(0, Math.round(frameIndex)));
   }, []);
+
+  useEffect(() => {
+    if (selectedEpisode.length <= 0) {
+      return;
+    }
+    const maxFrame = Math.max(0, selectedEpisode.length - 1);
+    const frameIndex = Math.max(0, Math.min(maxFrame, Math.round(selectedFrameIndex)));
+    if (
+      frameIndex < frameBrowserStart ||
+      frameIndex >= frameBrowserStart + frameBrowserLimit
+    ) {
+      const maxStart = Math.max(0, maxFrame - frameBrowserLimit + 1);
+      const pageStart = Math.floor(frameIndex / frameBrowserLimit) * frameBrowserLimit;
+      setFrameBrowserStart(Math.max(0, Math.min(pageStart, maxStart)));
+    }
+  }, [frameBrowserLimit, frameBrowserStart, selectedEpisode.length, selectedFrameIndex]);
+
+  const handleSetFrameBrowserStart = useCallback(
+    (startFrame: number) => {
+      const maxFrame = Math.max(0, selectedEpisode.length - 1);
+      const maxStart = Math.max(0, maxFrame - frameBrowserLimit + 1);
+      setFrameBrowserStart(Math.max(0, Math.min(Math.round(startFrame), maxStart)));
+    },
+    [frameBrowserLimit, selectedEpisode.length]
+  );
+
+  const handleSetFrameBrowserLimit = useCallback(
+    (limit: number) => {
+      const nextLimit = Math.max(8, Math.min(128, Math.round(limit)));
+      const maxFrame = Math.max(0, selectedEpisode.length - 1);
+      const maxStart = Math.max(0, maxFrame - nextLimit + 1);
+      const nextStart = Math.floor(Math.max(0, selectedFrameIndex) / nextLimit) * nextLimit;
+      setFrameBrowserLimit(nextLimit);
+      setFrameBrowserStart(Math.max(0, Math.min(nextStart, maxStart)));
+    },
+    [selectedEpisode.length, selectedFrameIndex]
+  );
 
   async function handleCreateSegment(draft: SegmentDraft) {
     const previousAnnotations = annotationRows;
@@ -644,7 +694,9 @@ export function useStudioData() {
   }
 
   async function handleUpdateSelectedFrameBadFlag(isBadFrame: boolean) {
-    await handleUpdateSelectedFrameLabel("bad_frame", "bad_frame", isBadFrame);
+    const maxFrame = Math.max(0, selectedEpisode.length - 1);
+    const frameIndex = Math.max(0, Math.min(maxFrame, Math.round(selectedFrameIndex)));
+    await handleUpdateFrameLabel(frameIndex, "bad_frame", "bad_frame", isBadFrame);
   }
 
   async function handleUpdateSelectedFrameLabel(
@@ -654,19 +706,46 @@ export function useStudioData() {
   ) {
     const maxFrame = Math.max(0, selectedEpisode.length - 1);
     const frameIndex = Math.max(0, Math.min(maxFrame, Math.round(selectedFrameIndex)));
+    await handleUpdateFrameLabel(frameIndex, labelType, labelValue, labelEnabled);
+  }
+
+  async function handleUpdateFrameBadFlag(frameIndex: number, isBadFrame: boolean) {
+    await handleUpdateFrameLabel(frameIndex, "bad_frame", "bad_frame", isBadFrame);
+  }
+
+  async function handleUpdateFrameLabel(
+    frameIndex: number,
+    labelType: string,
+    labelValue: string,
+    labelEnabled: boolean,
+  ) {
+    const maxFrame = Math.max(0, selectedEpisode.length - 1);
+    const boundedFrameIndex = Math.max(0, Math.min(maxFrame, Math.round(frameIndex)));
     const updated = await updateFrameRecord(
       selectedEpisode.datasetId,
       selectedEpisode.episodeIndex,
-      frameIndex,
+      boundedFrameIndex,
       {
         labelType,
         labelValue,
         labelEnabled
       }
     );
-    setSelectedFrameRecord(updated);
+    if (updated.frameIndex === Math.round(selectedFrameIndex)) {
+      setSelectedFrameRecord(updated);
+    }
     setFrameRows((current) =>
       current.map((frame) => (frame.frameIndex === updated.frameIndex ? updated : frame))
+    );
+    setFramePage((current) =>
+      current
+        ? {
+            ...current,
+            items: current.items.map((frame) =>
+              frame.frameIndex === updated.frameIndex ? updated : frame
+            )
+          }
+        : current
     );
     setSelectedFrameStatus("ready");
     const apiAnnotations = await fetchAnnotations(selectedEpisode.datasetId, selectedEpisode.episodeIndex);
@@ -679,6 +758,9 @@ export function useStudioData() {
     episodeRows,
     exportRecord,
     filterPresets,
+    frameBrowserLimit,
+    frameBrowserStart,
+    framePage,
     frameRows,
     frameRowsStatus,
     rerunSession,
@@ -707,6 +789,9 @@ export function useStudioData() {
     handleSemanticSearch,
     handleSplitSegment,
     handleUpdateEpisodeLabels,
+    handleUpdateFrameBadFlag,
+    handleSetFrameBrowserLimit,
+    handleSetFrameBrowserStart,
     handleUpdateSelectedFrameLabel,
     handleUpdateSelectedFrameBadFlag,
     handleUpdateReviewStatus,

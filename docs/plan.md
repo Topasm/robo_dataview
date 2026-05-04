@@ -89,8 +89,9 @@ Known limits:
   range streaming is not implemented.
 - Remote object-store/HF video path streaming and SHA256 video validation are not
   wired yet.
-- General frame-table mutation and full frame-table browser UX are not
-  implemented yet.
+- Full frame-table browser UX exists for local frame review, but raw
+  `frames.lance` table mutation remains annotation-backed rather than rewriting
+  source rows.
 
 ## Next Milestone
 
@@ -195,7 +196,7 @@ Definition of done:
 - [x] Add selected-episode frame browser panel.
 - [x] Add selected-frame bad-frame mutation endpoint.
 - [x] Add selected-frame exact-label mutation endpoint.
-- [ ] Add full frame-table browser and raw frame mutation workflow.
+- [x] Add full frame-table browser and raw frame mutation workflow.
 
 ### P5: Search and Filtering
 

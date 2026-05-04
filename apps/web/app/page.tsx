@@ -19,6 +19,9 @@ export default function Home() {
     episodeRows,
     exportRecord,
     filterPresets,
+    frameBrowserLimit,
+    frameBrowserStart,
+    framePage,
     frameRows,
     frameRowsStatus,
     rerunSession,
@@ -45,8 +48,11 @@ export default function Home() {
     handleSelectEpisode,
     handleSelectFrame,
     handleSemanticSearch,
+    handleSetFrameBrowserLimit,
+    handleSetFrameBrowserStart,
     handleSplitSegment,
     handleUpdateEpisodeLabels,
+    handleUpdateFrameBadFlag,
     handleUpdateSelectedFrameLabel,
     handleUpdateSelectedFrameBadFlag,
     handleUpdateSegment,
@@ -134,12 +140,18 @@ export default function Home() {
               episode={selectedEpisode}
               frameRows={frameRows}
               frameRowsStatus={frameRowsStatus}
+              frameBrowserLimit={frameBrowserLimit}
+              frameBrowserStart={frameBrowserStart}
+              framePage={framePage}
               onCreateSegment={handleCreateSegment}
               onDeleteSegment={handleDeleteSegment}
               onRunVlmLabel={handleRunVlmLabel}
               onSelectFrame={handleSelectFrame}
               onSplitSegment={handleSplitSegment}
               onUpdateEpisodeLabels={handleUpdateEpisodeLabels}
+              onUpdateFrameBadFlag={handleUpdateFrameBadFlag}
+              onSetFrameBrowserLimit={handleSetFrameBrowserLimit}
+              onSetFrameBrowserStart={handleSetFrameBrowserStart}
               onUpdateSelectedFrameLabel={handleUpdateSelectedFrameLabel}
               onUpdateSelectedFrameBadFlag={handleUpdateSelectedFrameBadFlag}
               onUpdateSegment={handleUpdateSegment}
