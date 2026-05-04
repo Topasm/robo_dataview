@@ -32,6 +32,11 @@ observation_images_cam_right_wrist
 The target examples below use shorter camera names for readability. Loader code
 should keep supporting generic camera columns instead of hard-coding names.
 
+The shared `packages/robot_schema` package currently defines local curation
+schemas for `annotations.lance`, `embeddings.lance`, and `versions.lance`. It
+does not yet define the full raw `frames.lance`, `episodes.lance`, or
+`videos.lance` schemas as code.
+
 ## frames.lance
 
 Purpose:
@@ -112,6 +117,10 @@ file_size_bytes: int64
 sha256: string
 video_blob: binary
 ```
+
+Current status: `videos.lance` is part of the target architecture, but the
+current playback path reads video blobs directly from `episodes.lance` columns.
+Provenance lookup and SHA256 validation through `videos.lance` are not wired.
 
 ## annotations.lance
 

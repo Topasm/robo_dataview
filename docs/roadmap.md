@@ -28,7 +28,10 @@ Current verified baseline:
 - `xvla-soft-fold` is indexed through the API.
 - Dataset summary reports 1,542 episodes, 2,852,512 frames, 20 FPS, and three
   camera streams.
-- Sample Rerun `.rrd` generation works.
+- Browser video endpoint supports MP4 byte ranges by slicing loaded episode
+  blobs.
+- Rerun `.rrd` generation and React web viewer embedding work for scalar
+  timelines.
 
 ## Phase 0: Specification
 
@@ -76,12 +79,20 @@ Features:
 
 Current status: partial.
 
+Implemented:
+
+- Active/selectable camera `<video>` pane.
+- Loading/error states for video metadata.
+- Browser-compatible MP4 byte-range serving.
+- State/action summary cards.
+
 Next:
 
-- Render actual multi-camera video panes when episode video blobs exist.
+- Add simultaneous synchronized multi-camera layout.
 - Add frame scrubber with timestamp/frame synchronization.
 - Add state/action chart visualization instead of summary-only display.
 - Add episode-level metadata edit endpoints and UI.
+- Wire play/previous/next controls to the active video/timeline.
 
 ## Phase 3: Rerun Web Viewer
 
@@ -102,10 +113,10 @@ Implemented:
 
 - Backend creates `.rrd` cache files for state/action scalar timelines.
 - API serves generated recordings.
+- Web embeds ready `.rrd` recordings through `@rerun-io/web-viewer-react`.
 
 Next:
 
-- Wire web Rerun panel to open generated `.rrd` URLs in the embedded viewer.
 - Add camera/video logging to Rerun recordings.
 - Cache by dataset version, episode index, and visualization config.
 - Add async Rerun cache worker.
@@ -133,11 +144,13 @@ Implemented:
 - JSONL persistence.
 - Optional Lance mirror.
 - Review status updates.
+- Segment edit form and midpoint split action in the web UI.
 
 Next:
 
 - Add episode-level label editing.
-- Add drag/split/merge timeline editing.
+- Add drag/split/merge timeline editing beyond the current midpoint split
+  button.
 - Add bad frame/range labels.
 - Add annotation history and audit fields beyond `created_at`/`updated_at`.
 

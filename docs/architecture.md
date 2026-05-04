@@ -63,8 +63,8 @@ apps/api
   Optional Lance mirroring when pyarrow/lance are installed
 
 packages/robot_schema
-  Shared Lance table column definitions
-  PyArrow schema builders for annotations, embeddings, versions
+  Lance table column definitions for annotations, embeddings, versions
+  PyArrow schema builders for those local curation tables
 
 workers
   Heuristic VLM proposal generator
@@ -80,12 +80,14 @@ Implemented now:
   `videos.lance` style roots.
 - LeRobot v3 metadata snapshot import/export helpers.
 - Dataset summary, schema, episode list/detail, state/action summary, and video
-  blob endpoints.
-- Annotation CRUD with range validation and persisted JSONL.
+  blob endpoints, including HTTP Range support for browser video playback.
+- Annotation CRUD with range validation, persisted JSONL, web edit actions, and
+  midpoint split scaffolding.
 - Optional `annotations.lance`, `embeddings.lance`, and `versions.lance`
   mirroring.
 - Deterministic text-embedding semantic search for local development.
-- Rerun `.rrd` cache generation for state/action scalar timelines.
+- Rerun `.rrd` cache generation for state/action scalar timelines and web
+  viewer embedding through `@rerun-io/web-viewer-react`.
 - Metadata-oriented LeRobot v3 export manifest and version lineage.
 - Web UI orchestration via `useStudioData`.
 
@@ -97,6 +99,13 @@ Not implemented yet:
 - LanceDB vector index search.
 - Full frame table browser and frame-level mutation workflow.
 - Full LeRobot Parquet/MP4 materialization.
+- Episode-level mutation API for captions, success/failure, quality, split, and
+  failure reason.
+- Frame-accurate scrubber, wired playback controls, and real time-series plots.
+- Direct byte-range reads from Lance blobs. The API currently loads the full
+  episode-table video blob and slices HTTP ranges in process.
+- `videos.lance` provenance lookup in the video endpoint. Video playback reads
+  episode video blob columns today.
 - Production auth, multi-user review assignment, and audit history.
 
 ## Design Principles
@@ -130,7 +139,8 @@ Workers
 
 Rerun
   Owns replay visualization artifacts only. Annotation source of truth stays in
-  the annotation store.
+  the annotation store. Current recordings are regenerated per session and log
+  timestamp, state norm, and action norm scalars only.
 ```
 
 ## Runtime Flow

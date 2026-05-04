@@ -37,11 +37,14 @@ Working:
 - `xvla-soft-fold` summary and episode list through API.
 - Dataset schema endpoint.
 - Episode detail, video blob, and state/action summary endpoints.
+- MP4 video blob serving with `HEAD` and byte-range support.
 - Annotation CRUD with JSONL persistence and optional Lance mirroring.
+- Segment edit and midpoint split actions in the web UI.
 - Search filter endpoint.
 - Deterministic text-embedding semantic search endpoint.
 - VLM-label job endpoint with heuristic pending annotation proposals.
 - Rerun session endpoint that generates `.rrd` cache files.
+- Rerun React viewer embed for ready `.rrd` sessions.
 - Export endpoint that writes a manifest and metadata-oriented LeRobot v3
   snapshot.
 - Version lineage JSONL and optional Lance mirror.
@@ -67,6 +70,11 @@ Known limits:
 - VLM labeling is heuristic scaffolding.
 - Semantic search is text-hash based, not LanceDB vector search.
 - Export does not yet materialize full LeRobot Parquet/MP4 artifacts.
+- Episode-level label form fields are visible but not saved.
+- Playback buttons and scrubber are not wired to frame/time state.
+- Video ranges are sliced after loading the full episode blob; direct Lance blob
+  range streaming is not implemented.
+- `videos.lance` provenance lookup is not used by playback yet.
 
 ## Next Milestone
 
@@ -86,10 +94,11 @@ export the selected reviewed episode.
 
 Definition of done:
 
-- Real camera video panes render for available episode videos.
+- A selectable active camera video pane renders for available episode videos.
+- Synchronized multi-camera playback can be inspected or is clearly planned.
 - Episode selection loads metadata, annotations, and state/action summary.
 - Timeline can create and update phase segments.
-- Rerun panel opens the generated `.rrd` in an embedded or linked viewer path.
+- Rerun panel opens the generated `.rrd` in an embedded viewer path.
 - Export includes accepted annotations and produces a validation summary.
 - The full path is covered by API tests plus web typecheck/build.
 
@@ -119,11 +128,16 @@ Definition of done:
 
 ### P2: Basic Viewer
 
-- [ ] Render N-camera video panes from API video blob URLs.
-- [ ] Add loading/error state per camera.
-- [ ] Add playback controls: play, pause, rate, seek.
+- [x] Render selectable active camera video pane from API video blob URLs.
+- [x] Add loading/error state per camera.
+- [x] Add backend `HEAD`/Range support for browser video playback.
+- [ ] Replace full-blob video loading with true range-aware Lance/object-store
+  reads.
+- [ ] Add synchronized N-camera playback layout.
+- [ ] Wire playback controls: play, pause, rate, seek, previous/next segment.
 - [ ] Add frame/time scrubber.
-- [ ] Add state/action chart.
+- [x] Add state/action summary cards.
+- [ ] Add state/action time-series chart.
 - [ ] Add selected-frame metadata panel.
 - [ ] Add thumbnail or keyframe preview cache.
 
@@ -133,9 +147,12 @@ Definition of done:
 - [x] Review status updates.
 - [x] JSONL persistence.
 - [x] Optional Lance mirroring.
+- [x] Segment edit form.
+- [x] Midpoint split action.
 - [ ] Add episode-level label update endpoint.
 - [ ] Add quality score, success/failure, failure reason editing.
-- [ ] Add bad frame/range labels.
+- [x] Add label type choices for bad range, important frame, and failure event.
+- [ ] Add frame-aware bad range authoring from the timeline.
 - [ ] Add timeline drag/split/merge controls.
 - [ ] Add annotation history.
 - [ ] Add optimistic UI rollback on mutation failure.
@@ -144,8 +161,8 @@ Definition of done:
 
 - [x] Generate `.rrd` cache files from episode time series.
 - [x] Serve `.rrd` files through API.
-- [ ] Embed Rerun Web Viewer in the web panel.
-- [ ] Add external-open fallback link for generated recordings.
+- [x] Embed Rerun Web Viewer in the web panel.
+- [x] Add external-open fallback link for generated recordings.
 - [ ] Log camera video or synchronized image frames to Rerun.
 - [ ] Add cache key by dataset version, episode index, and visualization config.
 - [ ] Move `.rrd` generation into a worker.
@@ -198,9 +215,9 @@ Definition of done:
 
 ## Recommended Immediate Order
 
-1. Make the basic viewer real: camera panes, scrubber, state/action plot.
+1. Make the basic viewer real: synchronized camera layout, scrubber, state/action plot.
 2. Add episode-level annotation editing.
-3. Make Rerun panel open generated recordings.
+3. Add Rerun cache keys and camera logging.
 4. Add export validation report.
 5. Add keyframe extraction and replace heuristic VLM with a real provider path.
 6. Replace deterministic semantic search with LanceDB vector search.

@@ -143,10 +143,12 @@ Implemented panels:
 - Dataset browser with dataset open control and summary metrics.
 - Episode list with selection.
 - Search/filter bar with filter and semantic search actions.
-- Episode viewer shell.
+- Episode viewer with active camera selection, one `<video>` playback pane,
+  loading and error states.
 - Timeline panel showing segment annotations.
-- Rerun panel that can request a backend session.
-- Annotation editor with create/update/delete review actions.
+- Rerun panel that can request a backend session, link the generated `.rrd`,
+  and embed ready recordings through the Rerun React viewer.
+- Annotation editor with create/update/delete/review actions and midpoint split.
 - Export strip for selected episode export.
 
 Current behavior:
@@ -158,10 +160,11 @@ Current behavior:
 
 Missing UX:
 
-- Real multi-camera synchronized playback controls.
+- Simultaneous multi-camera layout and synchronized playback controls across all
+  camera streams.
 - Frame-accurate scrubber and keyboard navigation.
 - Drag-to-edit timeline segments.
 - Episode-level metadata editor.
 - Batch selection, batch export, and batch VLM job controls.
-- Embedded Rerun viewer control beyond session creation and URL display.
+- Rerun recordings with camera streams and richer robot state visualization.
 - Loading/error states for every mutation.

@@ -46,7 +46,16 @@ GET /episodes/{episode_index}/state-action?dataset_id=...
 `GET /episodes` supports `limit` and `offset` query params.
 
 `GET /episodes/{episode_index}/video/{camera}` streams an MP4 blob when the
-episode table has a matching video blob column.
+episode table has a matching video blob column. It supports `GET` and `HEAD`,
+returns `Accept-Ranges: bytes`, and handles single byte-range requests for
+browser video playback.
+
+Current implementation detail:
+
+- The store reads the full episode-table video blob through `take_blobs` or a
+  row fallback, then the API slices the requested byte range in process.
+- The endpoint does not use `videos.lance` provenance lookup yet.
+- Suffix byte ranges such as `bytes=-500` are not supported.
 
 ## Frames
 
@@ -172,3 +181,5 @@ the same records are mirrored to `versions.lance`.
 - Annotation, embedding, export, and version records are persisted under
   `data/`.
 - Real queue-backed async jobs are planned but not wired yet.
+- The old Lance store semantic-search stub still exists internally, but the API
+  route uses `EmbeddingIndex`.

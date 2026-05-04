@@ -42,23 +42,25 @@ The repository has moved past a pure skeleton. The current MVP path can:
 
 1. Open and index the `lance-format/lerobot-xvla-soft-fold` Lance dataset.
 2. Serve dataset summaries, episode lists, episode details, state/action
-   summaries, and MP4 blobs when available.
+   summaries, and MP4 blobs with HTTP Range support when available.
 3. Store human and generated annotations as JSONL and mirror them to Lance when
    optional Lance dependencies are installed.
-4. Generate Rerun `.rrd` cache files for state/action timeline inspection.
+4. Generate Rerun `.rrd` cache files for state/action timeline inspection and
+   load them through the Rerun React web viewer.
 5. Run basic filter search and deterministic text-embedding semantic search.
 6. Create heuristic VLM-style annotation proposals for review.
 7. Export selected episodes as a metadata-oriented LeRobot v3 snapshot and
    record version lineage.
-8. Render the main web operations UI with dataset, episode, viewer, annotation,
-   search, Rerun, and export panels.
+8. Render the main web operations UI with dataset, episode, video viewer,
+   annotation editing, search, Rerun, and export panels.
 
 Known MVP gaps:
 
 - The frame API is still a placeholder.
-- Multi-camera video playback needs stronger browser UX and seek behavior.
-- Rerun is generated as `.rrd` cache, but the embedded viewer integration is
-  still early.
+- Multi-camera video playback exists, but the scrubber, segment skip buttons,
+  and state/action charts are still shallow.
+- Rerun is embedded, but recordings currently contain scalar state/action
+  timelines rather than synchronized camera video.
 - VLM labeling is heuristic/local scaffolding, not real model inference.
 - Semantic search uses deterministic text hashing, not LanceDB vector indexes.
 - LeRobot export is metadata-oriented and does not yet materialize full
