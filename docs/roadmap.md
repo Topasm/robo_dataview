@@ -273,6 +273,9 @@ Implemented:
   real `datasets.save_to_disk()` / `load_from_disk()`.
 - Manual official-dependency workflow can verify a no-video LeRobot snapshot
   with `LeRobotDataset(repo_id, root=...)`.
+- Manual official-dependency workflow can generate a tiny MP4 and verify a
+  video-backed LeRobot snapshot with the official loader when optional video
+  dependencies are installed.
 - Queue-backed export jobs through the shared job progress event stream.
 - Queue-backed Rerun session jobs with persisted session records.
 - Accepted annotations only.
@@ -281,4 +284,5 @@ Implemented:
 Next:
 
 - Materialize fully LeRobot-loadable Parquet/MP4 artifacts.
-- Extend official loader coverage to video-backed LeRobot snapshots.
+- Run the manual official-dependency workflow on GitHub and fix any loader
+  failures surfaced by the real dependency stack.

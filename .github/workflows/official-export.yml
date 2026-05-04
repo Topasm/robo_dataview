@@ -12,6 +12,6 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install export dependencies
-        run: python3 -m pip install -e ".[export]"
+        run: python3 -m pip install -e ".[export,video]"
       - name: Run official dependency export tests
         run: RUN_OFFICIAL_EXPORT_TESTS=1 python3 -m pytest apps/api/tests/test_official_export_dependencies.py -q
