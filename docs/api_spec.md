@@ -96,7 +96,9 @@ GET /episodes/{episode_index}/timeseries?dataset_id=...
 ```
 
 `PATCH /episodes/{episode_index}/labels` stores curation labels as a local
-overlay without mutating the raw Lance dataset. Supported fields:
+overlay without mutating the raw Lance dataset, and mirrors the overlay to
+`episode_labels.lance` when optional Lance dependencies are installed.
+Supported fields:
 
 ```json
 {

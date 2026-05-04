@@ -39,6 +39,23 @@ ANNOTATIONS_COLUMNS: tuple[ColumnSpec, ...] = (
     ColumnSpec("updated_at", "timestamp_us_utc", nullable=False),
 )
 
+EPISODE_LABELS_COLUMNS: tuple[ColumnSpec, ...] = (
+    ColumnSpec("dataset_id", "string", nullable=False),
+    ColumnSpec("episode_index", "int64", nullable=False),
+    ColumnSpec("caption", "string"),
+    ColumnSpec("success_label", "bool"),
+    ColumnSpec("failure_reason", "string"),
+    ColumnSpec("quality_score", "float32"),
+    ColumnSpec("split", "string"),
+    ColumnSpec(
+        "review_status",
+        "string",
+        description="pending | accepted | rejected | edited",
+    ),
+    ColumnSpec("has_human_label", "bool", nullable=False),
+    ColumnSpec("updated_at", "timestamp_us_utc", nullable=False),
+)
+
 EMBEDDINGS_COLUMNS: tuple[ColumnSpec, ...] = (
     ColumnSpec("embedding_id", "string", nullable=False),
     ColumnSpec("episode_index", "int64", nullable=False),
@@ -83,6 +100,10 @@ def embeddings_column_names() -> list[str]:
     return [column.name for column in EMBEDDINGS_COLUMNS]
 
 
+def episode_labels_column_names() -> list[str]:
+    return [column.name for column in EPISODE_LABELS_COLUMNS]
+
+
 def versions_column_names() -> list[str]:
     return [column.name for column in VERSIONS_COLUMNS]
 
@@ -118,6 +139,12 @@ def build_embeddings_pyarrow_schema() -> Any:
     return _build_pyarrow_schema(EMBEDDINGS_COLUMNS, "embeddings.lance")
 
 
+def build_episode_labels_pyarrow_schema() -> Any:
+    """Return the PyArrow schema used to create `episode_labels.lance`."""
+
+    return _build_pyarrow_schema(EPISODE_LABELS_COLUMNS, "episode_labels.lance")
+
+
 def build_versions_pyarrow_schema() -> Any:
     """Return the PyArrow schema used to create `versions.lance`."""
 
@@ -151,6 +178,8 @@ def _pyarrow_type(pa: Any, dtype: str) -> Any:
         return pa.int64()
     if dtype == "float32":
         return pa.float32()
+    if dtype == "bool":
+        return pa.bool_()
     if dtype == "list_float32":
         return pa.list_(pa.float32())
     if dtype == "timestamp_us_utc":

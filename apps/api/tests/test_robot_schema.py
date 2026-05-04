@@ -6,6 +6,7 @@ from packages.robot_schema import (
     ANNOTATIONS_COLUMNS,
     annotations_column_names,
     embeddings_column_names,
+    episode_labels_column_names,
     versions_column_names,
 )
 
@@ -52,6 +53,23 @@ class RobotSchemaTest(unittest.TestCase):
                 "camera",
                 "source_uri",
                 "content_hash",
+            ],
+        )
+
+    def test_episode_labels_schema_contains_required_columns_in_order(self) -> None:
+        self.assertEqual(
+            episode_labels_column_names(),
+            [
+                "dataset_id",
+                "episode_index",
+                "caption",
+                "success_label",
+                "failure_reason",
+                "quality_score",
+                "split",
+                "review_status",
+                "has_human_label",
+                "updated_at",
             ],
         )
 

@@ -30,6 +30,40 @@ class FakeTable:
         return self._rows
 
 
+class FakePyArrowTable:
+    def __init__(self, rows: list[dict[str, object]], schema: list[object]) -> None:
+        self.rows = rows
+        self.schema = schema
+
+    @classmethod
+    def from_pylist(cls, rows: list[dict[str, object]], schema: list[object]) -> "FakePyArrowTable":
+        return cls(rows, schema)
+
+    @classmethod
+    def from_arrays(cls, arrays: list[object], schema: list[object]) -> "FakePyArrowTable":
+        return cls([], schema)
+
+
+class FakePyArrowModule(types.SimpleNamespace):
+    def __init__(self) -> None:
+        super().__init__(
+            Table=FakePyArrowTable,
+            field=lambda name, type_, nullable=True: types.SimpleNamespace(
+                name=name,
+                type=type_,
+                nullable=nullable,
+            ),
+            schema=lambda fields, metadata=None: fields,
+            string=lambda: "string",
+            int64=lambda: "int64",
+            float32=lambda: "float32",
+            bool_=lambda: "bool",
+            timestamp=lambda unit, tz=None: f"timestamp:{unit}:{tz}",
+            list_=lambda value_type: f"list:{value_type}",
+            array=lambda values, type=None: values,
+        )
+
+
 class FakeScanner:
     def __init__(self, rows: list[dict[str, object]]) -> None:
         self._rows = rows
@@ -128,12 +162,17 @@ class FakeSeekableBlobDataset(FakeDataset):
 class LanceDatasetStoreTest(unittest.TestCase):
     def setUp(self) -> None:
         self.previous_lance = sys.modules.get("lance")
+        self.previous_pyarrow = sys.modules.get("pyarrow")
 
     def tearDown(self) -> None:
         if self.previous_lance is None:
             sys.modules.pop("lance", None)
         else:
             sys.modules["lance"] = self.previous_lance
+        if self.previous_pyarrow is None:
+            sys.modules.pop("pyarrow", None)
+        else:
+            sys.modules["pyarrow"] = self.previous_pyarrow
 
     def test_open_dataset_indexes_episode_summary_and_state_action(self) -> None:
         episode_rows = [
@@ -922,6 +961,44 @@ class LanceDatasetStoreTest(unittest.TestCase):
             self.assertEqual(reloaded.quality_score, 0.35)
             self.assertEqual(reloaded.split, "val")
             self.assertEqual(reloaded.review_status, "edited")
+
+    def test_episode_label_updates_mirror_lance_table_when_available(self) -> None:
+        written: dict[str, object] = {}
+        sys.modules["pyarrow"] = FakePyArrowModule()
+        sys.modules["lance"] = types.SimpleNamespace(
+            write_dataset=lambda table, path, mode: written.update(
+                {"table": table, "path": path, "mode": mode}
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = LanceDatasetStore(
+                label_storage_root=Path(tmpdir),
+                persist_episode_labels=True,
+            )
+            store.update_episode_labels(
+                "sample-xvla-soft-fold",
+                0,
+                EpisodeLabelUpdate(
+                    caption="Reviewed fold",
+                    success_label=None,
+                    quality_score=None,
+                    split=None,
+                    review_status=ReviewStatus.edited,
+                ),
+            )
+
+        table = written["table"]
+        self.assertEqual(written["mode"], "overwrite")
+        self.assertTrue(str(written["path"]).endswith("episode_labels.lance"))
+        self.assertEqual(table.rows[0]["dataset_id"], "sample-xvla-soft-fold")
+        self.assertEqual(table.rows[0]["episode_index"], 0)
+        self.assertEqual(table.rows[0]["caption"], "Reviewed fold")
+        self.assertIsNone(table.rows[0]["success_label"])
+        self.assertIsNone(table.rows[0]["quality_score"])
+        self.assertIsNone(table.rows[0]["split"])
+        self.assertEqual(table.rows[0]["review_status"], "edited")
+        self.assertTrue(table.rows[0]["has_human_label"])
 
 
 if __name__ == "__main__":

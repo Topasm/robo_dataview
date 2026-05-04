@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from importlib import import_module
 import json
 import math
@@ -22,6 +23,7 @@ from apps.api.schemas.frames import FrameRecord
 from apps.api.schemas.search import FilterSearchRequest, SearchResult
 from apps.api.services.lerobot_io import read_lerobot_snapshot_episodes
 from apps.api.services.pydantic_compat import model_dump
+from packages.robot_schema import build_episode_labels_pyarrow_schema
 
 NORM_SERIES_MAX_POINTS = 600
 EPISODE_LABEL_STORAGE_ROOT = Path("data/lance/episode_labels")
@@ -690,11 +692,13 @@ class LanceDatasetStore:
         *,
         persist_episode_labels: bool = False,
         persist_dataset_registry: bool = False,
+        mirror_episode_labels_lance: bool = True,
     ) -> None:
         self.label_storage_root = label_storage_root
         self.dataset_registry_path = dataset_registry_path
         self.persist_episode_labels = persist_episode_labels
         self.persist_dataset_registry = persist_dataset_registry
+        self.mirror_episode_labels_lance = mirror_episode_labels_lance
         self._datasets: dict[str, DatasetRecord] = {}
         self._summaries: dict[str, DatasetSummary] = {}
         self._episodes: dict[str, list[EpisodeDetail]] = {}
@@ -1878,6 +1882,47 @@ class LanceDatasetStore:
             "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
             encoding="utf-8",
         )
+        self._mirror_episode_labels_lance(dataset_dir / "episode_labels.lance", dataset_id, rows)
+
+    def _mirror_episode_labels_lance(
+        self,
+        lance_path: Path,
+        dataset_id: str,
+        rows: list[dict[str, Any]],
+    ) -> None:
+        if not self.mirror_episode_labels_lance:
+            return
+        try:
+            import pyarrow as pa
+            import lance
+        except ImportError:
+            return
+
+        schema = build_episode_labels_pyarrow_schema()
+        updated_at = datetime.now(timezone.utc)
+        lance_rows = [
+            {
+                "dataset_id": dataset_id,
+                "episode_index": row["episode_index"],
+                "caption": row.get("caption"),
+                "success_label": row.get("success_label"),
+                "failure_reason": row.get("failure_reason"),
+                "quality_score": row.get("quality_score"),
+                "split": row.get("split"),
+                "review_status": row.get("review_status"),
+                "has_human_label": bool(row.get("has_human_label", True)),
+                "updated_at": updated_at,
+            }
+            for row in rows
+        ]
+        if lance_rows:
+            table = pa.Table.from_pylist(lance_rows, schema=schema)
+        else:
+            table = pa.Table.from_arrays(
+                [pa.array([], type=field.type) for field in schema],
+                schema=schema,
+            )
+        lance.write_dataset(table, str(lance_path), mode="overwrite")
 
 
 store = LanceDatasetStore(persist_episode_labels=True, persist_dataset_registry=True)

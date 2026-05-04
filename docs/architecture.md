@@ -94,9 +94,10 @@ Implemented now:
 - Annotation CRUD with range validation, persisted JSONL, web edit actions, and
   midpoint split scaffolding.
 - Episode-level label overlay updates for caption, success/failure, failure
-  reason, quality, split, and review status.
-- Optional `annotations.lance`, `embeddings.lance`, and `versions.lance`
-  mirroring.
+  reason, quality, split, and review status, with optional
+  `episode_labels.lance` mirroring.
+- Optional `annotations.lance`, `episode_labels.lance`, `embeddings.lance`, and
+  `versions.lance` mirroring.
 - Text-embedding semantic search with deterministic fallback, optional
   OpenAI-compatible text inference, and optional LanceDB table mirror/query when
   `lancedb` is installed.

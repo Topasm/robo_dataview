@@ -109,6 +109,33 @@ review_status: string
 train_val_test_split: string
 ```
 
+## episode_labels.lance
+
+Purpose:
+
+- Local episode-level review overlays
+- Non-destructive curation labels for raw Lance datasets
+- Export/search inputs for human-reviewed labels
+
+Columns:
+
+```text
+dataset_id: string
+episode_index: int64
+caption: string
+success_label: bool
+failure_reason: string
+quality_score: float32
+split: string
+review_status: string
+has_human_label: bool
+updated_at: timestamp_us_utc
+```
+
+The API keeps raw `episodes.lance` immutable. `PATCH /episodes/{episode}/labels`
+writes JSONL overlays under `data/lance/episode_labels` and mirrors the same
+rows to `episode_labels.lance` when `pyarrow` and `lance` are installed.
+
 ## videos.lance
 
 Purpose:
