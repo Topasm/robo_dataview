@@ -3,6 +3,7 @@ import { Bot, Check, GitBranch, Plus, Save, Trash2, X } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
 import { FrameMetadataPanel } from "@/features/episode-viewer/frame-metadata-panel";
+import { FrameTablePanel } from "@/features/episode-viewer/frame-table-panel";
 import type { Episode, FrameRecord, JobRecord, ReviewStatus, SegmentAnnotation } from "@/lib/types";
 
 type AnnotationDraft = {
@@ -24,6 +25,8 @@ type EpisodeLabelDraft = {
 type AnnotationEditorProps = {
   episode: Episode;
   annotations: SegmentAnnotation[];
+  frameRows: FrameRecord[];
+  frameRowsStatus: "idle" | "loading" | "ready" | "error";
   selectedFrame: number;
   selectedFrameRecord: FrameRecord | null;
   selectedFrameStatus: "idle" | "loading" | "ready" | "error";
@@ -41,11 +44,14 @@ type AnnotationEditorProps = {
   onUpdateSelectedFrameBadFlag: (isBadFrame: boolean) => Promise<void>;
   onUpdateSegment: (annotationId: string, draft: AnnotationDraft) => Promise<void>;
   onUpdateReviewStatus: (annotationId: string, status: ReviewStatus) => Promise<void>;
+  onSelectFrame: (frameIndex: number) => void;
 };
 
 export function AnnotationEditor({
   episode,
   annotations,
+  frameRows,
+  frameRowsStatus,
   selectedFrame,
   selectedFrameRecord,
   selectedFrameStatus,
@@ -58,7 +64,8 @@ export function AnnotationEditor({
   onUpdateSelectedFrameLabel,
   onUpdateSelectedFrameBadFlag,
   onUpdateSegment,
-  onUpdateReviewStatus
+  onUpdateReviewStatus,
+  onSelectFrame
 }: AnnotationEditorProps) {
   const [episodeDraft, setEpisodeDraft] = useState<EpisodeLabelDraft>(() => toEpisodeDraft(episode));
   const [draft, setDraft] = useState<AnnotationDraft>({
@@ -267,6 +274,13 @@ export function AnnotationEditor({
         onSetFrameLabel={onUpdateSelectedFrameLabel}
         selectedFrame={selectedFrame}
         status={selectedFrameStatus}
+      />
+
+      <FrameTablePanel
+        frames={frameRows}
+        onSelectFrame={onSelectFrame}
+        selectedFrame={selectedFrame}
+        status={frameRowsStatus}
       />
 
       <section className="panel-section">

@@ -1451,6 +1451,71 @@ button:disabled {
   white-space: nowrap;
 }
 
+.frame-table-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.frame-table-head,
+.frame-table-row {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 0.9fr 0.8fr 0.8fr 0.8fr 0.8fr;
+}
+
+.frame-table-head {
+  color: var(--muted);
+  font-size: 11px;
+  padding: 0 8px;
+}
+
+.frame-table-body {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  max-height: 264px;
+  overflow-y: auto;
+}
+
+.frame-table-row {
+  background: var(--surface);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12px;
+  min-height: 34px;
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.frame-table-row:last-child {
+  border-bottom: 0;
+}
+
+.frame-table-row:hover,
+.frame-table-row.active {
+  background: #edf6f6;
+}
+
+.frame-table-index,
+.frame-table-flags,
+.frame-table-bad-flag,
+.frame-table-label-flag {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+  min-width: 0;
+}
+
+.frame-table-bad-flag {
+  color: var(--danger);
+}
+
+.frame-table-label-flag {
+  color: var(--accent);
+}
+
 label {
   color: var(--muted);
   display: grid;

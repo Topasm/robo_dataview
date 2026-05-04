@@ -58,6 +58,7 @@ Working:
 - Frame listing endpoint with `frames.lance` preference, episode time-series
   fallback, state/action samples, annotation labels, and bad-frame flags.
 - Selected-frame metadata panel backed by `GET /frames`.
+- Frame browser panel backed by `GET /frames` for the selected episode window.
 - Annotation-backed selected-frame exact-label mutation.
 - Export endpoint that writes a manifest and LeRobot v3-oriented snapshot with
   metadata, frame JSONL, optional Parquet, and available MP4 artifacts.
@@ -191,6 +192,7 @@ Definition of done:
 - [x] Return state/action vectors and norms.
 - [x] Overlay annotation labels and derive bad-frame flags.
 - [x] Add frame metadata panel in the web UI.
+- [x] Add selected-episode frame browser panel.
 - [x] Add selected-frame bad-frame mutation endpoint.
 - [x] Add selected-frame exact-label mutation endpoint.
 - [ ] Add full frame-table browser and raw frame mutation workflow.

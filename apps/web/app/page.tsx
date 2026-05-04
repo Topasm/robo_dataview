@@ -19,6 +19,8 @@ export default function Home() {
     episodeRows,
     exportRecord,
     filterPresets,
+    frameRows,
+    frameRowsStatus,
     rerunSession,
     rerunViewerUrl,
     searchResults,
@@ -130,9 +132,12 @@ export default function Home() {
             <AnnotationEditor
               annotations={annotationRows}
               episode={selectedEpisode}
+              frameRows={frameRows}
+              frameRowsStatus={frameRowsStatus}
               onCreateSegment={handleCreateSegment}
               onDeleteSegment={handleDeleteSegment}
               onRunVlmLabel={handleRunVlmLabel}
+              onSelectFrame={handleSelectFrame}
               onSplitSegment={handleSplitSegment}
               onUpdateEpisodeLabels={handleUpdateEpisodeLabels}
               onUpdateSelectedFrameLabel={handleUpdateSelectedFrameLabel}

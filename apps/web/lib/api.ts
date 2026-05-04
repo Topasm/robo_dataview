@@ -292,6 +292,24 @@ export async function fetchFrameRecord(
   return frame ? toFrameRecord(frame) : null;
 }
 
+export async function fetchFrameWindow(
+  datasetId: string,
+  episodeIndex: number,
+  startFrame: number,
+  endFrame: number,
+  limit = 32,
+): Promise<FrameRecord[]> {
+  const query = new URLSearchParams({
+    dataset_id: datasetId,
+    episode_index: String(episodeIndex),
+    start_frame: String(startFrame),
+    end_frame: String(endFrame),
+    limit: String(limit)
+  });
+  const row = await request<FrameListResponse>(`/frames?${query}`);
+  return row.items.map(toFrameRecord);
+}
+
 export async function updateFrameRecord(
   datasetId: string,
   episodeIndex: number,

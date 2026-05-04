@@ -15,6 +15,7 @@ import {
   fetchEpisodes,
   fetchFilterPresets,
   fetchFrameRecord,
+  fetchFrameWindow,
   filterSearch,
   fullTextSearch,
   openDataset,
@@ -67,6 +68,10 @@ export function useStudioData() {
   const [filterPresets, setFilterPresets] = useState<FilterPreset[]>([]);
   const [selectedFrameIndex, setSelectedFrameIndex] = useState(0);
   const [selectedFrameRecord, setSelectedFrameRecord] = useState<FrameRecord | null>(null);
+  const [frameRows, setFrameRows] = useState<FrameRecord[]>([]);
+  const [frameRowsStatus, setFrameRowsStatus] = useState<"idle" | "loading" | "ready" | "error">(
+    "idle"
+  );
   const [selectedFrameStatus, setSelectedFrameStatus] = useState<
     "idle" | "loading" | "ready" | "error"
   >("idle");
@@ -160,6 +165,8 @@ export function useStudioData() {
   useEffect(() => {
     setSelectedFrameIndex(0);
     setSelectedFrameRecord(null);
+    setFrameRows([]);
+    setFrameRowsStatus("idle");
     setSelectedFrameStatus("idle");
   }, [selectedEpisode.datasetId, selectedEpisode.episodeIndex]);
 
@@ -198,6 +205,55 @@ export function useStudioData() {
     selectedEpisode.datasetId,
     selectedEpisode.episodeIndex,
     selectedEpisode.length,
+    annotationRows,
+    selectedFrameIndex
+  ]);
+
+  useEffect(() => {
+    if (selectedEpisode.length <= 0) {
+      setFrameRows([]);
+      setFrameRowsStatus("idle");
+      return;
+    }
+
+    let isMounted = true;
+    const windowSize = 16;
+    const maxFrame = Math.max(0, selectedEpisode.length - 1);
+    const centerFrame = Math.max(0, Math.min(maxFrame, Math.round(selectedFrameIndex)));
+    const startFrame = Math.max(0, Math.min(centerFrame - 7, Math.max(0, maxFrame - windowSize + 1)));
+    const endFrame = Math.min(maxFrame, startFrame + windowSize - 1);
+    setFrameRowsStatus("loading");
+    const timeoutId = window.setTimeout(() => {
+      fetchFrameWindow(
+        selectedEpisode.datasetId,
+        selectedEpisode.episodeIndex,
+        startFrame,
+        endFrame,
+        windowSize
+      )
+        .then((frames) => {
+          if (isMounted) {
+            setFrameRows(frames);
+            setFrameRowsStatus("ready");
+          }
+        })
+        .catch(() => {
+          if (isMounted) {
+            setFrameRows([]);
+            setFrameRowsStatus("error");
+          }
+        });
+    }, 160);
+
+    return () => {
+      isMounted = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    selectedEpisode.datasetId,
+    selectedEpisode.episodeIndex,
+    selectedEpisode.length,
+    annotationRows,
     selectedFrameIndex
   ]);
 
@@ -249,6 +305,8 @@ export function useStudioData() {
     setSelectedEpisodeIndex(episodeIndex);
     setSelectedFrameIndex(0);
     setSelectedFrameRecord(null);
+    setFrameRows([]);
+    setFrameRowsStatus("idle");
     setSelectedFrameStatus("idle");
     setRerunSession(null);
     setVlmJob(null);
@@ -449,6 +507,9 @@ export function useStudioData() {
       }
     );
     setSelectedFrameRecord(updated);
+    setFrameRows((current) =>
+      current.map((frame) => (frame.frameIndex === updated.frameIndex ? updated : frame))
+    );
     setSelectedFrameStatus("ready");
     const apiAnnotations = await fetchAnnotations(selectedEpisode.datasetId, selectedEpisode.episodeIndex);
     setAnnotationRows(apiAnnotations);
@@ -460,6 +521,8 @@ export function useStudioData() {
     episodeRows,
     exportRecord,
     filterPresets,
+    frameRows,
+    frameRowsStatus,
     rerunSession,
     rerunViewerUrl,
     searchResults,
