@@ -112,6 +112,8 @@ Implemented now:
   review coordination.
 - Optional Redis/RQ queue backend for VLM labeling and visual embedding jobs.
 - Server-sent job progress events at `/api/jobs/{job_id}/events`.
+- Web-side streaming of VLM job progress with API-key-compatible `fetch`
+  event parsing.
 - Rerun `.rrd` cache generation for state/action scalar timelines, optional
   camera video assets, deterministic cache keys, and web viewer embedding
   through `@rerun-io/web-viewer-react`.
@@ -129,7 +131,6 @@ Not implemented yet:
 
 - Durable external database for sessions and app settings.
 - Queue-backed Rerun/export jobs.
-- UI-side EventSource wiring for live job progress updates.
 - Local VLM/video-model inference.
 - Cross-modal visual search over compatible text/image model embeddings.
 - Full LeRobot Parquet/MP4 materialization.

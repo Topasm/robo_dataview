@@ -104,6 +104,8 @@ export function AnnotationEditor({
         annotation.reviewStatus === "pending"
     )
     .sort((left, right) => left.startFrame - right.startFrame);
+  const isVlmJobActive = vlmJob ? !["succeeded", "failed"].includes(vlmJob.status) : false;
+  const vlmProgressPercent = Math.round(Math.max(0, Math.min(1, vlmJob?.progress ?? 0)) * 100);
 
   useEffect(() => {
     setEpisodeDraft(toEpisodeDraft(episode));
@@ -313,7 +315,7 @@ export function AnnotationEditor({
         <div className="section-title">VLM Proposals</div>
         <button
           className="text-button vlm-run-button"
-          disabled={isRunningVlm}
+          disabled={isRunningVlm || isVlmJobActive}
           onClick={handleRunVlmLabel}
           type="button"
         >
@@ -332,6 +334,13 @@ export function AnnotationEditor({
             {vlmJob.rawResponseIds.length > 0 ? (
               <span className="mono">{vlmJob.rawResponseIds.length} raw</span>
             ) : null}
+            {vlmJob.queueJobId ? <span className="mono">queue {vlmJob.queueJobId}</span> : null}
+            <div className="vlm-progress">
+              <div className="progress-track compact-progress-track">
+                <div className="progress-fill" style={{ width: `${vlmProgressPercent}%` }} />
+              </div>
+              <span className="mono">{vlmProgressPercent}%</span>
+            </div>
           </div>
         ) : null}
         <div className="proposal-list">

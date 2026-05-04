@@ -7,6 +7,7 @@ import type {
   FilterPreset,
   FrameListPage,
   FrameRecord,
+  JobProgressEvent,
   JobRecord,
   RerunSession,
   ReviewStatus,
@@ -123,6 +124,15 @@ type JobRecordResponse = {
   raw_response_uri: string | null;
   created_embedding_ids: string[];
   artifact_count: number;
+  queue_job_id: string | null;
+};
+
+type JobProgressEventResponse = {
+  job_id: string;
+  kind: string;
+  status: string;
+  progress: number;
+  message: string | null;
   queue_job_id: string | null;
 };
 
@@ -602,6 +612,46 @@ export function jobEventsUrl(jobId: string): string {
   return `${API_BASE_URL}/jobs/${jobId}/events`;
 }
 
+export async function streamJobEvents(
+  jobId: string,
+  onEvent: (event: JobProgressEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(jobEventsUrl(jobId), {
+    headers: {
+      Accept: "text/event-stream",
+      ...(API_KEY ? { "X-Robot-Data-Studio-API-Key": API_KEY } : {}),
+      ...(REVIEW_USER ? { "X-Robot-Data-Studio-User": REVIEW_USER } : {})
+    },
+    signal
+  });
+  if (!response.ok) {
+    throw new Error(`Job event stream failed: ${response.status} ${response.statusText}`);
+  }
+  if (!response.body) {
+    return;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    const events = splitSseEvents(buffer);
+    buffer = events.remainder;
+    for (const rawEvent of events.items) {
+      const event = parseJobSseEvent(rawEvent);
+      if (event) {
+        onEvent(event);
+      }
+    }
+  }
+}
+
 export async function fetchCurrentUser(): Promise<UserIdentity> {
   const row = await request<UserIdentityResponse>("/users/me");
   return { userId: row.user_id };
@@ -713,6 +763,39 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`API request failed: ${response.status} ${response.statusText}`);
   }
   return response.json() as Promise<T>;
+}
+
+function splitSseEvents(buffer: string): { items: string[]; remainder: string } {
+  const normalized = buffer.replace(/\r\n/g, "\n");
+  const parts = normalized.split("\n\n");
+  const remainder = parts.pop() ?? "";
+  return {
+    items: parts.filter((part) => part.trim().length > 0),
+    remainder
+  };
+}
+
+function parseJobSseEvent(rawEvent: string): JobProgressEvent | null {
+  const lines = rawEvent.split("\n");
+  const eventType = lines
+    .find((line) => line.startsWith("event:"))
+    ?.slice("event:".length)
+    .trim();
+  const dataLines = lines
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice("data:".length).trim());
+  if (eventType !== "job" || dataLines.length === 0) {
+    return null;
+  }
+  const payload = JSON.parse(dataLines.join("\n")) as JobProgressEventResponse;
+  return {
+    jobId: payload.job_id,
+    kind: payload.kind,
+    status: payload.status,
+    progress: payload.progress,
+    message: payload.message,
+    queueJobId: payload.queue_job_id
+  };
 }
 
 function toDatasetSummary(raw: DatasetSummaryResponse): DatasetSummary {

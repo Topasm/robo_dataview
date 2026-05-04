@@ -158,6 +158,15 @@ export type JobRecord = {
   queueJobId: string | null;
 };
 
+export type JobProgressEvent = {
+  jobId: string;
+  kind: string;
+  status: string;
+  progress: number;
+  message: string | null;
+  queueJobId: string | null;
+};
+
 export type ExportRecord = {
   exportId: string;
   datasetId: string;

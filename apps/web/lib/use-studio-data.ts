@@ -20,6 +20,7 @@ import {
   fullTextSearch,
   openDataset,
   semanticSearch,
+  streamJobEvents,
   updateEpisodeLabels,
   updateSegmentAnnotation,
   updateAnnotationReviewStatus,
@@ -33,6 +34,7 @@ import type {
   FilterPreset,
   FrameListPage,
   FrameRecord,
+  JobProgressEvent,
   JobRecord,
   RerunSession,
   ReviewStatus,
@@ -55,6 +57,8 @@ type EpisodeLabelDraft = {
   split: string;
   reviewStatus: ReviewStatus;
 };
+
+const TERMINAL_JOB_STATUSES = new Set(["succeeded", "failed"]);
 
 function sortAnnotations(rows: SegmentAnnotation[]): SegmentAnnotation[] {
   return [...rows].sort((a, b) => a.startFrame - b.startFrame);
@@ -79,6 +83,17 @@ function optimisticAnnotation(
     createdBy: "local",
     assignedTo: null,
     ...patch
+  };
+}
+
+function mergeJobEvent(record: JobRecord, event: JobProgressEvent): JobRecord {
+  return {
+    ...record,
+    kind: event.kind,
+    status: event.status,
+    progress: event.progress,
+    message: event.message,
+    queueJobId: event.queueJobId
   };
 }
 
@@ -121,6 +136,8 @@ export function useStudioData() {
   );
 
   const rerunViewerUrl = process.env.NEXT_PUBLIC_RERUN_IFRAME_URL ?? null;
+  const vlmJobId = vlmJob?.jobId ?? null;
+  const vlmJobStatus = vlmJob?.status ?? null;
 
   useEffect(() => {
     let isMounted = true;
@@ -315,6 +332,55 @@ export function useStudioData() {
       isMounted = false;
     };
   }, [selectedDatasetId]);
+
+  useEffect(() => {
+    if (!vlmJobId || !vlmJobStatus || TERMINAL_JOB_STATUSES.has(vlmJobStatus)) {
+      return;
+    }
+
+    const jobId = vlmJobId;
+    let isActive = true;
+    const controller = new AbortController();
+    streamJobEvents(
+      jobId,
+      (event) => {
+        if (!isActive) {
+          return;
+        }
+        setVlmJob((current) =>
+          current?.jobId === event.jobId ? mergeJobEvent(current, event) : current
+        );
+        if (TERMINAL_JOB_STATUSES.has(event.status)) {
+          fetchAnnotations(selectedEpisode.datasetId, selectedEpisode.episodeIndex)
+            .then((apiAnnotations) => {
+              if (isActive) {
+                setAnnotationRows(apiAnnotations);
+              }
+            })
+            .catch(() => undefined);
+        }
+      },
+      controller.signal
+    ).catch((error) => {
+      if (isActive && error instanceof Error && error.name !== "AbortError") {
+        setVlmJob((current) =>
+          current?.jobId === jobId
+            ? {
+                ...current,
+                status: "failed",
+                progress: 1,
+                message: error.message
+              }
+            : current
+        );
+      }
+    });
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, [selectedEpisode.datasetId, selectedEpisode.episodeIndex, vlmJobId, vlmJobStatus]);
 
   function resetDerivedState() {
     setRerunSession(null);
@@ -651,9 +717,11 @@ export function useStudioData() {
 
   async function handleRunVlmLabel() {
     const job = await createVlmLabelJob(selectedEpisode.datasetId, [selectedEpisode.episodeIndex]);
-    const apiAnnotations = await fetchAnnotations(selectedEpisode.datasetId, selectedEpisode.episodeIndex);
     setVlmJob(job);
-    setAnnotationRows(apiAnnotations);
+    if (TERMINAL_JOB_STATUSES.has(job.status)) {
+      const apiAnnotations = await fetchAnnotations(selectedEpisode.datasetId, selectedEpisode.episodeIndex);
+      setAnnotationRows(apiAnnotations);
+    }
   }
 
   async function handleSemanticSearch(text: string, filterQuery?: string) {

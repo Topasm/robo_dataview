@@ -256,6 +256,7 @@ Definition of done:
 - [x] Add SQLite/Postgres app metadata store.
 - [x] Add Redis + RQ/Celery worker queue.
 - [x] Add background job progress events.
+- [x] Wire web VLM job progress streaming.
 - [x] Add auth and user identities.
 - [x] Add multi-user review assignment.
 - [ ] Add object storage support for cache and exports.
