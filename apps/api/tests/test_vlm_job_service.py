@@ -32,6 +32,7 @@ class VlmJobServiceTest(unittest.TestCase):
         self.assertEqual(record.status, JobStatus.succeeded)
         self.assertEqual(record.prompt_template, "episode_autolabel_v1")
         self.assertEqual(record.prompt_version, "v1")
+        self.assertEqual(record.provider, "heuristic-fallback")
         self.assertGreaterEqual(len(record.created_annotation_ids), 20)
         self.assertEqual(len(created_by_job), len(record.created_annotation_ids))
         self.assertTrue(all(annotation.review_status == ReviewStatus.pending for annotation in created_by_job))

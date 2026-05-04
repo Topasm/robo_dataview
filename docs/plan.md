@@ -196,8 +196,8 @@ Definition of done:
 - [x] Pending review annotations.
 - [x] Add deterministic keyframe index sampling.
 - [x] Add prompt registry/versioning.
+- [x] Add VLM provider abstraction with heuristic fallback provider.
 - [ ] Add decoded keyframe image extraction from video blobs.
-- [ ] Add VLM provider abstraction.
 - [ ] Add real model/API integration.
 - [ ] Store raw response and model metadata.
 - [ ] Add review queue for generated labels.

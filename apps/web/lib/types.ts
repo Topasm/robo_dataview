@@ -97,6 +97,7 @@ export type JobRecord = {
   model: string | null;
   promptTemplate: string | null;
   promptVersion: string | null;
+  provider: string | null;
 };
 
 export type ExportRecord = {

@@ -90,6 +90,7 @@ type JobRecordResponse = {
   model: string | null;
   prompt_template: string | null;
   prompt_version: string | null;
+  provider: string | null;
 };
 
 type ExportRecordResponse = {
@@ -524,7 +525,8 @@ function toJobRecord(raw: JobRecordResponse): JobRecord {
     createdAnnotationIds: raw.created_annotation_ids,
     model: raw.model,
     promptTemplate: raw.prompt_template,
-    promptVersion: raw.prompt_version
+    promptVersion: raw.prompt_version,
+    provider: raw.provider
   };
 }
 

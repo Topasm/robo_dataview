@@ -30,3 +30,4 @@ class JobRecord(BaseModel):
     model: str | None = None
     prompt_template: str | None = None
     prompt_version: str | None = None
+    provider: str | None = None

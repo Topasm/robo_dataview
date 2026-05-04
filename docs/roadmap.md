@@ -179,12 +179,13 @@ Implemented:
 - Pending annotations are created for review.
 - Deterministic 8 to 16 frame index sampling for prompt inputs.
 - Versioned prompt registry and prompt validation.
+- VLM provider interface with heuristic fallback provider.
 
 Next:
 
 - Move job execution to RQ/Celery.
 - Decode sampled keyframe images from video blobs.
-- Add provider abstraction for local/API VLMs.
+- Add real local/API VLM provider implementations.
 - Store raw model response, prompt version, and confidence rationale.
 
 ## Phase 6: Search and Filtering

@@ -201,8 +201,9 @@ GET  /jobs/{job_id}
 
 `GET /jobs/vlm-prompts` returns registered VLM prompt templates and versions.
 `POST /jobs/vlm-label` rejects unknown `prompt_template` values with `400`.
-Job records include `model`, `prompt_template`, and `prompt_version` so generated
-annotation batches can be traced to the prompt contract used.
+Job records include `model`, `provider`, `prompt_template`, and
+`prompt_version` so generated annotation batches can be traced to the model
+route and prompt contract used.
 
 ## Exports
 

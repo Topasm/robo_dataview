@@ -10,7 +10,8 @@ from apps.api.services.annotation_service import annotation_store
 from apps.api.services.lance_store import store
 from apps.api.services.pydantic_compat import model_copy
 from packages.prompts import UnknownPromptTemplateError, get_prompt_template
-from workers.vlm_autolabel import AutoLabelConfig, build_vlm_annotation_proposals
+from workers.vlm_autolabel import AutoLabelConfig
+from workers.vlm_provider import get_vlm_provider
 
 
 class JobStore:
@@ -83,6 +84,7 @@ class JobStore:
             prompt_template=payload.prompt_template,
             prompt_version=prompt_version,
         )
+        provider = get_vlm_provider(payload.model)
         created_annotation_ids: list[str] = []
         missing_episodes: list[int] = []
         for episode_index in episode_indices:
@@ -90,9 +92,13 @@ class JobStore:
             if episode is None:
                 missing_episodes.append(episode_index)
                 continue
-            proposals = build_vlm_annotation_proposals(payload.dataset_id, episode, config)
+            result = provider.propose(
+                dataset_id=payload.dataset_id,
+                episode=episode,
+                config=config,
+            )
             created_annotation_ids.extend(
-                annotation_store.create(proposal).annotation_id for proposal in proposals
+                annotation_store.create(proposal).annotation_id for proposal in result.proposals
             )
 
         status = JobStatus.succeeded if created_annotation_ids else JobStatus.failed
@@ -111,6 +117,7 @@ class JobStore:
                 "progress": 1.0,
                 "message": message,
                 "created_annotation_ids": created_annotation_ids,
+                "provider": provider.name,
             }
         )
 
