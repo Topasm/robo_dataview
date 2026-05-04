@@ -467,14 +467,15 @@ export async function createVlmLabelJob(
 export async function createExport(
   datasetId: string,
   episodeIndices: number[],
+  format: "lerobot" | "lance" = "lerobot",
 ): Promise<ExportRecord> {
   const row = await request<ExportRecordResponse>("/exports", {
     method: "POST",
     body: JSON.stringify({
       dataset_id: datasetId,
       episode_indices: episodeIndices,
-      format: "lerobot",
-      version_description: "web selected episode export"
+      format,
+      version_description: `web selected episode ${format} export`
     })
   });
   return toExportRecord(row);

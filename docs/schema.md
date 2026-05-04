@@ -287,3 +287,22 @@ accepted annotations. It writes frame JSONL and available camera MP4 blobs, and
 also writes Parquet shards when `pyarrow` is installed. Full official
 `LeRobotDataset` loadability still needs validation against the optional
 `lerobot` package and its exact v3 expectations.
+
+## Lance subset export
+
+`format=lance` exports write a selected subset when optional `pyarrow` and
+`lance` dependencies are installed:
+
+```text
+lance_subset/
+├─ metadata.json
+├─ episodes.lance
+├─ frames.lance
+├─ annotations.lance
+└─ validation.json
+```
+
+The subset includes selected episode metadata, frame-level state/action samples
+from `frames.lance` or the episode time-series fallback, and accepted
+annotations only. Missing optional Lance dependencies fail the export explicitly
+so callers do not mistake a manifest-only export for a usable Lance dataset.

@@ -1622,6 +1622,13 @@ textarea {
   white-space: nowrap;
 }
 
+.export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 @media (max-width: 1280px) {
   .studio-shell {
     min-width: 0;

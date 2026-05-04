@@ -416,8 +416,8 @@ export function useStudioData() {
     setFilterPresets((current) => current.filter((preset) => preset.presetId !== presetId));
   }
 
-  async function handleCreateExport() {
-    const record = await createExport(selectedEpisode.datasetId, [selectedEpisode.episodeIndex]);
+  async function handleCreateExport(format: "lerobot" | "lance" = "lerobot") {
+    const record = await createExport(selectedEpisode.datasetId, [selectedEpisode.episodeIndex], format);
     setExportRecord(record);
   }
 

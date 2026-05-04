@@ -10,7 +10,9 @@ from fastapi import HTTPException
 from apps.api.schemas.common import ExportFormat, JobStatus, ReviewStatus
 from apps.api.schemas.episodes import EpisodeDetail
 from apps.api.schemas.exports import ExportCreateRequest, ExportRecord
+from apps.api.schemas.frames import FrameRecord
 from apps.api.services.annotation_service import annotation_store
+from apps.api.services.lance_export import LanceExportDependencyError, write_lance_subset
 from apps.api.services.lance_store import store
 from apps.api.services.lerobot_io import write_lerobot_v3_snapshot
 from apps.api.services.pydantic_compat import model_copy, model_dump
@@ -153,6 +155,29 @@ class ExportStore:
                 timeseries_by_episode=timeseries_by_episode,
                 video_blobs_by_episode=video_blobs_by_episode,
             )
+        elif payload.format == ExportFormat.lance:
+            try:
+                frames_by_episode = {
+                    episode.episode_index: self._frame_records(record.dataset_id, episode)
+                    for episode in episode_records
+                }
+                artifacts["lance_subset"] = write_lance_subset(
+                    manifest_path.parent,
+                    dataset_id=record.dataset_id,
+                    episodes=episode_records,
+                    annotations_by_episode=annotations_by_episode,
+                    frames_by_episode=frames_by_episode,
+                    version_description=payload.version_description,
+                )
+            except LanceExportDependencyError as exc:
+                return model_copy(
+                    record,
+                    update={
+                        "status": JobStatus.failed,
+                        "output_uri": None,
+                        "message": str(exc),
+                    },
+                )
 
         manifest = {
             "export_id": record.export_id,
@@ -202,6 +227,33 @@ class ExportStore:
             if blob is not None:
                 blobs[camera] = blob
         return blobs
+
+    @staticmethod
+    def _frame_records(dataset_id: str, episode: EpisodeDetail) -> list[FrameRecord]:
+        frames = []
+        start_frame = 0
+        chunk_size = 1000
+        end_frame = (episode.length - 1) if episode.length is not None and episode.length > 0 else None
+        while True:
+            batch = store.list_frames(
+                dataset_id,
+                episode.episode_index,
+                start_frame=start_frame,
+                end_frame=end_frame,
+                limit=chunk_size,
+            )
+            if not batch:
+                break
+            frames.extend(batch)
+            next_start = batch[-1].frame_index + 1
+            if next_start <= start_frame:
+                break
+            start_frame = next_start
+            if end_frame is not None and start_frame > end_frame:
+                break
+            if len(batch) < chunk_size and end_frame is None:
+                break
+        return frames
 
 
 exports = ExportStore()

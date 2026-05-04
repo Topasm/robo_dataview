@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import sys
+from types import ModuleType
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from apps.api.schemas.annotations import AnnotationCreate
@@ -119,6 +122,123 @@ class ExportServiceTest(unittest.TestCase):
         self.assertEqual(loaded.episode_indices, [0, 2])
         self.assertEqual(loaded.output_uri, created.output_uri)
         self.assertEqual(loaded.artifacts, created.artifacts)
+
+    def test_lance_export_fails_when_dependencies_are_missing(self) -> None:
+        versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
+        exports = ExportStore(versions=versions)
+
+        with patch.dict(sys.modules, {"pyarrow": None, "lance": None}):
+            record = exports.create(
+                ExportCreateRequest(
+                    dataset_id="sample-xvla-soft-fold",
+                    episode_indices=[0],
+                    format=ExportFormat.lance,
+                    version_description="missing deps",
+                )
+            )
+
+        self.assertEqual(record.status, JobStatus.failed)
+        self.assertIsNone(record.output_uri)
+        self.assertIn("optional pyarrow and lance", record.message or "")
+
+    def test_lance_export_writes_subset_artifact(self) -> None:
+        accepted = annotation_store.create(
+            AnnotationCreate(
+                dataset_id="sample-xvla-soft-fold",
+                episode_index=0,
+                start_frame=1,
+                end_frame=1,
+                label_type="important_frame",
+                label_value="accepted_exact_frame",
+                review_status=ReviewStatus.accepted,
+            )
+        )
+        rejected = annotation_store.create(
+            AnnotationCreate(
+                dataset_id="sample-xvla-soft-fold",
+                episode_index=0,
+                start_frame=2,
+                end_frame=2,
+                label_type="occlusion",
+                label_value="rejected_exact_frame",
+                review_status=ReviewStatus.rejected,
+            )
+        )
+        fake_pyarrow = _fake_pyarrow_module()
+        fake_lance, written_paths = _fake_lance_module()
+
+        versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
+        exports = ExportStore(versions=versions)
+        with patch.dict(
+            sys.modules,
+            {"pyarrow": fake_pyarrow, "lance": fake_lance},
+        ):
+            record = exports.create(
+                ExportCreateRequest(
+                    dataset_id="sample-xvla-soft-fold",
+                    episode_indices=[0],
+                    format=ExportFormat.lance,
+                    version_description="lance subset",
+                )
+            )
+
+        manifest = json.loads(Path(record.output_uri or "").read_text(encoding="utf-8"))
+        artifact = manifest["artifacts"]["lance_subset"]
+
+        self.assertEqual(record.status, JobStatus.succeeded)
+        self.assertEqual(artifact["materialized"]["episode_rows"], 1)
+        self.assertEqual(artifact["materialized"]["frame_rows"], 180)
+        self.assertEqual(artifact["materialized"]["annotation_rows"], 1)
+        self.assertTrue(artifact["validation"]["metadata_ok"])
+        self.assertTrue(Path(artifact["files"]["episodes"]).exists())
+        self.assertTrue(Path(artifact["files"]["frames"]).exists())
+        self.assertTrue(Path(artifact["files"]["annotations"]).exists())
+        self.assertEqual(len(written_paths), 3)
+        self.assertEqual(manifest["episodes"][0]["annotations"][0]["label_value"], "accepted_exact_frame")
+        version_records = versions.list("sample-xvla-soft-fold")
+        self.assertEqual(version_records[0].export_format, "lance")
+
+        annotation_store.delete(accepted.annotation_id)
+        annotation_store.delete(rejected.annotation_id)
+
+
+class _FakeTable:
+    @staticmethod
+    def from_pylist(rows: list[dict], schema: object | None = None) -> dict:
+        return {"rows": rows, "schema": schema}
+
+
+def _fake_pyarrow_module() -> ModuleType:
+    module = ModuleType("pyarrow")
+    module.Table = _FakeTable
+    module.schema = lambda fields, metadata=None: {"fields": fields, "metadata": metadata}
+    module.field = lambda name, dtype, nullable=True: {
+        "name": name,
+        "dtype": dtype,
+        "nullable": nullable,
+    }
+    module.string = lambda: "string"
+    module.int64 = lambda: "int64"
+    module.float32 = lambda: "float32"
+    module.bool_ = lambda: "bool"
+    module.list_ = lambda dtype: f"list<{dtype}>"
+    module.timestamp = lambda unit, tz=None: f"timestamp<{unit},{tz}>"
+    return module
+
+
+def _fake_lance_module() -> tuple[ModuleType, list[str]]:
+    module = ModuleType("lance")
+    written_paths: list[str] = []
+
+    def write_dataset(table: object, path: str, mode: str = "overwrite") -> None:
+        del table, mode
+        path_obj = Path(path)
+        path_obj.mkdir(parents=True, exist_ok=True)
+        (path_obj / "_SUCCESS").write_text("ok", encoding="utf-8")
+        written_paths.append(path)
+
+    module.write_dataset = write_dataset
+    return module, written_paths
 
 
 if __name__ == "__main__":

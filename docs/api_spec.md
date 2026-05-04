@@ -265,6 +265,13 @@ root, file paths, materialization status, and validation report. The API
 response also includes the same `artifacts` object so the web UI can show export
 provenance without reading the manifest file.
 
+For `format=lance`, the response contains `artifacts.lance_subset` when optional
+`pyarrow` and `lance` dependencies are installed. The subset contains
+`episodes.lance`, `frames.lance`, and `annotations.lance` tables for selected
+episodes and accepted annotations only. If those optional dependencies are
+missing, the export fails with a dependency message instead of returning an empty
+successful artifact.
+
 Each successful export appends a version record to
 `data/lance/versions/versions.jsonl`; with optional Lance dependencies installed,
 the same records are mirrored to `versions.lance`.

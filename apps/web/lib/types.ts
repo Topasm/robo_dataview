@@ -156,6 +156,23 @@ export type ExportArtifacts = {
       video_files?: number;
     };
   };
+  lance_subset?: {
+    root?: string;
+    validation?: {
+      metadata_ok?: boolean;
+      episode_count?: number;
+      frame_count?: number;
+      annotation_count?: number;
+      errors?: string[];
+      warnings?: string[];
+    };
+    files?: Record<string, string | null>;
+    materialized?: {
+      episode_rows?: number;
+      frame_rows?: number;
+      annotation_rows?: number;
+    };
+  };
 };
 
 export type SearchResult = {

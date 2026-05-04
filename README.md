@@ -62,7 +62,8 @@ The repository has moved past a pure skeleton. The current MVP path can:
    review queue.
 8. Export selected episodes as a LeRobot v3-oriented snapshot with metadata,
    frame JSONL, optional Parquet, available camera MP4 artifacts, validation,
-   and version lineage.
+   and version lineage, or as a Lance subset when optional `pyarrow` and
+   `lance` dependencies are installed.
 9. Render the main web operations UI with dataset, episode, video viewer,
    annotation editing, search, Rerun, and export panels.
 
@@ -80,6 +81,8 @@ Known MVP gaps:
   not implemented yet.
 - LeRobot export writes frame JSONL and available MP4 artifacts; training-ready
   Parquet shards still require optional `pyarrow`/LeRobot dependencies.
+- Lance subset export requires optional `pyarrow` and `lance` dependencies and
+  fails clearly when they are missing.
 
 ## MVP Scope
 

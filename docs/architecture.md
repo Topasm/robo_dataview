@@ -106,6 +106,8 @@ Implemented now:
   through `@rerun-io/web-viewer-react`.
 - Metadata-oriented LeRobot v3 export manifest, validation report, and version
   lineage.
+- Lance subset export for selected episodes when optional `pyarrow` and `lance`
+  dependencies are installed.
 - Web UI orchestration via `useStudioData`.
 
 Not implemented yet:

@@ -247,11 +247,12 @@ Implemented:
 - Metadata-oriented LeRobot v3 snapshot.
 - Frame JSONL and available camera MP4 artifact materialization.
 - Export validation report.
+- Lance subset export for selected episodes when optional Lance dependencies are
+  installed.
 - Accepted annotations only.
 - Version lineage JSONL plus optional Lance mirror.
 
 Next:
 
 - Materialize fully LeRobot-loadable Parquet/MP4 artifacts.
-- Add Lance subset export.
 - Add train/val/test split controls.

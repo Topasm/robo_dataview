@@ -226,9 +226,9 @@ Definition of done:
 - [x] Materialize frame JSONL and available camera MP4 artifacts.
 - [x] Add export validation report.
 - [x] Append version lineage.
+- [x] Add Lance subset export.
 - [ ] Add train/val/test split controls.
 - [ ] Materialize fully LeRobot-loadable Parquet/MP4 export.
-- [ ] Add Lance subset export.
 - [ ] Add JSONL captions and VLA training format export.
 
 ### P8: Production Shape
@@ -247,7 +247,7 @@ Definition of done:
 2. Add full frame-table browser and raw frame mutation workflow.
 3. Materialize fully LeRobot-loadable Parquet/MP4 export.
 4. Move Rerun/export/VLM work into queue-backed workers.
-5. Add background job progress events.
+5. Add train/val/test split controls and JSONL/VLA export variants.
 
 ## Validation Checklist
 
