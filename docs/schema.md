@@ -347,7 +347,9 @@ package is installed, validation attempts
 length, or the exact exception. `lerobot_loadable` is true only for a successful
 official loader check; a complete local heuristic without the official loader is
 reported through `local_lerobot_loadable_heuristic` and
-`loadability_basis=local_heuristic_unverified`.
+`loadability_basis=local_heuristic_unverified`. Local validation also checks
+that readable Parquet row counts match the exported task metadata, episode
+metadata, and frame index expectations.
 
 ## Lance subset export
 

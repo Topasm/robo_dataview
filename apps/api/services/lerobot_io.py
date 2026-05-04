@@ -268,6 +268,7 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
 
     info = json.loads(info_path.read_text(encoding="utf-8"))
     episode_rows = _read_episode_rows(root)
+    task_rows = _read_jsonl(paths["tasks_jsonl"]) if present["tasks_jsonl"] else []
     data_index_rows = _read_jsonl(paths["data_index"]) if present["data_index"] else []
     data_rows = _read_jsonl(paths["data_jsonl"]) if present["data_jsonl"] else []
     video_rows = _read_jsonl(paths["video_index"]) if present["video_index"] else []
@@ -284,6 +285,8 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         errors.append("missing episode metadata")
     if info.get("fps") is None or float(info.get("fps") or 0) <= 0:
         errors.append("meta/info.json must include a positive fps")
+    if int(info.get("total_tasks") or 0) != len(task_rows):
+        errors.append("total_tasks does not match task metadata rows")
     if int(info.get("total_episodes") or 0) != len(episode_rows):
         errors.append("total_episodes does not match episode metadata rows")
     if len(data_index_rows) != len(episode_rows):
@@ -313,6 +316,16 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         errors.append("episode metadata must include dataset_from_index and dataset_to_index")
     if episode_rows and not _episode_rows_have_tasks(episode_rows):
         errors.append("episode metadata must include tasks lists")
+    errors.extend(
+        _parquet_row_count_errors(
+            parquet_readability,
+            {
+                "tasks_parquet": len(task_rows),
+                "episodes_parquet": len(episode_rows),
+                "data_parquet": len(data_rows) if data_rows else previous_end,
+            },
+        )
+    )
 
     if not present["tasks_parquet"]:
         warnings.append("pyarrow not available or parquet task metadata was not written")
@@ -392,6 +405,25 @@ def _required_parquet_files_are_readable(parquet_readability: dict[str, dict[str
         parquet_readability.get(name, {}).get("readable") is True
         for name in ("tasks_parquet", "episodes_parquet", "data_parquet")
     )
+
+
+def _parquet_row_count_errors(
+    parquet_readability: dict[str, dict[str, Any]],
+    expected_rows: dict[str, int],
+) -> list[str]:
+    errors = []
+    for name, expected in expected_rows.items():
+        status = parquet_readability.get(name, {})
+        if not status.get("present") or status.get("readable") is not True:
+            continue
+        actual = status.get("row_count")
+        if actual is None:
+            continue
+        if int(actual) != int(expected):
+            errors.append(
+                f"{status.get('label', name)} row count {actual} does not match expected {expected}"
+            )
+    return errors
 
 
 def _is_probable_mp4(path: Path) -> bool:

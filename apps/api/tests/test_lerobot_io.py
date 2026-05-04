@@ -368,6 +368,56 @@ class LeRobotIoTest(unittest.TestCase):
                 any("not readable as Parquet" in error for error in validation["errors"])
             )
 
+    def test_validate_lerobot_snapshot_rejects_wrong_parquet_row_count(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir)
+            artifact = write_lerobot_v3_snapshot(
+                export_dir,
+                dataset_id="sample-xvla-soft-fold",
+                episodes=[
+                    EpisodeDetail(
+                        dataset_id="sample-xvla-soft-fold",
+                        episode_index=0,
+                        task_index=3,
+                        length=1,
+                        fps=20.0,
+                        camera_names=["cam_high"],
+                    )
+                ],
+                annotations_by_episode={},
+                version_description="unit test",
+                timeseries_by_episode={
+                    0: {
+                        "timestamps": [0.0],
+                        "states": [[0.0, 0.0]],
+                        "actions": [[1.0, 1.0]],
+                    }
+                },
+                video_blobs_by_episode={0: {"cam_high": FAKE_MP4_BYTES}},
+            )
+            root = Path(artifact["root"])
+            (root / "meta/tasks.parquet").write_text("placeholder", encoding="utf-8")
+            (root / "meta/episodes/chunk-000/file-000.parquet").write_text(
+                "placeholder",
+                encoding="utf-8",
+            )
+            (root / "data/chunk-000/file-000.parquet").write_text(
+                "placeholder",
+                encoding="utf-8",
+            )
+
+            with patch.dict(
+                sys.modules,
+                _fake_pyarrow_modules(row_count_overrides={"data_parquet": 2}),
+            ):
+                validation = validate_lerobot_v3_snapshot(root)
+
+            self.assertFalse(validation["metadata_ok"])
+            self.assertFalse(validation["local_lerobot_loadable_heuristic"])
+            self.assertTrue(
+                any("row count 2 does not match expected 1" in error for error in validation["errors"])
+            )
+
     def test_validate_lerobot_snapshot_requires_video_shard_metadata_for_local_loadable(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             export_dir = Path(tmpdir)
@@ -515,13 +565,22 @@ class _FakeParquetTable:
         return self._rows
 
 
-def _fake_pyarrow_modules(error: Exception | None = None) -> dict[str, ModuleType]:
+def _fake_pyarrow_modules(
+    error: Exception | None = None,
+    row_count_overrides: dict[str, int] | None = None,
+) -> dict[str, ModuleType]:
     pyarrow_module = ModuleType("pyarrow")
     parquet_module = ModuleType("pyarrow.parquet")
+    row_count_overrides = row_count_overrides or {}
 
     def read_table(path: Path) -> _FakeParquetTable:
         if error is not None:
             raise error
+        key = _fake_parquet_key(Path(path))
+        if key in row_count_overrides:
+            return _FakeParquetTable(
+                [{"index": index} for index in range(int(row_count_overrides[key]))]
+            )
         return _FakeParquetTable(_jsonl_rows_for_fake_parquet(Path(path)))
 
     parquet_module.read_table = read_table  # type: ignore[attr-defined]
@@ -530,6 +589,17 @@ def _fake_pyarrow_modules(error: Exception | None = None) -> dict[str, ModuleTyp
         "pyarrow": pyarrow_module,
         "pyarrow.parquet": parquet_module,
     }
+
+
+def _fake_parquet_key(path: Path) -> str:
+    if path.name == "tasks.parquet":
+        return "tasks_parquet"
+    if path.name == "file-000.parquet" and path.parent.name == "chunk-000":
+        if path.parent.parent.name == "episodes":
+            return "episodes_parquet"
+        if path.parent.parent.name == "data":
+            return "data_parquet"
+    return path.name
 
 
 def _jsonl_rows_for_fake_parquet(path: Path) -> list[dict]:
