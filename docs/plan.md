@@ -196,8 +196,8 @@ Definition of done:
 - [x] Include accepted annotations only.
 - [x] Write export manifest.
 - [x] Write metadata-oriented LeRobot v3 snapshot.
+- [x] Add export validation report.
 - [x] Append version lineage.
-- [ ] Add export validation report.
 - [ ] Add train/val/test split controls.
 - [ ] Materialize full LeRobot Parquet/MP4 export.
 - [ ] Add Lance subset export.

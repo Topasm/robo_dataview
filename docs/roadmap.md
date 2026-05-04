@@ -231,6 +231,7 @@ Implemented:
 
 - Selected episode export manifest.
 - Metadata-oriented LeRobot v3 snapshot.
+- Export validation report.
 - Accepted annotations only.
 - Version lineage JSONL plus optional Lance mirror.
 
@@ -239,4 +240,3 @@ Next:
 - Materialize full LeRobot Parquet/MP4 artifacts.
 - Add Lance subset export.
 - Add train/val/test split controls.
-- Add export validation report.

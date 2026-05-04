@@ -196,6 +196,39 @@ class LanceDatasetStoreTest(unittest.TestCase):
             self.assertEqual(episodes[0].episode_index, 7)
             self.assertEqual(episodes[0].task_index, 4)
 
+    def test_video_blob_uses_episode_index_filter_before_row_offset(self) -> None:
+        episode_rows = [
+            {
+                "episode_index": 42,
+                "task_index": 3,
+                "fps": 20.0,
+                "timestamps": [0.0],
+                "cam_high_video_blob": b"sparse-index-video",
+            },
+            {
+                "episode_index": 7,
+                "task_index": 3,
+                "fps": 20.0,
+                "timestamps": [0.0],
+                "cam_high_video_blob": b"other-video",
+            },
+        ]
+        fake_tables = {
+            "/datasets/sparse/episodes.lance": FakeDataset(
+                episode_rows,
+                list(episode_rows[0].keys()),
+            ),
+            "/datasets/sparse/frames.lance": FakeDataset([], ["episode_index"]),
+            "/datasets/sparse/videos.lance": FakeDataset([], ["camera_angle", "video_blob"]),
+        }
+        sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+
+        store = LanceDatasetStore()
+        record = store.open_dataset(DatasetOpenRequest(uri="/datasets/sparse", name="sparse"))
+        video_blob = store.get_video_blob(record.dataset_id, 42, "cam_high")
+
+        self.assertEqual(video_blob, b"sparse-index-video")
+
     def test_filter_search_evaluates_basic_episode_predicates(self) -> None:
         store = LanceDatasetStore()
         results = store.filter_search(

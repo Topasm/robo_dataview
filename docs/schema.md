@@ -251,13 +251,21 @@ can be resolved from version rows.
 lerobot_v3/
 ├─ meta/
 │  ├─ info.json
-│  ├─ tasks.jsonl
-│  └─ episodes/chunk-000/file-000.jsonl
+│  ├─ stats.json
+│  ├─ tasks.parquet              # when pyarrow is installed
+│  ├─ tasks.jsonl                # fallback/readability copy
+│  └─ episodes/chunk-000/
+│     ├─ file-000.parquet        # when pyarrow is installed
+│     └─ file-000.jsonl          # fallback/readability copy
 ├─ data/chunk-000/file-000.index.jsonl
 ├─ videos/
-└─ annotations/annotations.jsonl
+├─ annotations/annotations.jsonl
+└─ validation.json
 ```
 
 The snapshot follows the LeRobot v3 directory contract for selected episodes and
-accepted annotations, but it is not yet a full Parquet/MP4 materialization. Full
-materialization needs the optional `lerobot` and `pyarrow` dependencies.
+accepted annotations. It now writes official metadata parquet files when
+`pyarrow` is installed, but it is still not a full Parquet/MP4 materialization:
+`data/chunk-*/file-*.parquet` and `videos/<camera>/chunk-*/file-*.mp4` are not
+materialized yet. Full materialization needs the optional `lerobot`, `pyarrow`,
+and video encoding dependencies.

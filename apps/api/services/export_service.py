@@ -80,6 +80,7 @@ class ExportStore:
                 status=JobStatus.succeeded,
                 output_uri=str(manifest_path),
                 message=f"Loaded export manifest with {manifest.get('num_episodes', 0)} episodes.",
+                artifacts=manifest.get("artifacts"),
             )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError):
             return None
@@ -176,6 +177,7 @@ class ExportStore:
                 "status": JobStatus.succeeded,
                 "episode_indices": [episode["episode_index"] for episode in episodes],
                 "message": message,
+                "artifacts": artifacts,
             }
         )
 

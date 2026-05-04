@@ -81,9 +81,11 @@ class ExportServiceTest(unittest.TestCase):
 
         self.assertEqual(record.status, JobStatus.succeeded)
         self.assertEqual(manifest["num_episodes"], 1)
+        self.assertIsNotNone(record.artifacts)
         self.assertEqual(lerobot_artifact["materialization_status"], "metadata_only")
+        self.assertTrue(lerobot_artifact["validation"]["metadata_ok"])
         self.assertTrue(Path(lerobot_artifact["files"]["info"]).exists())
-        self.assertTrue(Path(lerobot_artifact["files"]["episodes_index"]).exists())
+        self.assertTrue(Path(lerobot_artifact["files"]["episodes_jsonl"]).exists())
         self.assertTrue(Path(lerobot_artifact["files"]["annotations"]).exists())
         self.assertIn("accepted_phase", annotation_values)
         self.assertNotIn("rejected_phase", annotation_values)
@@ -114,6 +116,7 @@ class ExportServiceTest(unittest.TestCase):
         self.assertEqual(loaded.status, JobStatus.succeeded)
         self.assertEqual(loaded.episode_indices, [0, 2])
         self.assertEqual(loaded.output_uri, created.output_uri)
+        self.assertEqual(loaded.artifacts, created.artifacts)
 
 
 if __name__ == "__main__":

@@ -167,7 +167,9 @@ GET  /versions?dataset_id=...
 
 For `format=lerobot`, the response `output_uri` points to the export manifest.
 The manifest contains an `artifacts.lerobot_v3` object with the metadata snapshot
-root and file paths.
+root, file paths, materialization status, and validation report. The API
+response also includes the same `artifacts` object so the web UI can show export
+provenance without reading the manifest file.
 
 Each successful export appends a version record to
 `data/lance/versions/versions.jsonl`; with optional Lance dependencies installed,
@@ -181,5 +183,3 @@ the same records are mirrored to `versions.lance`.
 - Annotation, embedding, export, and version records are persisted under
   `data/`.
 - Real queue-backed async jobs are planned but not wired yet.
-- The old Lance store semantic-search stub still exists internally, but the API
-  route uses `EmbeddingIndex`.

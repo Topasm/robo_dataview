@@ -31,7 +31,7 @@ apps/
   api/        FastAPI backend
   web/        Next.js frontend
 docs/         Architecture, schema, API, UI, roadmap, and execution plan
-workers/      Python worker entry points
+workers/      Python worker helpers
 packages/     Shared schema and prompts
 data/         Local Lance data, cache, and exports
 ```
@@ -49,8 +49,8 @@ The repository has moved past a pure skeleton. The current MVP path can:
    load them through the Rerun React web viewer.
 5. Run basic filter search and deterministic text-embedding semantic search.
 6. Create heuristic VLM-style annotation proposals for review.
-7. Export selected episodes as a metadata-oriented LeRobot v3 snapshot and
-   record version lineage.
+7. Export selected episodes as a metadata-oriented LeRobot v3 snapshot with
+   validation and version lineage.
 8. Render the main web operations UI with dataset, episode, video viewer,
    annotation editing, search, Rerun, and export panels.
 

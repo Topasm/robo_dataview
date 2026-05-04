@@ -18,3 +18,4 @@ class ExportRecord(BaseModel):
     status: JobStatus
     output_uri: str | None = None
     message: str | None = None
+    artifacts: dict | None = None

@@ -92,6 +92,7 @@ type ExportRecordResponse = {
   status: string;
   output_uri: string | null;
   message: string | null;
+  artifacts?: ExportRecord["artifacts"];
 };
 
 type SearchResultResponse = {
@@ -435,7 +436,8 @@ function toExportRecord(raw: ExportRecordResponse): ExportRecord {
     format: raw.format,
     status: raw.status,
     outputUri: raw.output_uri,
-    message: raw.message
+    message: raw.message,
+    artifacts: raw.artifacts ?? null
   };
 }
 

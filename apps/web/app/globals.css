@@ -1098,6 +1098,22 @@ textarea {
   padding: 0 14px;
 }
 
+.export-artifact {
+  color: var(--muted);
+  display: grid;
+  font-size: 11px;
+  gap: 2px;
+  line-height: 1.4;
+  margin-top: 4px;
+  max-width: min(680px, 62vw);
+}
+
+.export-artifact span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 1280px) {
   .studio-shell {
     min-width: 0;

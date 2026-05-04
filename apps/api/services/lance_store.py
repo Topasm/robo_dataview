@@ -9,7 +9,7 @@ from typing import Any
 
 from apps.api.schemas.datasets import DatasetOpenRequest, DatasetRecord, DatasetSummary
 from apps.api.schemas.episodes import EpisodeDetail, EpisodeListItem, StateActionSummary
-from apps.api.schemas.search import FilterSearchRequest, SearchResult, SemanticSearchRequest
+from apps.api.schemas.search import FilterSearchRequest, SearchResult
 from apps.api.services.lerobot_io import read_lerobot_snapshot_episodes
 from apps.api.services.pydantic_compat import model_dump
 
@@ -535,8 +535,22 @@ class LanceDatasetStore:
         if column is None:
             return None
         dataset = bundle.tables["episodes"]
+
+        row = _read_episode_row_by_index(
+            dataset,
+            episode_index,
+            columns=["episode_index", column],
+        )
+        if row is not None:
+            blob = _blob_to_bytes(row.get(column))
+            if blob is not None:
+                return blob
+
         if hasattr(dataset, "take_blobs"):
             try:
+                offset_rows = _read_rows(dataset, columns=["episode_index"], limit=1, offset=episode_index)
+                if not offset_rows or int(offset_rows[0].get("episode_index", -1)) != episode_index:
+                    return None
                 blob_file = dataset.take_blobs(column, indices=[episode_index])[0]
                 try:
                     return blob_file.read()
@@ -544,14 +558,7 @@ class LanceDatasetStore:
                     blob_file.close()
             except Exception:
                 pass
-        row = _read_episode_row_by_index(
-            dataset,
-            episode_index,
-            columns=["episode_index", column],
-        )
-        if row is None:
-            return None
-        return _blob_to_bytes(row.get(column))
+        return None
 
     def get_episode_timeseries(
         self,
@@ -596,19 +603,6 @@ class LanceDatasetStore:
                 label=payload.query,
             )
             for episode in matched
-        ]
-
-    def semantic_search(self, payload: SemanticSearchRequest) -> list[SearchResult]:
-        episodes = self.list_episodes(payload.dataset_id, limit=payload.limit, offset=0)
-        return [
-            SearchResult(
-                dataset_id=payload.dataset_id,
-                episode_index=episode.episode_index,
-                score=0.5,
-                match_type="semantic_stub",
-                label=payload.text,
-            )
-            for episode in episodes
         ]
 
     def _name_from_uri(self, uri: str) -> str:

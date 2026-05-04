@@ -86,6 +86,23 @@ export type ExportRecord = {
   status: string;
   outputUri: string | null;
   message: string | null;
+  artifacts: ExportArtifacts | null;
+};
+
+export type ExportArtifacts = {
+  lerobot_v3?: {
+    root?: string;
+    materialization_status?: string;
+    validation?: {
+      metadata_ok?: boolean;
+      lerobot_loadable?: boolean;
+      episode_count?: number;
+      frame_count?: number;
+      errors?: string[];
+      warnings?: string[];
+    };
+    files?: Record<string, string | null>;
+  };
 };
 
 export type SearchResult = {

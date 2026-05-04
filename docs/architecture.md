@@ -68,7 +68,7 @@ packages/robot_schema
 
 workers
   Heuristic VLM proposal generator
-  Placeholder worker entry points for embeddings, thumbnails, Rerun cache, export
+  Future async worker entry points are added when queue-backed jobs are real
 
 data
   Local annotations, embeddings, versions, cache, and export artifacts
@@ -78,7 +78,8 @@ Implemented now:
 
 - Lance dataset open/index for `frames.lance`, `episodes.lance`, and
   `videos.lance` style roots.
-- LeRobot v3 metadata snapshot import/export helpers.
+- LeRobot v3 metadata snapshot import/export helpers, including optional
+  metadata parquet writes when `pyarrow` is installed.
 - Dataset summary, schema, episode list/detail, state/action summary, and video
   blob endpoints, including HTTP Range support for browser video playback.
 - Annotation CRUD with range validation, persisted JSONL, web edit actions, and
@@ -88,7 +89,8 @@ Implemented now:
 - Deterministic text-embedding semantic search for local development.
 - Rerun `.rrd` cache generation for state/action scalar timelines and web
   viewer embedding through `@rerun-io/web-viewer-react`.
-- Metadata-oriented LeRobot v3 export manifest and version lineage.
+- Metadata-oriented LeRobot v3 export manifest, validation report, and version
+  lineage.
 - Web UI orchestration via `useStudioData`.
 
 Not implemented yet:
