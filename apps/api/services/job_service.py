@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+import sqlite3
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -10,7 +13,7 @@ from apps.api.schemas.jobs import JobCreateRequest, JobRecord, VisualEmbeddingJo
 from apps.api.services.annotation_service import annotation_store
 from apps.api.services.embedding_service import embedding_index
 from apps.api.services.lance_store import store
-from apps.api.services.pydantic_compat import model_copy
+from apps.api.services.pydantic_compat import model_copy, model_dump
 from apps.api.services.vlm_response_service import vlm_response_store
 from packages.prompts import UnknownPromptTemplateError, get_prompt_template
 from workers.vlm_autolabel import AutoLabelConfig
@@ -21,9 +24,68 @@ from workers.visual_embedding_worker import (
 )
 
 
+APP_METADATA_DB_PATH = Path("data/app/metadata.sqlite3")
+
+
+class SQLiteJobRecordStore:
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._initialize()
+
+    def save(self, record: JobRecord) -> None:
+        payload = json.dumps(model_dump(record), default=str, sort_keys=True)
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO jobs (job_id, payload_json, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(job_id) DO UPDATE SET
+                    payload_json = excluded.payload_json,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (record.job_id, payload),
+            )
+
+    def get(self, job_id: str) -> JobRecord | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT payload_json FROM jobs WHERE job_id = ?",
+                (job_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return JobRecord(**json.loads(str(row[0])))
+
+    def list(self) -> list[JobRecord]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT payload_json FROM jobs ORDER BY updated_at, job_id",
+            ).fetchall()
+        return [JobRecord(**json.loads(str(row[0]))) for row in rows]
+
+    def _initialize(self) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS jobs (
+                    job_id TEXT PRIMARY KEY,
+                    payload_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+
+    def _connect(self) -> sqlite3.Connection:
+        return sqlite3.connect(self.path)
+
+
 class JobStore:
-    def __init__(self) -> None:
+    def __init__(self, sqlite_path: Path | None = None) -> None:
         self._records: dict[str, JobRecord] = {}
+        self._sqlite = SQLiteJobRecordStore(sqlite_path) if sqlite_path is not None else None
+        if self._sqlite is not None:
+            self._records.update({record.job_id: record for record in self._sqlite.list()})
 
     def create(
         self,
@@ -66,10 +128,16 @@ class JobStore:
                 }
             )
         self._records[job_id] = record
+        if self._sqlite is not None:
+            self._sqlite.save(record)
         return record
 
     def get(self, job_id: str) -> JobRecord:
         record = self._records.get(job_id)
+        if record is None and self._sqlite is not None:
+            record = self._sqlite.get(job_id)
+            if record is not None:
+                self._records[job_id] = record
         if record is None:
             raise HTTPException(status_code=404, detail="Job not found")
         return record
@@ -226,4 +294,4 @@ class JobStore:
         return blobs
 
 
-jobs = JobStore()
+jobs = JobStore(sqlite_path=APP_METADATA_DB_PATH)

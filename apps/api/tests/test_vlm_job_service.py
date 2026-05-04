@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 from datetime import datetime, timezone
@@ -137,6 +138,28 @@ class VlmJobServiceTest(unittest.TestCase):
         self.assertEqual(result.provider, "fake-vision")
         self.assertEqual(fake_index.dataset_id, "sample-xvla-soft-fold")
         self.assertEqual(fake_index.records, [record])
+
+    def test_job_store_persists_records_to_sqlite(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sqlite_path = Path(tmpdir) / "metadata.sqlite3"
+            first = JobStore(sqlite_path=sqlite_path)
+            created = first.create(
+                kind="unconfigured_job",
+                payload=JobCreateRequest(
+                    dataset_id="sample-xvla-soft-fold",
+                    episode_indices=[0],
+                    model="test-model",
+                ),
+            )
+
+            second = JobStore(sqlite_path=sqlite_path)
+            loaded = second.get(created.job_id)
+
+        self.assertEqual(loaded.job_id, created.job_id)
+        self.assertEqual(loaded.kind, "unconfigured_job")
+        self.assertEqual(loaded.status, JobStatus.queued)
+        self.assertEqual(loaded.dataset_id, "sample-xvla-soft-fold")
+        self.assertEqual(loaded.episode_indices, [0])
 
 
 class FakeEmbeddingIndex:

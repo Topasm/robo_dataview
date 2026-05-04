@@ -58,7 +58,8 @@ apps/web
 
 apps/api
   FastAPI app
-  In-memory service registries for datasets, jobs, exports, Rerun sessions
+  In-memory service registries for datasets, exports, Rerun sessions
+  SQLite-backed job metadata registry for restart-safe job lookups
   JSONL-backed annotation, embedding, version, and VLM response stores
   Optional Lance mirroring when pyarrow/lance are installed
 
@@ -104,6 +105,7 @@ Implemented now:
 - VLM provider routing with heuristic fallback and optional OpenAI-compatible
   HTTP inference.
 - Generated-label review queue for pending VLM/heuristic proposals.
+- SQLite job metadata store under `data/app/metadata.sqlite3`.
 - Rerun `.rrd` cache generation for state/action scalar timelines, optional
   camera video assets, deterministic cache keys, and web viewer embedding
   through `@rerun-io/web-viewer-react`.
@@ -117,7 +119,7 @@ Implemented now:
 
 Not implemented yet:
 
-- Durable external database for jobs, sessions, users, and app settings.
+- Durable external database for sessions, users, and app settings.
 - Real worker queue such as RQ/Celery plus Redis.
 - Local VLM/video-model inference.
 - Cross-modal visual search over compatible text/image model embeddings.

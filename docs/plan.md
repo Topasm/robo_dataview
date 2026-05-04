@@ -249,7 +249,7 @@ Definition of done:
 
 ### P8: Production Shape
 
-- [ ] Add SQLite/Postgres app metadata store.
+- [x] Add SQLite/Postgres app metadata store.
 - [ ] Add Redis + RQ/Celery worker queue.
 - [ ] Add background job progress events.
 - [ ] Add auth and user identities.
