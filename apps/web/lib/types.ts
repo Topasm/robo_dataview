@@ -22,13 +22,13 @@ export type Episode = {
   taskIndex: number;
   length: number;
   successLabel: boolean | null;
-  qualityScore: number;
+  qualityScore: number | null;
   reviewStatus: ReviewStatus;
   caption: string;
   failureReason: string;
   hasVlmLabel: boolean;
   hasHumanLabel: boolean;
-  split: string;
+  split: string | null;
   fps: number;
   cameraNames: string[];
 };

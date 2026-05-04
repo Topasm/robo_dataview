@@ -56,8 +56,8 @@ type EpisodeLabelDraft = {
   caption: string;
   successLabel: boolean | null;
   failureReason: string;
-  qualityScore: number;
-  split: string;
+  qualityScore: number | null;
+  split: string | null;
   reviewStatus: ReviewStatus;
 };
 

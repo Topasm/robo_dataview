@@ -12,6 +12,7 @@ from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
 from apps.api.routers import episodes
+from apps.api.schemas.common import ReviewStatus
 from apps.api.schemas.episodes import EpisodeDetail, EpisodeLabelUpdate, EpisodeListItem, EpisodeListPage
 from apps.api.services.episode_preview_service import EpisodePreview
 from apps.api.services.lance_store import VideoSource
@@ -362,6 +363,7 @@ class EpisodeVideoEndpointTest(unittest.TestCase):
             failure_reason="slipped",
             quality_score=0.4,
             split="val",
+            review_status=ReviewStatus.edited,
         )
 
         with patch.object(episodes, "store", fake_store):
@@ -372,6 +374,7 @@ class EpisodeVideoEndpointTest(unittest.TestCase):
         self.assertEqual(updated.failure_reason, "slipped")
         self.assertEqual(updated.quality_score, 0.4)
         self.assertEqual(updated.split, "val")
+        self.assertEqual(updated.review_status, "edited")
         self.assertIs(fake_store.payload, payload)
 
     def test_update_episode_labels_returns_404_for_missing_episode(self) -> None:

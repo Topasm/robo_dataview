@@ -47,7 +47,7 @@ export function EpisodeList({
             <span>
               <StatusPill status={episode.reviewStatus} />
             </span>
-            <span>{episode.qualityScore.toFixed(2)}</span>
+            <span>{episode.qualityScore === null ? "n/a" : episode.qualityScore.toFixed(2)}</span>
             <span className="label-icons">
               {episode.successLabel ? <Check size={14} /> : null}
               {episode.hasVlmLabel ? <Bot size={14} /> : null}

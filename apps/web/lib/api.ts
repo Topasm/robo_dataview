@@ -892,13 +892,13 @@ function toEpisode(raw: EpisodeResponse): Episode {
     taskIndex: raw.task_index ?? 0,
     length: raw.length ?? 0,
     successLabel: raw.success_label,
-    qualityScore: raw.quality_score ?? 0,
+    qualityScore: raw.quality_score,
     reviewStatus: raw.review_status,
     caption: raw.caption ?? "",
     failureReason: raw.failure_reason ?? "",
     hasVlmLabel: raw.has_vlm_label,
     hasHumanLabel: raw.has_human_label,
-    split: raw.split ?? "",
+    split: raw.split,
     fps: raw.fps ?? 0,
     cameraNames: raw.camera_names ?? []
   };

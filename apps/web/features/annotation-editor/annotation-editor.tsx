@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bot, Check, GitBranch, Plus, Save, Trash2, X } from "lucide-react";
+import { Bot, Check, GitBranch, Minus, Plus, Save, Trash2, X } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
 import { FrameMetadataPanel } from "@/features/episode-viewer/frame-metadata-panel";
@@ -24,8 +24,8 @@ type EpisodeLabelDraft = {
   caption: string;
   successLabel: boolean | null;
   failureReason: string;
-  qualityScore: number;
-  split: string;
+  qualityScore: number | null;
+  split: string | null;
   reviewStatus: ReviewStatus;
 };
 
@@ -211,22 +211,27 @@ export function AnnotationEditor({
               onChange={(event) =>
                 setEpisodeDraft((current) => ({
                   ...current,
-                  qualityScore: Number(event.target.value)
+                  qualityScore: event.target.value === "" ? null : Number(event.target.value)
                 }))
               }
+              placeholder="unset"
               step={0.01}
               type="number"
-              value={episodeDraft.qualityScore}
+              value={episodeDraft.qualityScore ?? ""}
             />
           </label>
           <label>
             Split
             <select
               onChange={(event) =>
-                setEpisodeDraft((current) => ({ ...current, split: event.target.value }))
+                setEpisodeDraft((current) => ({
+                  ...current,
+                  split: event.target.value === "" ? null : event.target.value
+                }))
               }
-              value={episodeDraft.split}
+              value={episodeDraft.split ?? ""}
             >
+              <option value="">unassigned</option>
               <option value="train">train</option>
               <option value="val">val</option>
               <option value="test">test</option>
@@ -261,6 +266,14 @@ export function AnnotationEditor({
           </label>
         </div>
         <div className="segmented-control">
+          <button
+            className={episodeDraft.successLabel === null ? "active" : ""}
+            onClick={() => setEpisodeDraft((current) => ({ ...current, successLabel: null }))}
+            type="button"
+          >
+            <Minus size={14} />
+            Unknown
+          </button>
           <button
             className={episodeDraft.successLabel === true ? "active" : ""}
             onClick={() => setEpisodeDraft((current) => ({ ...current, successLabel: true }))}
@@ -537,7 +550,7 @@ function toEpisodeDraft(episode: Episode): EpisodeLabelDraft {
     successLabel: episode.successLabel,
     failureReason: episode.failureReason,
     qualityScore: episode.qualityScore,
-    split: episode.split || "train",
+    split: episode.split,
     reviewStatus: episode.reviewStatus
   };
 }
