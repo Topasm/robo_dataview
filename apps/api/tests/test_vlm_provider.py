@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -42,43 +43,61 @@ class VlmProviderTest(unittest.TestCase):
         self.assertGreaterEqual(len(result.proposals), 12)
 
     def test_provider_includes_extracted_keyframe_image_artifacts(self) -> None:
-        with patch.dict(os.environ, {"ROBOT_DATA_STUDIO_VLM_PROVIDER": ""}, clear=False):
-            provider = get_vlm_provider("heuristic-vlm-fallback")
-        episode = EpisodeDetail(
-            dataset_id="dataset-a",
-            episode_index=2,
-            task_index=3,
-            length=24,
-            fps=20.0,
-            camera_names=["cam_high"],
-        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            image_path = root / "keyframe.jpg"
+            image_path.write_bytes(b"fake-jpeg")
+            publish_root = root / "published"
 
-        def fake_extract(**kwargs):
-            return [
-                KeyframeArtifact(
-                    camera=kwargs["camera"],
-                    frame_index=0,
-                    uri="/tmp/keyframe.jpg",
-                    width=32,
-                    height=24,
-                )
-            ]
-
-        with patch("workers.vlm_provider.extract_keyframes_from_blob", side_effect=fake_extract):
-            result = provider.propose(
+            episode = EpisodeDetail(
                 dataset_id="dataset-a",
-                episode=episode,
-                config=AutoLabelConfig(
-                    model="heuristic-vlm-fallback",
-                    prompt_template="episode_autolabel_v1",
-                    prompt_version="v1",
-                ),
-                video_blobs={"cam_high": b"fake mp4"},
+                episode_index=2,
+                task_index=3,
+                length=24,
+                fps=20.0,
+                camera_names=["cam_high"],
             )
 
-        self.assertEqual(result.raw_response["keyframe_image_count"], 1)
-        self.assertEqual(result.raw_response["keyframe_images"][0]["camera"], "cam_high")
-        self.assertEqual(result.raw_response["keyframe_images"][0]["uri"], "/tmp/keyframe.jpg")
+            def fake_extract(**kwargs):
+                return [
+                    KeyframeArtifact(
+                        camera=kwargs["camera"],
+                        frame_index=0,
+                        uri=str(image_path),
+                        width=32,
+                        height=24,
+                    )
+                ]
+
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "ROBOT_DATA_STUDIO_VLM_PROVIDER": "",
+                        "ROBOT_DATA_STUDIO_KEYFRAME_CACHE_PUBLISH_URI": str(publish_root),
+                    },
+                    clear=False,
+                ),
+                patch("workers.vlm_provider.extract_keyframes_from_blob", side_effect=fake_extract),
+            ):
+                provider = get_vlm_provider("heuristic-vlm-fallback")
+                result = provider.propose(
+                    dataset_id="dataset-a",
+                    episode=episode,
+                    config=AutoLabelConfig(
+                        model="heuristic-vlm-fallback",
+                        prompt_template="episode_autolabel_v1",
+                        prompt_version="v1",
+                    ),
+                    video_blobs={"cam_high": b"fake mp4"},
+                )
+
+            self.assertEqual(result.raw_response["keyframe_image_count"], 1)
+            image_payload = result.raw_response["keyframe_images"][0]
+            self.assertEqual(image_payload["camera"], "cam_high")
+            self.assertEqual(image_payload["uri"], str(image_path))
+            self.assertEqual(image_payload["published_uri"], str(publish_root / "keyframes/keyframe.jpg"))
+            self.assertEqual(Path(image_payload["published_uri"]).read_bytes(), b"fake-jpeg")
 
     def test_openai_compatible_provider_posts_images_and_parses_annotations(self) -> None:
         episode = EpisodeDetail(

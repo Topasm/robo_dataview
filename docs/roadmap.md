@@ -296,6 +296,8 @@ Implemented:
   destinations through `publish_uri`,
   `ROBOT_DATA_STUDIO_RERUN_CACHE_PUBLISH_URI`, or
   `ROBOT_DATA_STUDIO_CACHE_PUBLISH_URI`.
+- Optional keyframe and preview cache artifact publishing to local or
+  `fsspec` destinations through cache publish environment variables.
 - Accepted annotations only.
 - Version lineage JSONL plus optional Lance mirror.
 
@@ -303,5 +305,5 @@ Next:
 
 - Run the real-dataset export smoke workflow with video materialization and on
   larger representative multi-camera subsets.
-- Add keyframe and preview cache artifact publishing beyond Rerun `.rrd`
-  recordings.
+- Run configured keyframe/preview cache publishing smoke workflows against
+  local or object storage.

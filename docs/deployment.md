@@ -175,6 +175,10 @@ through those paths.
 - Rerun cache publishing: set `ROBOT_DATA_STUDIO_RERUN_CACHE_PUBLISH_URI`
   or `ROBOT_DATA_STUDIO_CACHE_PUBLISH_URI`, or pass `publish_uri` to
   `POST /api/rerun/session` / `POST /api/jobs/rerun-session`
+- Keyframe and preview cache publishing: set
+  `ROBOT_DATA_STUDIO_KEYFRAME_CACHE_PUBLISH_URI` and/or
+  `ROBOT_DATA_STUDIO_PREVIEW_CACHE_PUBLISH_URI`; both fall back to
+  `ROBOT_DATA_STUDIO_CACHE_PUBLISH_URI`
 - Export publishing: set `ROBOT_DATA_STUDIO_EXPORT_PUBLISH_URI` or pass
   `publish_uri` to `POST /api/exports` / `POST /api/jobs/export`
 

@@ -29,6 +29,7 @@ from workers.keyframe_extractor import (
     KeyframeExtractionUnavailable,
     extract_keyframes_from_blob,
     extract_keyframes_from_path,
+    publish_keyframe_artifacts,
 )
 from workers.vlm_autolabel import select_keyframes
 
@@ -160,6 +161,7 @@ def build_visual_embedding_records(
             if not artifacts:
                 skipped.append(f"episode {episode.episode_index} {camera}: no images decoded")
                 continue
+            artifacts = publish_keyframe_artifacts(artifacts)
             image_paths = [Path(artifact.uri) for artifact in artifacts]
             embeddings = provider.embed_images(image_paths)
             if len(embeddings) != len(artifacts):
@@ -255,8 +257,8 @@ def _record_from_artifact(
     provider: VisualEmbeddingProvider,
     created_at: datetime,
 ) -> EmbeddingRecord:
-    source_uri = artifact.uri
-    content_hash = _file_sha1(Path(source_uri))
+    content_hash = _file_sha1(Path(artifact.uri))
+    source_uri = artifact.published_uri or artifact.uri
     text = f"{artifact.camera} frame {artifact.frame_index} visual keyframe"
     scope = f"visual:{provider.source_model}:{artifact.camera}:{artifact.frame_index}:{content_hash}"
     return EmbeddingRecord(

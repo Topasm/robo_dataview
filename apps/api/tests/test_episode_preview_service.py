@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -93,6 +94,39 @@ class EpisodePreviewServiceTest(unittest.TestCase):
             self.assertEqual(first.frame_index, 4)
             self.assertEqual(FakeCapture.opened_paths, [str(video_path)])
             self.assertEqual(FakeCapture.seek_frames, [4])
+
+    def test_preview_cache_can_publish_generated_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            cache_root = root / "cache"
+            publish_root = root / "published"
+            video_path = root / "episode.mp4"
+            video_path.write_bytes(b"fake-video")
+            service = EpisodePreviewService(cache_root=cache_root)
+
+            with (
+                patch.dict(
+                    os.environ,
+                    {"ROBOT_DATA_STUDIO_PREVIEW_CACHE_PUBLISH_URI": str(publish_root)},
+                    clear=False,
+                ),
+                patch(
+                    "apps.api.services.episode_preview_service.store",
+                    FakePreviewStore(VideoSource(size=video_path.stat().st_size, path=video_path)),
+                ),
+            ):
+                preview = service.get_or_create_preview(
+                    dataset_id="dataset-a",
+                    episode_index=3,
+                    camera="cam_high",
+                    frame_index=4,
+                )
+
+            self.assertIsNotNone(preview)
+            self.assertEqual(preview.published_uri, str(publish_root / "previews" / preview.path.name))
+            self.assertEqual(preview.publish_size_bytes, len(b"fake-jpeg"))
+            self.assertIsNone(preview.publish_error)
+            self.assertEqual(Path(preview.published_uri or "").read_bytes(), b"fake-jpeg")
 
     def test_preview_cache_returns_none_when_video_source_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

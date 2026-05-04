@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -18,6 +19,7 @@ class VisualEmbeddingWorkerTest(unittest.TestCase):
     def test_build_visual_embedding_records_uses_video_source_keyframes(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
+            publish_root = root / "published"
             video_path = root / "episode.mp4"
             video_path.write_bytes(b"fake-video")
             image_path = root / "cam_high_frame_000000.jpg"
@@ -38,9 +40,16 @@ class VisualEmbeddingWorkerTest(unittest.TestCase):
                     )
                 ]
 
-            with patch(
-                "workers.visual_embedding_worker.extract_keyframes_from_path",
-                side_effect=fake_extract,
+            with (
+                patch.dict(
+                    os.environ,
+                    {"ROBOT_DATA_STUDIO_KEYFRAME_CACHE_PUBLISH_URI": str(publish_root)},
+                    clear=False,
+                ),
+                patch(
+                    "workers.visual_embedding_worker.extract_keyframes_from_path",
+                    side_effect=fake_extract,
+                ),
             ):
                 result = build_visual_embedding_records(
                     dataset_store=FakeVisualStore(video_path),
@@ -56,19 +65,20 @@ class VisualEmbeddingWorkerTest(unittest.TestCase):
                     cache_root=root / "cache",
                 )
 
-        self.assertEqual(result.provider, "fake-vision-provider")
-        self.assertEqual(result.artifact_count, 1)
-        self.assertEqual(result.skipped, [])
-        self.assertEqual(len(result.records), 1)
-        record = result.records[0]
-        self.assertEqual(record.episode_index, 3)
-        self.assertEqual(record.frame_index, 0)
-        self.assertEqual(record.modality, "image")
-        self.assertEqual(record.camera, "cam_high")
-        self.assertEqual(record.source_uri, str(image_path))
-        self.assertEqual(record.source_model, "fake-vision-provider")
-        self.assertIsNotNone(record.content_hash)
-        self.assertAlmostEqual(sum(value * value for value in record.embedding), 1.0)
+            self.assertEqual(result.provider, "fake-vision-provider")
+            self.assertEqual(result.artifact_count, 1)
+            self.assertEqual(result.skipped, [])
+            self.assertEqual(len(result.records), 1)
+            record = result.records[0]
+            self.assertEqual(record.episode_index, 3)
+            self.assertEqual(record.frame_index, 0)
+            self.assertEqual(record.modality, "image")
+            self.assertEqual(record.camera, "cam_high")
+            self.assertEqual(record.source_uri, str(publish_root / "keyframes/cam_high_frame_000000.jpg"))
+            self.assertEqual(record.source_model, "fake-vision-provider")
+            self.assertIsNotNone(record.content_hash)
+            self.assertEqual(Path(record.source_uri).read_bytes(), b"fake-jpeg")
+            self.assertAlmostEqual(sum(value * value for value in record.embedding), 1.0)
 
 
 class FakeVisualStore:

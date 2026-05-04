@@ -114,7 +114,10 @@ Supported fields:
 `GET /episodes/{episode_index}/preview/{camera}` returns a cached JPEG preview
 frame for browser posters and episode-list thumbnails. It uses OpenCV when
 available, caches generated files under `data/cache/previews`, and returns `503`
-when optional video decoding dependencies are missing.
+when optional video decoding dependencies are missing. Set
+`ROBOT_DATA_STUDIO_PREVIEW_CACHE_PUBLISH_URI` or the shared
+`ROBOT_DATA_STUDIO_CACHE_PUBLISH_URI` to copy generated preview JPEGs to a
+local or `fsspec` destination after cache creation.
 
 `GET /episodes/{episode_index}/video/{camera}` streams an MP4 blob when the
 episode table has a matching video blob column, including
@@ -343,7 +346,11 @@ Job records include `model`, `provider`, `prompt_template`, and
 route and prompt contract used. VLM jobs also write raw provider responses to
 JSONL and return `raw_response_ids` plus `raw_response_uri`. When camera MP4
 blobs are available and optional video dependencies are installed, raw responses
-include decoded keyframe JPEG artifact metadata.
+include decoded keyframe JPEG artifact metadata. Set
+`ROBOT_DATA_STUDIO_KEYFRAME_CACHE_PUBLISH_URI` or the shared
+`ROBOT_DATA_STUDIO_CACHE_PUBLISH_URI` to publish those JPEG artifacts; each
+raw-response image entry then includes `published_uri`, `publish_size_bytes`,
+and `publish_error` metadata.
 
 `POST /jobs/vlm-label`
 
@@ -389,7 +396,9 @@ embedding rows to the shared embedding store, and returns
 uses deterministic image hashing for local development. Use
 `ROBOT_DATA_STUDIO_VISUAL_EMBEDDING_PROVIDER=transformers` or a model prefix
 such as `clip:`, `siglip:`, `dino:`, or `transformers:` to route images through
-an optional Transformers vision model.
+an optional Transformers vision model. When keyframe cache publishing is
+configured, visual embedding rows keep hashing the local decoded JPEG but store
+the published artifact URI as `source_uri`.
 
 `POST /jobs/export` accepts the same payload as `POST /exports`, returns a
 `JobRecord`, and runs through the configured job backend when

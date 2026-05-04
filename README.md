@@ -118,8 +118,8 @@ The repository has moved past a pure skeleton. The current MVP path can:
    deterministic keyframe index sampling, versioned prompt tracking, and a
    provider interface with heuristic fallback, optional OpenAI-compatible model
    routing, optional local Ollama-compatible model routing,
-   raw-response/keyframe artifact persistence, and a generated-label review
-   queue.
+   raw-response/keyframe artifact persistence, optional keyframe cache
+   artifact publishing, and a generated-label review queue.
 9. Export selected episodes as a LeRobot v3-oriented snapshot with metadata,
    frame JSONL, optional Parquet, available camera MP4 artifacts, validation,
    and version lineage, or as a Lance subset when optional `pyarrow` and
@@ -133,6 +133,8 @@ The repository has moved past a pure skeleton. The current MVP path can:
    export smoke workflow also opens the default `xvla-soft-fold` `hf://` Lance
    URI and validates a one-episode exported subset with the official loader.
    Exports can target the selected episode or the current train/val/test split.
+   Rerun, preview, and keyframe cache artifacts can also publish to local or
+   `fsspec` destinations through cache publish environment variables.
 10. Render the main web operations UI with dataset, episode, video viewer,
    annotation editing, search, Rerun, and export panels.
 

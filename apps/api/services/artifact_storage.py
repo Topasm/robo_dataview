@@ -129,3 +129,19 @@ def configured_rerun_cache_publish_uri() -> str | None:
         or os.getenv("ROBOT_DATA_STUDIO_CACHE_PUBLISH_URI")
         or None
     )
+
+
+def configured_keyframe_cache_publish_uri() -> str | None:
+    return (
+        os.getenv("ROBOT_DATA_STUDIO_KEYFRAME_CACHE_PUBLISH_URI")
+        or os.getenv("ROBOT_DATA_STUDIO_CACHE_PUBLISH_URI")
+        or None
+    )
+
+
+def configured_preview_cache_publish_uri() -> str | None:
+    return (
+        os.getenv("ROBOT_DATA_STUDIO_PREVIEW_CACHE_PUBLISH_URI")
+        or os.getenv("ROBOT_DATA_STUDIO_CACHE_PUBLISH_URI")
+        or None
+    )

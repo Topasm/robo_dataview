@@ -1,9 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import re
 import tempfile
+
+from apps.api.services.artifact_storage import (
+    ArtifactPublishDependencyError,
+    ArtifactPublishError,
+    configured_keyframe_cache_publish_uri,
+    publish_file,
+)
 
 
 class KeyframeExtractionUnavailable(RuntimeError):
@@ -18,6 +25,9 @@ class KeyframeArtifact:
     width: int
     height: int
     content_type: str = "image/jpeg"
+    published_uri: str | None = None
+    publish_size_bytes: int | None = None
+    publish_error: str | None = None
 
 
 def extract_keyframes_from_blob(
@@ -96,6 +106,45 @@ def extract_keyframes_from_path(
     finally:
         capture.release()
     return artifacts
+
+
+def publish_keyframe_artifacts(
+    artifacts: list[KeyframeArtifact],
+    *,
+    publish_uri: str | None = None,
+) -> list[KeyframeArtifact]:
+    publish_uri = publish_uri or configured_keyframe_cache_publish_uri()
+    if not publish_uri:
+        return artifacts
+
+    published: list[KeyframeArtifact] = []
+    for artifact in artifacts:
+        path = Path(artifact.uri)
+        try:
+            result = publish_file(
+                path,
+                publish_uri,
+                relative_path=_cache_relative_path(path, namespace="keyframes"),
+            )
+        except (ArtifactPublishDependencyError, ArtifactPublishError) as exc:
+            published.append(replace(artifact, publish_error=str(exc)))
+            continue
+        published.append(
+            replace(
+                artifact,
+                published_uri=str(result["uri"]),
+                publish_size_bytes=int(result["size_bytes"]),
+                publish_error=None,
+            )
+        )
+    return published
+
+
+def _cache_relative_path(path: Path, *, namespace: str) -> str:
+    try:
+        return path.resolve().relative_to(Path("data/cache").resolve()).as_posix()
+    except ValueError:
+        return f"{namespace}/{path.name}"
 
 
 def _safe_name(value: str) -> str:

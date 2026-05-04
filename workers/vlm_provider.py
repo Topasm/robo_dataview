@@ -14,7 +14,11 @@ from urllib.request import Request, urlopen
 from apps.api.schemas.annotations import AnnotationCreate
 from apps.api.schemas.common import AnnotationSource, ReviewStatus
 from apps.api.schemas.episodes import EpisodeDetail
-from workers.keyframe_extractor import KeyframeArtifact, extract_keyframes_from_blob
+from workers.keyframe_extractor import (
+    KeyframeArtifact,
+    extract_keyframes_from_blob,
+    publish_keyframe_artifacts,
+)
 from workers.vlm_autolabel import AutoLabelConfig, build_vlm_annotation_proposals, select_keyframes
 
 KEYFRAME_CACHE_ROOT = Path("data/cache/keyframes")
@@ -325,7 +329,7 @@ def _extract_keyframe_artifacts(
                 output_dir=output_dir,
             )
         )
-    return artifacts
+    return publish_keyframe_artifacts(artifacts)
 
 
 def _artifact_payload(artifact: KeyframeArtifact) -> dict[str, object]:
@@ -336,6 +340,9 @@ def _artifact_payload(artifact: KeyframeArtifact) -> dict[str, object]:
         "width": artifact.width,
         "height": artifact.height,
         "content_type": artifact.content_type,
+        "published_uri": artifact.published_uri,
+        "publish_size_bytes": artifact.publish_size_bytes,
+        "publish_error": artifact.publish_error,
     }
 
 

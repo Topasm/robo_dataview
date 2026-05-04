@@ -4,7 +4,12 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from workers.keyframe_extractor import extract_keyframes_from_blob, extract_keyframes_from_path
+from workers.keyframe_extractor import (
+    KeyframeArtifact,
+    extract_keyframes_from_blob,
+    extract_keyframes_from_path,
+    publish_keyframe_artifacts,
+)
 
 
 class KeyframeExtractorTest(unittest.TestCase):
@@ -83,6 +88,32 @@ class KeyframeExtractorTest(unittest.TestCase):
             )
 
         self.assertEqual(artifacts, [])
+
+    def test_publish_keyframe_artifacts_copies_images_and_records_uri(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            image_path = root / "frame.jpg"
+            image_path.write_bytes(b"fake-jpeg")
+            publish_root = root / "published"
+
+            [artifact] = publish_keyframe_artifacts(
+                [
+                    KeyframeArtifact(
+                        camera="cam_high",
+                        frame_index=0,
+                        uri=str(image_path),
+                        width=32,
+                        height=24,
+                    )
+                ],
+                publish_uri=str(publish_root),
+            )
+
+            self.assertEqual(artifact.uri, str(image_path))
+            self.assertEqual(artifact.published_uri, str(publish_root / "keyframes/frame.jpg"))
+            self.assertEqual(artifact.publish_size_bytes, len(b"fake-jpeg"))
+            self.assertIsNone(artifact.publish_error)
+            self.assertEqual(Path(artifact.published_uri or "").read_bytes(), b"fake-jpeg")
 
 
 def _cv2_or_skip(test_case: unittest.TestCase):

@@ -134,6 +134,8 @@ Implemented now:
 - Optional export artifact publishing to local or `fsspec` destinations.
 - Optional Rerun cache artifact publishing to local or `fsspec`
   destinations.
+- Optional keyframe and preview cache artifact publishing to local or
+  `fsspec` destinations.
 - Export scope controls for selected episode or current train/val/test split.
 - Queue-backed export and Rerun session jobs using the shared job progress
   event stream.
@@ -147,8 +149,6 @@ Not implemented yet:
   Ollama-compatible HTTP provider.
 - Larger strict real-dataset LeRobot Parquet/MP4 smoke runs with video
   materialization.
-- Keyframe and preview cache artifact publishing beyond Rerun `.rrd`
-  recordings.
 
 ## Design Principles
 

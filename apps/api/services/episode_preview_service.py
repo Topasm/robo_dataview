@@ -7,6 +7,12 @@ import re
 import tempfile
 from typing import Any
 
+from apps.api.services.artifact_storage import (
+    ArtifactPublishDependencyError,
+    ArtifactPublishError,
+    configured_preview_cache_publish_uri,
+    publish_file,
+)
 from apps.api.services.lance_store import VideoSource, store
 
 
@@ -22,6 +28,9 @@ class EpisodePreview:
     path: Path
     content_type: str
     frame_index: int
+    published_uri: str | None = None
+    publish_size_bytes: int | None = None
+    publish_error: str | None = None
 
 
 class EpisodePreviewService:
@@ -49,7 +58,15 @@ class EpisodePreviewService:
         )
         if not cache_path.exists():
             self._extract_preview(source=source, frame_index=frame_index, output_path=cache_path)
-        return EpisodePreview(path=cache_path, content_type="image/jpeg", frame_index=frame_index)
+        publish = self._publish_preview(cache_path)
+        return EpisodePreview(
+            path=cache_path,
+            content_type="image/jpeg",
+            frame_index=frame_index,
+            published_uri=publish.get("published_uri"),
+            publish_size_bytes=publish.get("publish_size_bytes"),
+            publish_error=publish.get("publish_error"),
+        )
 
     def _cache_path(
         self,
@@ -103,6 +120,24 @@ class EpisodePreviewService:
             finally:
                 capture.release()
 
+    @staticmethod
+    def _publish_preview(path: Path) -> dict[str, Any]:
+        publish_uri = configured_preview_cache_publish_uri()
+        if not publish_uri:
+            return {}
+        try:
+            result = publish_file(
+                path,
+                publish_uri,
+                relative_path=_cache_relative_path(path, namespace="previews"),
+            )
+        except (ArtifactPublishDependencyError, ArtifactPublishError) as exc:
+            return {"publish_error": str(exc)}
+        return {
+            "published_uri": str(result["uri"]),
+            "publish_size_bytes": int(result["size_bytes"]),
+        }
+
 
 class _capture_input_path:
     def __init__(self, source: VideoSource) -> None:
@@ -128,6 +163,13 @@ class _capture_input_path:
 def _safe_name(value: str) -> str:
     safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", value.strip())
     return safe.strip("_") or "item"
+
+
+def _cache_relative_path(path: Path, *, namespace: str) -> str:
+    try:
+        return path.resolve().relative_to(Path("data/cache").resolve()).as_posix()
+    except ValueError:
+        return f"{namespace}/{path.name}"
 
 
 episode_preview_service = EpisodePreviewService()
