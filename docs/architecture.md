@@ -104,6 +104,8 @@ Implemented now:
   Transformers CLIP/SigLIP/DINO-style provider, and camera/source/hash metadata
   in the shared embedding table.
 - Semantic search modality/source-model filters for stored visual rows.
+- Optional CLIP/SigLIP text embedding provider for compatible text-to-image
+  vector search against stored visual rows.
 - Full-text search over episode metadata and annotation text.
 - VLM provider routing with heuristic fallback and optional OpenAI-compatible
   HTTP inference.
@@ -138,7 +140,6 @@ Not implemented yet:
 
 - Durable external database for app settings.
 - Local VLM/video-model inference.
-- Compatible CLIP/SigLIP text encoder route for true text-to-image search.
 - Larger strict real-dataset LeRobot Parquet/MP4 smoke runs with video
   materialization.
 - Remote object-store/HF path byte-range reads. Local file sources and seekable

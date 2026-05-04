@@ -225,10 +225,12 @@ Implemented:
 - Visual keyframe embedding jobs with deterministic fallback and optional
   Transformers CLIP/SigLIP/DINO-style image model route.
 - Semantic search modality/source-model filters for stored visual rows.
+- Optional CLIP/SigLIP text encoder route for compatible text-to-image search.
 
 Next:
 
-- Add a compatible CLIP/SigLIP text encoder route for true text-to-image search.
+- Run a real CLIP/SigLIP text-to-image search smoke with generated visual
+  embeddings.
 - Move embedding jobs to a queue-backed worker process.
 
 ## Phase 7: Export and Versioning

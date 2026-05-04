@@ -253,9 +253,10 @@ route keyframes through an optional Transformers vision model. Visual rows store
 traceable.
 
 Current status: semantic search can target stored text, image, video clip, or
-trajectory embedding rows via modality filters. Cross-modal text-to-image search
-should only rank visual rows when the query and image vectors come from a
-compatible model family and `source_model` is selected accordingly.
+trajectory embedding rows via modality filters. Optional CLIP/SigLIP text
+embedding providers use the same `transformers-vision:<model>` source model
+namespace as compatible visual rows, so cross-modal text-to-image search can be
+restricted to a shared vector space.
 
 ## versions.lance
 

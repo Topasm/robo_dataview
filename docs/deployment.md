@@ -117,6 +117,11 @@ ROBOT_DATA_STUDIO_VISUAL_EMBEDDING_PROVIDER=transformers
 ROBOT_DATA_STUDIO_VISUAL_EMBEDDING_MODEL=openai/clip-vit-base-patch32
 ```
 
+For compatible text-to-image search, use the same CLIP/SigLIP model for text and
+visual embeddings, for example `ROBOT_DATA_STUDIO_EMBEDDING_PROVIDER=clip`,
+`ROBOT_DATA_STUDIO_EMBEDDING_MODEL=clip:openai/clip-vit-base-patch32`, and
+`ROBOT_DATA_STUDIO_VISUAL_EMBEDDING_MODEL=openai/clip-vit-base-patch32`.
+
 ## Start Commands
 
 API:

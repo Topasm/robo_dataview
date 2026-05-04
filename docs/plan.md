@@ -91,8 +91,9 @@ Known limits:
 - VLM labeling defaults to heuristic scaffolding unless an OpenAI-compatible
   provider is configured.
 - Semantic search can target stored visual embedding rows by modality and source
-  model, but meaningful cross-modal text-to-image ranking still requires a
-  compatible visual/text model route.
+  model. Meaningful cross-modal text-to-image ranking requires configuring the
+  text embedding provider and visual embedding worker with the same compatible
+  CLIP/SigLIP model.
 - Export writes frame JSONL, available MP4 artifacts, and optional Parquet
   shards. JSONL keeps internal per-frame video references; Parquet omits video
   feature columns and relies on LeRobot episode video metadata.
@@ -276,7 +277,8 @@ Definition of done:
 
 1. Run the opt-in real-dataset export smoke workflow with video materialization
    and larger representative downloaded or `hf://` Lance subsets.
-2. Add a compatible CLIP/SigLIP text encoder route for true text-to-image search.
+2. Run a real CLIP/SigLIP text-to-image search smoke with generated visual
+   embeddings.
 3. Add remote object-store/HF path byte-range reads.
 4. Add object storage support for cache and exports.
 

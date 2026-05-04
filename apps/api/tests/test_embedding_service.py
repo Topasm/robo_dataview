@@ -7,6 +7,7 @@ import sys
 import types
 from datetime import datetime, timezone
 from pathlib import Path
+from types import ModuleType
 import unittest
 from unittest.mock import patch
 
@@ -17,6 +18,7 @@ from apps.api.services.embedding_service import (
     EmbeddingRecord,
     EmbeddingIndex,
     OpenAICompatibleEmbeddingProvider,
+    TransformersTextEmbeddingProvider,
     embed_text,
     get_text_embedding_provider,
 )
@@ -260,6 +262,46 @@ class EmbeddingServiceTest(unittest.TestCase):
         self.assertEqual(results[0].source_model, "fake-text-embedding")
         self.assertEqual(results[0].camera, "cam_high")
         self.assertEqual(results[0].source_uri, "/tmp/keyframe.jpg")
+
+    def test_semantic_search_skips_dimension_mismatched_visual_records(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            index = EmbeddingIndex(
+                storage_root=Path(tmpdir),
+                embedding_provider=FakeTextEmbeddingProvider(),
+                mirror_lance=False,
+                mirror_lancedb=False,
+            )
+            index.upsert_records(
+                "sample",
+                [
+                    EmbeddingRecord(
+                        embedding_id="visual-1",
+                        episode_index=7,
+                        frame_index=4,
+                        clip_start_frame=4,
+                        clip_end_frame=4,
+                        modality="image",
+                        embedding=[1.0, 0.0, 0.0],
+                        text="dimension mismatched keyframe",
+                        source_model="fake-text-embedding",
+                        created_at=datetime.now(timezone.utc),
+                    )
+                ],
+            )
+
+            results = index.search(
+                SemanticSearchRequest(
+                    dataset_id="sample",
+                    text="cloth grasp",
+                    modalities=["image"],
+                    source_model="fake-text-embedding",
+                    limit=2,
+                ),
+                episodes=[EpisodeListItem(dataset_id="sample", episode_index=7)],
+                annotations=[],
+            )
+
+        self.assertEqual(results, [])
 
     def test_visual_semantic_search_respects_filtered_episode_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -507,6 +549,30 @@ class EmbeddingServiceTest(unittest.TestCase):
 
         self.assertIsInstance(provider, OpenAICompatibleEmbeddingProvider)
 
+    def test_transformers_text_provider_uses_text_features_with_visual_source_model(self) -> None:
+        fake_modules = _fake_transformers_text_modules()
+        with patch.dict(sys.modules, fake_modules):
+            provider = TransformersTextEmbeddingProvider("openai/clip-vit-base-patch32")
+            embeddings = provider.embed_many(["cloth grasp", "empty table"])
+
+        self.assertEqual(provider.source_model, "transformers-vision:openai/clip-vit-base-patch32")
+        self.assertEqual(embeddings, [[1.0, 0.0], [0.0, 1.0]])
+        self.assertEqual(fake_modules["transformers"].AutoProcessor.seen_texts, ["cloth grasp", "empty table"])
+
+    def test_embedding_provider_env_selects_transformers_text_provider(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "ROBOT_DATA_STUDIO_EMBEDDING_PROVIDER": "clip",
+                "ROBOT_DATA_STUDIO_EMBEDDING_MODEL": "clip:openai/clip-vit-base-patch32",
+            },
+            clear=False,
+        ):
+            provider = get_text_embedding_provider()
+
+        self.assertIsInstance(provider, TransformersTextEmbeddingProvider)
+        self.assertEqual(provider.source_model, "transformers-vision:openai/clip-vit-base-patch32")
+
 
 class FakeLanceDb:
     def __init__(self) -> None:
@@ -567,6 +633,62 @@ class FakeHttpResponse:
 
     def read(self) -> bytes:
         return json.dumps(self.payload).encode("utf-8")
+
+
+class _FakeNoGrad:
+    def __enter__(self) -> None:
+        return None
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+
+class _FakeTorch(ModuleType):
+    def no_grad(self) -> _FakeNoGrad:
+        return _FakeNoGrad()
+
+
+class _FakeTensor:
+    def __init__(self, rows: list[list[float]]) -> None:
+        self.rows = rows
+
+    def tolist(self) -> list[list[float]]:
+        return self.rows
+
+
+class _FakeAutoProcessor:
+    seen_texts: list[str] = []
+
+    @classmethod
+    def from_pretrained(cls, model_name: str) -> "_FakeAutoProcessor":
+        cls.seen_texts = []
+        return cls()
+
+    def __call__(self, *, text: list[str], **_: object) -> dict[str, list[str]]:
+        self.__class__.seen_texts = text
+        return {"text": text}
+
+
+class _FakeAutoModel:
+    @classmethod
+    def from_pretrained(cls, model_name: str) -> "_FakeAutoModel":
+        return cls()
+
+    def eval(self) -> None:
+        return None
+
+    def get_text_features(self, *, text: list[str]) -> _FakeTensor:
+        return _FakeTensor([[1.0, 0.0] if "cloth" in value else [0.0, 1.0] for value in text])
+
+
+def _fake_transformers_text_modules() -> dict[str, ModuleType]:
+    transformers_module = ModuleType("transformers")
+    transformers_module.AutoProcessor = _FakeAutoProcessor  # type: ignore[attr-defined]
+    transformers_module.AutoModel = _FakeAutoModel  # type: ignore[attr-defined]
+    return {
+        "torch": _FakeTorch("torch"),
+        "transformers": transformers_module,
+    }
 
 
 if __name__ == "__main__":

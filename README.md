@@ -136,8 +136,9 @@ Known MVP gaps:
 
 - VLM labeling defaults to heuristic/local scaffolding; OpenAI-compatible model
   inference is available only when configured with environment variables.
-- Text semantic search and visual image embedding generation are separate paths.
-  Cross-modal text-to-image search requires a compatible CLIP/SigLIP route.
+- Cross-modal text-to-image search requires configuring the text embedding
+  provider and visual embedding worker with the same compatible CLIP/SigLIP
+  model.
 - LeRobot export writes frame JSONL, available MP4 artifacts, and optional
   Parquet shards. Per-frame video references stay in the JSONL readability copy;
   Parquet rows omit video feature columns so video resolution follows LeRobot

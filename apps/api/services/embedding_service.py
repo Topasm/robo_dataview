@@ -150,6 +150,56 @@ class OpenAICompatibleEmbeddingProvider:
             return json.loads(response.read().decode("utf-8"))
 
 
+class TransformersTextEmbeddingProvider:
+    """Optional CLIP/SigLIP-style text encoder for visual-compatible search."""
+
+    def __init__(self, model_name: str | None = None) -> None:
+        self.model_name = model_name or _transformers_text_model_name()
+        self.source_model = f"transformers-vision:{self.model_name}"
+        self._loaded = False
+        self._torch: object | None = None
+        self._processor: object | None = None
+        self._model: object | None = None
+
+    def embed_many(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        self._load()
+        assert self._torch is not None
+        assert self._processor is not None
+        assert self._model is not None
+        inputs = self._processor(
+            text=texts,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+        )
+        with self._torch.no_grad():  # type: ignore[attr-defined]
+            if hasattr(self._model, "get_text_features"):
+                outputs = self._model.get_text_features(**inputs)
+                rows = outputs.tolist()
+            else:
+                outputs = self._model(**inputs)
+                rows = _rows_from_transformers_text_output(outputs)
+        return [_normalize_embedding(row) for row in rows]
+
+    def _load(self) -> None:
+        if self._loaded:
+            return
+        try:
+            import torch
+            from transformers import AutoModel, AutoProcessor
+        except ImportError as exc:
+            raise RuntimeError(
+                "transformers and torch are required for CLIP/SigLIP text embeddings."
+            ) from exc
+        self._torch = torch
+        self._processor = AutoProcessor.from_pretrained(self.model_name)
+        self._model = AutoModel.from_pretrained(self.model_name)
+        self._model.eval()
+        self._loaded = True
+
+
 class EmbeddingIndex:
     """Small deterministic embedding index for local semantic search.
 
@@ -297,6 +347,7 @@ class EmbeddingIndex:
         scored = [
             (cosine_similarity(query_embedding, record.embedding), record)
             for record in candidate_records
+            if len(record.embedding) == len(query_embedding)
         ]
         scored.sort(key=lambda item: item[0], reverse=True)
         return [
@@ -558,7 +609,25 @@ def get_text_embedding_provider() -> TextEmbeddingProvider:
     provider_name = os.getenv("ROBOT_DATA_STUDIO_EMBEDDING_PROVIDER", "").lower()
     if provider_name in {"openai", "openai-compatible"}:
         return OpenAICompatibleEmbeddingProvider()
+    if provider_name in {"clip", "siglip", "transformers-text", "visual-compatible"}:
+        return TransformersTextEmbeddingProvider()
+    configured_model = os.getenv("ROBOT_DATA_STUDIO_EMBEDDING_MODEL", "")
+    if configured_model.lower().startswith(("clip:", "siglip:", "transformers-text:")):
+        return TransformersTextEmbeddingProvider()
     return DeterministicTextEmbeddingProvider()
+
+
+def _transformers_text_model_name() -> str:
+    configured = (
+        os.getenv("ROBOT_DATA_STUDIO_EMBEDDING_MODEL")
+        or os.getenv("ROBOT_DATA_STUDIO_VISUAL_EMBEDDING_MODEL")
+    )
+    if configured:
+        for prefix in ("clip:", "siglip:", "transformers-text:", "transformers:"):
+            if configured.lower().startswith(prefix):
+                return configured.split(":", 1)[1]
+        return configured
+    return "openai/clip-vit-base-patch32"
 
 
 def tokenize(text: str) -> list[str]:
@@ -593,6 +662,19 @@ def _match_type_for_modality(modality: str) -> str:
     if normalized in {"image", "video_clip"}:
         return "semantic_visual_embedding"
     return f"semantic_{normalized or 'unknown'}_embedding"
+
+
+def _rows_from_transformers_text_output(outputs: object) -> list[list[float]]:
+    pooler = getattr(outputs, "pooler_output", None)
+    if pooler is not None:
+        return pooler.tolist()
+    text_embeds = getattr(outputs, "text_embeds", None)
+    if text_embeds is not None:
+        return text_embeds.tolist()
+    hidden = getattr(outputs, "last_hidden_state", None)
+    if hidden is not None:
+        return hidden.mean(dim=1).tolist()
+    raise ValueError("Text model output does not include text embeddings")
 
 
 def cosine_similarity(left: list[float], right: list[float]) -> float:
