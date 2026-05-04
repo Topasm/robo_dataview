@@ -33,6 +33,7 @@ type AnnotationEditorProps = {
   onRunVlmLabel: () => Promise<void>;
   onSplitSegment: (annotation: SegmentAnnotation) => Promise<void>;
   onUpdateEpisodeLabels: (draft: EpisodeLabelDraft) => Promise<void>;
+  onUpdateSelectedFrameBadFlag: (isBadFrame: boolean) => Promise<void>;
   onUpdateSegment: (annotationId: string, draft: AnnotationDraft) => Promise<void>;
   onUpdateReviewStatus: (annotationId: string, status: ReviewStatus) => Promise<void>;
 };
@@ -49,6 +50,7 @@ export function AnnotationEditor({
   onRunVlmLabel,
   onSplitSegment,
   onUpdateEpisodeLabels,
+  onUpdateSelectedFrameBadFlag,
   onUpdateSegment,
   onUpdateReviewStatus
 }: AnnotationEditorProps) {
@@ -248,6 +250,7 @@ export function AnnotationEditor({
 
       <FrameMetadataPanel
         frame={selectedFrameRecord}
+        onSetBadFrame={onUpdateSelectedFrameBadFlag}
         selectedFrame={selectedFrame}
         status={selectedFrameStatus}
       />

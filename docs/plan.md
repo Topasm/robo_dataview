@@ -51,6 +51,7 @@ Working:
 - Frame listing endpoint with `frames.lance` preference, episode time-series
   fallback, state/action samples, annotation labels, and bad-frame flags.
 - Selected-frame metadata panel backed by `GET /frames`.
+- Annotation-backed selected-frame bad-frame mutation.
 - Export endpoint that writes a manifest and LeRobot v3-oriented snapshot with
   metadata, frame JSONL, optional Parquet, and available MP4 artifacts.
 - Version lineage JSONL and optional Lance mirror.
@@ -78,7 +79,8 @@ Known limits:
 - Video ranges are sliced after loading the full episode blob; direct Lance blob
   range streaming is not implemented.
 - `videos.lance` provenance lookup is not used by playback yet.
-- Frame mutation and full frame-table browser UX are not implemented yet.
+- General frame-table mutation and full frame-table browser UX are not
+  implemented yet.
 
 ## Next Milestone
 
@@ -180,7 +182,8 @@ Definition of done:
 - [x] Return state/action vectors and norms.
 - [x] Overlay annotation labels and derive bad-frame flags.
 - [x] Add frame metadata panel in the web UI.
-- [ ] Add frame-level mutation endpoints.
+- [x] Add selected-frame bad-frame mutation endpoint.
+- [ ] Add general frame-level mutation endpoints.
 
 ### P5: Search and Filtering
 
@@ -233,9 +236,9 @@ Definition of done:
 
 ## Recommended Immediate Order
 
-1. Add frame-level mutation endpoints.
-2. Replace heuristic VLM with a real provider path.
-3. Replace deterministic text embeddings with real model-backed vectors.
+1. Replace heuristic VLM with a real provider path.
+2. Replace deterministic text embeddings with real model-backed vectors.
+3. Add general frame-level mutation endpoints.
 4. Materialize fully LeRobot-loadable Parquet/MP4 export.
 5. Move Rerun/export/VLM work into queue-backed workers.
 

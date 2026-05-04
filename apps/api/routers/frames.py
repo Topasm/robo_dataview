@@ -1,8 +1,8 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Path, Query
 
-from apps.api.schemas.annotations import AnnotationRecord
-from apps.api.schemas.common import ReviewStatus
-from apps.api.schemas.frames import FrameLabel, FrameListResponse, FrameRecord
+from apps.api.schemas.annotations import AnnotationCreate, AnnotationRecord, AnnotationUpdate
+from apps.api.schemas.common import AnnotationSource, ReviewStatus
+from apps.api.schemas.frames import FrameLabel, FrameListResponse, FrameRecord, FrameUpdate
 from apps.api.services.annotation_service import annotation_store
 from apps.api.services.lance_store import store
 from apps.api.services.pydantic_compat import model_copy
@@ -53,6 +53,37 @@ def list_frames(
     )
 
 
+@router.patch("/frames/{frame_index}", response_model=FrameRecord)
+def update_frame(
+    payload: FrameUpdate,
+    frame_index: int = Path(..., ge=0),
+    dataset_id: str = Query(...),
+    episode_index: int = Query(..., ge=0),
+) -> FrameRecord:
+    if payload.is_bad_frame is None:
+        raise HTTPException(status_code=400, detail="No frame mutation requested")
+
+    episode = store.get_episode(dataset_id, episode_index)
+    if episode is None:
+        raise HTTPException(status_code=404, detail="Episode not found")
+    if episode.length is not None and frame_index >= episode.length:
+        raise HTTPException(status_code=404, detail="Frame not found")
+
+    frames = store.list_frames(
+        dataset_id,
+        episode_index,
+        start_frame=frame_index,
+        end_frame=frame_index,
+        limit=1,
+    )
+    if frames is None or not frames:
+        raise HTTPException(status_code=404, detail="Frame not found")
+
+    _set_bad_frame_annotation(dataset_id, episode_index, frame_index, payload)
+    annotations = annotation_store.list(dataset_id=dataset_id, episode_index=episode_index)
+    return _with_annotation_labels(frames[0], annotations)
+
+
 BAD_FRAME_LABEL_TYPES = {"bad_frame", "bad_range", "bad_episode"}
 
 
@@ -83,3 +114,55 @@ def _with_annotation_labels(frame: FrameRecord, annotations: list[AnnotationReco
             "is_bad_frame": frame.is_bad_frame or has_bad_label,
         },
     )
+
+
+def _set_bad_frame_annotation(
+    dataset_id: str,
+    episode_index: int,
+    frame_index: int,
+    payload: FrameUpdate,
+) -> None:
+    annotations = annotation_store.list(dataset_id=dataset_id, episode_index=episode_index)
+    existing = [
+        annotation
+        for annotation in annotations
+        if annotation.start_frame == frame_index
+        and annotation.end_frame == frame_index
+        and annotation.label_type == "bad_frame"
+    ]
+    if payload.is_bad_frame:
+        label_value = payload.label_value or "bad_frame"
+        if existing:
+            annotation_store.update(
+                existing[0].annotation_id,
+                AnnotationUpdate(
+                    label_value=label_value,
+                    review_status=ReviewStatus.accepted,
+                    updated_by=payload.updated_by,
+                ),
+            )
+            return
+        annotation_store.create(
+            AnnotationCreate(
+                dataset_id=dataset_id,
+                episode_index=episode_index,
+                start_frame=frame_index,
+                end_frame=frame_index,
+                label_type="bad_frame",
+                label_value=label_value,
+                source=AnnotationSource.human,
+                confidence=1.0,
+                review_status=ReviewStatus.accepted,
+                created_by=payload.updated_by,
+            )
+        )
+        return
+
+    for annotation in existing:
+        annotation_store.update(
+            annotation.annotation_id,
+            AnnotationUpdate(
+                review_status=ReviewStatus.rejected,
+                updated_by=payload.updated_by,
+            ),
+        )

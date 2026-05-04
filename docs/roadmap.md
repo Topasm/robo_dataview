@@ -89,6 +89,7 @@ Implemented:
 - Browser-compatible MP4 byte-range serving.
 - State/action summary cards.
 - Selected-frame metadata panel backed by the frame API.
+- Annotation-backed selected-frame bad-frame mutation.
 
 Next:
 

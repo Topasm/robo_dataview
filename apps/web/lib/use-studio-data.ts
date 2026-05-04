@@ -20,7 +20,8 @@ import {
   semanticSearch,
   updateEpisodeLabels,
   updateSegmentAnnotation,
-  updateAnnotationReviewStatus
+  updateAnnotationReviewStatus,
+  updateFrameRecord
 } from "@/lib/api";
 import { annotations, datasetSummary, episodes } from "@/lib/sample-data";
 import type {
@@ -414,6 +415,24 @@ export function useStudioData() {
     setExportRecord(record);
   }
 
+  async function handleUpdateSelectedFrameBadFlag(isBadFrame: boolean) {
+    const maxFrame = Math.max(0, selectedEpisode.length - 1);
+    const frameIndex = Math.max(0, Math.min(maxFrame, Math.round(selectedFrameIndex)));
+    const updated = await updateFrameRecord(
+      selectedEpisode.datasetId,
+      selectedEpisode.episodeIndex,
+      frameIndex,
+      {
+        isBadFrame,
+        labelValue: isBadFrame ? "bad_frame" : null
+      }
+    );
+    setSelectedFrameRecord(updated);
+    setSelectedFrameStatus("ready");
+    const apiAnnotations = await fetchAnnotations(selectedEpisode.datasetId, selectedEpisode.episodeIndex);
+    setAnnotationRows(apiAnnotations);
+  }
+
   return {
     annotationRows,
     dataStatus,
@@ -445,6 +464,7 @@ export function useStudioData() {
     handleSemanticSearch,
     handleSplitSegment,
     handleUpdateEpisodeLabels,
+    handleUpdateSelectedFrameBadFlag,
     handleUpdateReviewStatus,
     handleUpdateSegment
   };

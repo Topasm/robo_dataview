@@ -44,6 +44,7 @@ export default function Home() {
     handleSemanticSearch,
     handleSplitSegment,
     handleUpdateEpisodeLabels,
+    handleUpdateSelectedFrameBadFlag,
     handleUpdateSegment,
     handleUpdateReviewStatus
   } = useStudioData();
@@ -131,6 +132,7 @@ export default function Home() {
               onRunVlmLabel={handleRunVlmLabel}
               onSplitSegment={handleSplitSegment}
               onUpdateEpisodeLabels={handleUpdateEpisodeLabels}
+              onUpdateSelectedFrameBadFlag={handleUpdateSelectedFrameBadFlag}
               onUpdateSegment={handleUpdateSegment}
               onUpdateReviewStatus={handleUpdateReviewStatus}
               selectedFrame={selectedFrameIndex}

@@ -272,6 +272,12 @@ button:disabled {
   padding: 0 12px;
 }
 
+.secondary-text-button {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
 .metrics-grid {
   display: grid;
   gap: 8px;
@@ -1300,6 +1306,11 @@ button:disabled {
   display: grid;
   gap: 8px;
   grid-template-columns: 1fr 1fr;
+}
+
+.frame-mutation-button {
+  justify-content: center;
+  width: 100%;
 }
 
 .frame-meta-cell {

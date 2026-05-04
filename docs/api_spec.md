@@ -77,6 +77,7 @@ Current implementation detail:
 
 ```text
 GET /frames?dataset_id=...&episode_index=...&start_frame=...&end_frame=...&limit=...
+PATCH /frames/{frame_index}?dataset_id=...&episode_index=...
 ```
 
 Returns frame-level samples for one episode. The backend prefers `frames.lance`
@@ -85,6 +86,10 @@ frame includes timestamp, state/action vectors when present, computed norms,
 overlapping annotation labels, and an `is_bad_frame` flag derived from raw frame
 metadata or non-rejected `bad_frame`, `bad_range`, and `bad_episode`
 annotations.
+
+`PATCH /frames/{frame_index}` currently supports the `is_bad_frame` mutation.
+It writes through `annotations` by creating or accepting an exact-frame
+`bad_frame` label, or rejecting that exact-frame label when clearing the flag.
 
 Response shape:
 

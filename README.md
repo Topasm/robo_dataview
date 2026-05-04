@@ -65,7 +65,8 @@ The repository has moved past a pure skeleton. The current MVP path can:
 
 Known MVP gaps:
 
-- Frame mutation is not implemented yet.
+- General frame-table editing is not implemented yet; selected-frame bad-frame
+  marking is available through annotation-backed frame mutation.
 - Rerun is embedded and records scalar timelines plus camera video assets when
   MP4 blobs are available; generation is still synchronous and workerless.
 - VLM labeling is heuristic/local scaffolding, not real model inference.

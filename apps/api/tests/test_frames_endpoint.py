@@ -7,10 +7,11 @@ from unittest.mock import patch
 from fastapi import HTTPException
 
 from apps.api.routers import frames as frames_router
-from apps.api.schemas.annotations import AnnotationRecord
+from apps.api.schemas.annotations import AnnotationCreate, AnnotationRecord, AnnotationUpdate
 from apps.api.schemas.common import AnnotationSource, ReviewStatus
 from apps.api.schemas.episodes import EpisodeDetail
-from apps.api.schemas.frames import FrameRecord
+from apps.api.schemas.frames import FrameRecord, FrameUpdate
+from apps.api.services.pydantic_compat import model_dump
 
 
 class FakeFrameStore:
@@ -90,6 +91,71 @@ class FakeAnnotationStore:
         ]
 
 
+class MutableAnnotationStore:
+    def __init__(self, records: list[AnnotationRecord] | None = None) -> None:
+        self.records = records or []
+        self.created_payloads: list[AnnotationCreate] = []
+
+    def list(self, dataset_id: str, episode_index: int | None) -> list[AnnotationRecord]:
+        return [
+            record
+            for record in self.records
+            if record.dataset_id == dataset_id
+            and (episode_index is None or record.episode_index == episode_index)
+        ]
+
+    def create(self, payload: AnnotationCreate) -> AnnotationRecord:
+        now = datetime.now(timezone.utc)
+        record = AnnotationRecord(
+            annotation_id=f"created-{len(self.records) + 1}",
+            created_at=now,
+            updated_at=now,
+            **model_dump(payload),
+        )
+        self.created_payloads.append(payload)
+        self.records.append(record)
+        return record
+
+    def update(self, annotation_id: str, payload: AnnotationUpdate) -> AnnotationRecord | None:
+        for index, record in enumerate(self.records):
+            if record.annotation_id != annotation_id:
+                continue
+            data = model_dump(record)
+            update_data = model_dump(payload, exclude_unset=True)
+            update_data.pop("updated_by", None)
+            data.update(update_data)
+            data["updated_at"] = datetime.now(timezone.utc)
+            updated = AnnotationRecord(**data)
+            self.records[index] = updated
+            return updated
+        return None
+
+
+def make_annotation(
+    *,
+    annotation_id: str,
+    frame_index: int,
+    label_type: str = "bad_frame",
+    review_status: ReviewStatus = ReviewStatus.accepted,
+) -> AnnotationRecord:
+    now = datetime.now(timezone.utc)
+    return AnnotationRecord(
+        annotation_id=annotation_id,
+        dataset_id="dataset-a",
+        episode_index=3,
+        start_frame=frame_index,
+        end_frame=frame_index,
+        label_type=label_type,
+        label_value=label_type,
+        source=AnnotationSource.human,
+        confidence=1.0,
+        review_status=review_status,
+        created_by="test",
+        created_at=now,
+        updated_at=now,
+    )
+
+
 class FramesEndpointTest(unittest.TestCase):
     def test_list_frames_returns_annotation_labels_and_bad_flags(self) -> None:
         with (
@@ -136,6 +202,55 @@ class FramesEndpointTest(unittest.TestCase):
                 )
 
         self.assertEqual(context.exception.status_code, 404)
+
+    def test_update_frame_marks_bad_frame_through_annotation(self) -> None:
+        annotation_store = MutableAnnotationStore()
+        with (
+            patch.object(frames_router, "store", FakeFrameStore()),
+            patch.object(frames_router, "annotation_store", annotation_store),
+        ):
+            response = frames_router.update_frame(
+                dataset_id="dataset-a",
+                episode_index=3,
+                frame_index=4,
+                payload=FrameUpdate(is_bad_frame=True, label_value="occluded"),
+            )
+
+        self.assertTrue(response.is_bad_frame)
+        self.assertEqual(response.labels[0].label_type, "bad_frame")
+        self.assertEqual(response.labels[0].label_value, "occluded")
+        self.assertEqual(annotation_store.created_payloads[0].label_value, "occluded")
+
+    def test_update_frame_clears_exact_bad_frame_annotation(self) -> None:
+        annotation_store = MutableAnnotationStore([make_annotation(annotation_id="bad-frame", frame_index=4)])
+        with (
+            patch.object(frames_router, "store", FakeFrameStore()),
+            patch.object(frames_router, "annotation_store", annotation_store),
+        ):
+            response = frames_router.update_frame(
+                dataset_id="dataset-a",
+                episode_index=3,
+                frame_index=4,
+                payload=FrameUpdate(is_bad_frame=False),
+            )
+
+        self.assertFalse(response.is_bad_frame)
+        self.assertEqual(response.labels[0].review_status, ReviewStatus.rejected)
+
+    def test_update_frame_rejects_empty_mutation(self) -> None:
+        with (
+            patch.object(frames_router, "store", FakeFrameStore()),
+            patch.object(frames_router, "annotation_store", MutableAnnotationStore()),
+        ):
+            with self.assertRaises(HTTPException) as context:
+                frames_router.update_frame(
+                    dataset_id="dataset-a",
+                    episode_index=3,
+                    frame_index=4,
+                    payload=FrameUpdate(),
+                )
+
+        self.assertEqual(context.exception.status_code, 400)
 
 
 if __name__ == "__main__":

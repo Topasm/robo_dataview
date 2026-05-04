@@ -28,6 +28,12 @@ class FrameRecord(BaseModel):
     labels: list[FrameLabel] = Field(default_factory=list)
 
 
+class FrameUpdate(BaseModel):
+    is_bad_frame: bool | None = None
+    label_value: str | None = Field(default=None, min_length=1)
+    updated_by: str = "local"
+
+
 class FrameListResponse(BaseModel):
     dataset_id: str
     episode_index: int

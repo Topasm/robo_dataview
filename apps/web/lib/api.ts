@@ -215,6 +215,11 @@ export type EpisodeLabelUpdate = {
   reviewStatus?: ReviewStatus | null;
 };
 
+export type FrameUpdate = {
+  isBadFrame?: boolean | null;
+  labelValue?: string | null;
+};
+
 export async function fetchDatasetSummaries(): Promise<DatasetSummary[]> {
   const datasets = await request<DatasetRecordResponse[]>("/datasets");
   return Promise.all(datasets.map((dataset) => fetchDatasetSummary(dataset.dataset_id)));
@@ -281,6 +286,30 @@ export async function fetchFrameRecord(
   const row = await request<FrameListResponse>(`/frames?${query}`);
   const frame = row.items[0] ?? null;
   return frame ? toFrameRecord(frame) : null;
+}
+
+export async function updateFrameRecord(
+  datasetId: string,
+  episodeIndex: number,
+  frameIndex: number,
+  payload: FrameUpdate,
+): Promise<FrameRecord> {
+  const query = new URLSearchParams({
+    dataset_id: datasetId,
+    episode_index: String(episodeIndex)
+  });
+  const body: Record<string, boolean | string | null> = {};
+  if (payload.isBadFrame !== undefined) {
+    body.is_bad_frame = payload.isBadFrame;
+  }
+  if (payload.labelValue !== undefined) {
+    body.label_value = payload.labelValue;
+  }
+  const row = await request<FrameRecordResponse>(`/frames/${frameIndex}?${query}`, {
+    method: "PATCH",
+    body: JSON.stringify(body)
+  });
+  return toFrameRecord(row);
 }
 
 export async function updateEpisodeLabels(

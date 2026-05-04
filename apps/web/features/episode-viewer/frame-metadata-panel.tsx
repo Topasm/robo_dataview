@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { AlertTriangle, CheckCircle2, Hash, Tag } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
@@ -5,16 +6,38 @@ import type { FrameRecord } from "@/lib/types";
 
 type FrameMetadataPanelProps = {
   frame: FrameRecord | null;
+  onSetBadFrame: (isBadFrame: boolean) => Promise<void>;
   selectedFrame: number;
   status: "idle" | "loading" | "ready" | "error";
 };
 
 export function FrameMetadataPanel({
   frame,
+  onSetBadFrame,
   selectedFrame,
   status
 }: FrameMetadataPanelProps) {
+  const [isSaving, setIsSaving] = useState(false);
   const hasFrame = status === "ready" && frame !== null;
+  const hasExactBadFrameLabel =
+    frame?.labels.some(
+      (label) => label.labelType === "bad_frame" && label.reviewStatus !== "rejected"
+    ) ?? false;
+  const canToggleBadFrame = hasFrame && (!frame.isBadFrame || hasExactBadFrameLabel);
+  const mutationLabel = frame?.isBadFrame
+    ? hasExactBadFrameLabel
+      ? "Clear bad"
+      : "Bad source"
+    : "Mark bad";
+
+  async function handleSetBadFrame(isBadFrame: boolean) {
+    setIsSaving(true);
+    try {
+      await onSetBadFrame(isBadFrame);
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   return (
     <section className="panel-section frame-metadata-panel">
@@ -41,6 +64,15 @@ export function FrameMetadataPanel({
 
       {hasFrame ? (
         <>
+          <button
+            className={`text-button frame-mutation-button${frame.isBadFrame ? " secondary-text-button" : ""}`}
+            disabled={isSaving || !canToggleBadFrame}
+            onClick={() => void handleSetBadFrame(!frame.isBadFrame)}
+            type="button"
+          >
+            {frame.isBadFrame ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+            {mutationLabel}
+          </button>
           <div className="frame-meta-grid">
             <MetaCell label="Timestamp" value={formatMaybeNumber(frame.timestamp, 4)} />
             <MetaCell label="Task" value={frame.taskIndex === null ? "none" : String(frame.taskIndex)} />
