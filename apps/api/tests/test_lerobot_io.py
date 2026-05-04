@@ -226,6 +226,56 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertEqual(len(data_rows), 2)
             self.assertTrue(validation["metadata_ok"])
 
+    def test_lerobot_data_parquet_excludes_video_reference_columns(self) -> None:
+        written_tables: dict[str, list[dict]] = {}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir)
+            with patch.dict(
+                sys.modules,
+                {
+                    **_fake_pyarrow_write_modules(written_tables),
+                    "pandas": None,
+                },
+            ):
+                artifact = write_lerobot_v3_snapshot(
+                    export_dir,
+                    dataset_id="sample-xvla-soft-fold",
+                    episodes=[
+                        EpisodeDetail(
+                            dataset_id="sample-xvla-soft-fold",
+                            episode_index=0,
+                            task_index=3,
+                            length=1,
+                            fps=20.0,
+                            camera_names=["cam high"],
+                        )
+                    ],
+                    annotations_by_episode={},
+                    version_description="unit test",
+                    timeseries_by_episode={
+                        0: {
+                            "timestamps": [0.0],
+                            "states": [[0.0]],
+                            "actions": [[1.0]],
+                        }
+                    },
+                    video_blobs_by_episode={0: {"cam high": FAKE_MP4_BYTES}},
+                )
+
+            root = Path(artifact["root"])
+            data_parquet_path = (root / "data/chunk-000/file-000.parquet").as_posix()
+            data_jsonl_rows = [
+                json.loads(line)
+                for line in (root / "data/chunk-000/file-000.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+                if line.strip()
+            ]
+
+            self.assertTrue(Path(artifact["files"]["data"]).exists())
+            self.assertIn("cam_high", data_jsonl_rows[0])
+            self.assertNotIn("cam_high", written_tables[data_parquet_path][0])
+
     def test_validate_lerobot_snapshot_rejects_total_frame_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             export_dir = Path(tmpdir)
@@ -689,6 +739,34 @@ def _fake_pyarrow_modules(
 
     parquet_module.read_table = read_table  # type: ignore[attr-defined]
     pyarrow_module.parquet = parquet_module  # type: ignore[attr-defined]
+    return {
+        "pyarrow": pyarrow_module,
+        "pyarrow.parquet": parquet_module,
+    }
+
+
+def _fake_pyarrow_write_modules(written_tables: dict[str, list[dict]]) -> dict[str, ModuleType]:
+    pyarrow_module = ModuleType("pyarrow")
+    parquet_module = ModuleType("pyarrow.parquet")
+
+    class Table:
+        @staticmethod
+        def from_pylist(rows: list[dict]) -> _FakeParquetTable:
+            return _FakeParquetTable(rows)
+
+    def write_table(table: _FakeParquetTable, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("fake parquet", encoding="utf-8")
+        written_tables[path.as_posix()] = table.to_pylist()
+
+    def read_table(path: Path) -> _FakeParquetTable:
+        rows = written_tables.get(path.as_posix(), _jsonl_rows_for_fake_parquet(Path(path)))
+        return _FakeParquetTable(rows)
+
+    pyarrow_module.Table = Table  # type: ignore[attr-defined]
+    pyarrow_module.parquet = parquet_module  # type: ignore[attr-defined]
+    parquet_module.write_table = write_table  # type: ignore[attr-defined]
+    parquet_module.read_table = read_table  # type: ignore[attr-defined]
     return {
         "pyarrow": pyarrow_module,
         "pyarrow.parquet": parquet_module,

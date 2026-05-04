@@ -318,8 +318,8 @@ mean/std/min/max statistics for exported numeric frame features. Frame rows
 include LeRobot's global `index` column in addition to compact local
 `episode_index`, `frame_index`, `timestamp`, compact local `task_index`,
 `source_episode_index`, `source_task_index`, `observation.state`, and `action`.
-When camera MP4 artifacts are present, each frame row also includes a LeRobot
-video-frame reference under the exported video feature key:
+When camera MP4 artifacts are present, the frame JSONL readability copy also
+includes an internal video-frame reference under the exported video feature key:
 
 ```json
 {
@@ -329,6 +329,11 @@ video-frame reference under the exported video feature key:
   }
 }
 ```
+
+The optional data Parquet shard omits those video-reference columns. This
+matches LeRobot's Hugging Face feature conversion path, where `dtype="video"`
+features are resolved from episode metadata and skipped in the tabular data
+features.
 
 Episode metadata includes `meta/episodes/chunk_index`,
 `meta/episodes/file_index`, `tasks`, `dataset_from_index`, `dataset_to_index`,
@@ -340,9 +345,9 @@ copied artifacts.
 `validation.json` contains both the local loadability heuristic and an
 `official_loader` result. The local heuristic requires Parquet task, episode,
 and frame data that can be read with `pyarrow`, plus LeRobot offset metadata,
-video timestamp metadata, probable MP4 video artifacts, and valid per-frame
-video references when video artifacts are present. When the optional `lerobot`
-package is installed, validation attempts
+video timestamp metadata, probable MP4 video artifacts, and valid JSONL
+video-reference metadata when video artifacts are present. When the optional
+`lerobot` package is installed, validation attempts
 `LeRobotDataset(repo_id, root=<export_root>)` and records success, dataset
 length, or the exact exception. `lerobot_loadable` is true only for a successful
 official loader check; a complete local heuristic without the official loader is

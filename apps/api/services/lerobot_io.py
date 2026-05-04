@@ -96,10 +96,11 @@ def write_lerobot_v3_snapshot(
         for annotations in annotations_by_episode.values()
         for annotation in annotations
     ]
+    data_parquet_rows = _official_data_parquet_rows(frame_rows, video_rows)
     parquet_files = {
         "tasks": _write_optional_tasks_parquet(tasks_parquet_path, task_rows),
         "episodes": _write_optional_parquet(episodes_parquet_path, episode_rows),
-        "data": _write_optional_parquet(data_parquet_path, frame_rows),
+        "data": _write_optional_parquet(data_parquet_path, data_parquet_rows),
     }
     materialization_status = _materialization_status(
         frame_rows=frame_rows,
@@ -810,6 +811,19 @@ def _video_frame_references(
         for row in video_rows
         if row.get("video_key") and row.get("video_file")
     }
+
+
+def _official_data_parquet_rows(
+    frame_rows: list[dict[str, Any]],
+    video_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    video_keys = {str(row["video_key"]) for row in video_rows if row.get("video_key")}
+    if not video_keys:
+        return frame_rows
+    return [
+        {key: value for key, value in row.items() if key not in video_keys}
+        for row in frame_rows
+    ]
 
 
 def _write_video_blobs(

@@ -40,7 +40,7 @@ Optional production extras:
 python3 -m pip install -e ".[lance,rerun,video,export,queue]"
 ```
 
-Use `.[export]` on machines that must write training-ready LeRobot Parquet/MP4
+Use `.[export]` on machines that must write optional LeRobot Parquet/MP4
 artifacts and run official loader validation. Use `.[queue]` on API and worker
 machines that enqueue or execute Redis/RQ jobs.
 

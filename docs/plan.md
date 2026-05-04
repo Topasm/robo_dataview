@@ -65,7 +65,7 @@ Working:
 - Annotation-backed selected-frame exact-label mutation.
 - Export endpoint that writes a manifest and LeRobot v3-oriented snapshot with
   metadata, frame JSONL, optional Parquet, available MP4 artifacts, and
-  per-frame video references.
+  JSONL-only per-frame video references.
 - LeRobot v3 export metadata includes official-style compact episode/task
   indices, global frame `index`, episode `dataset_from_index` /
   `dataset_to_index`, `tasks`, source-index provenance, and per-camera video
@@ -93,9 +93,9 @@ Known limits:
 - Text semantic search and visual image embedding generation are separate paths;
   cross-modal text-to-image search still requires a compatible visual/text model
   route.
-- Export writes frame JSONL, available MP4 artifacts, and per-frame video
-  references; training-ready Parquet shards require optional `export`
-  dependencies.
+- Export writes frame JSONL, available MP4 artifacts, and optional Parquet
+  shards. JSONL keeps internal per-frame video references; Parquet omits video
+  feature columns and relies on LeRobot episode video metadata.
 - File-backed video ranges stream directly from disk, but embedded Lance blob
   ranges are still sliced after loading the full blob; direct Lance blob range
   streaming is not implemented.

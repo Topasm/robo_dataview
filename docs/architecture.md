@@ -121,8 +121,9 @@ Implemented now:
   camera video assets, deterministic cache keys, and web viewer embedding
   through `@rerun-io/web-viewer-react`.
 - LeRobot v3 export manifest, validation report, frame JSONL, available MP4
-  artifacts, per-frame video references, and version lineage, including
-  optional official LeRobotDataset loader validation.
+  artifacts, JSONL-only per-frame video references, official-style tabular
+  Parquet rows, and version lineage, including optional official
+  LeRobotDataset loader validation.
 - Lance subset export for selected episodes when optional `pyarrow` and `lance`
   dependencies are installed.
 - JSONL caption export and VLA-style JSONL trajectory export.

@@ -399,8 +399,11 @@ rows include LeRobot's global `index` column and compact local episode/task
 indices; original dataset indices are preserved as `source_episode_index` and
 `source_task_index`. Episode metadata includes `tasks`, `dataset_from_index`,
 `dataset_to_index`, data shard indices, and per-camera video shard/timestamp
-fields. When the optional `lerobot` package is installed, the official loader
-result records success, dataset length, or the exact exception.
+fields. The JSONL readability copy keeps internal per-frame video references;
+the optional Parquet data shard omits video feature columns and relies on
+episode video metadata, matching the official LeRobot/Hugging Face feature
+conversion path. When the optional `lerobot` package is installed, the official
+loader result records success, dataset length, or the exact exception.
 `lerobot_loadable=true` means the official loader was available and succeeded.
 When the official loader is unavailable, `local_lerobot_loadable_heuristic` can
 still describe whether the local artifact shape appears complete, and

@@ -59,7 +59,7 @@ python3 -m pip install -e ".[lance]"      # Lance/LanceDB + PyArrow mirrors
 python3 -m pip install -e ".[rerun]"      # Rerun .rrd generation
 python3 -m pip install -e ".[video]"      # OpenCV keyframe/preview extraction
 python3 -m pip install -e ".[lerobot]"    # official LeRobotDataset validation
-python3 -m pip install -e ".[export]"     # training-ready LeRobot Parquet/MP4 export
+python3 -m pip install -e ".[export]"     # optional LeRobot Parquet/MP4 materialization
 python3 -m pip install -e ".[queue]"      # Redis/RQ background job queue
 ```
 
@@ -132,10 +132,11 @@ Known MVP gaps:
   inference is available only when configured with environment variables.
 - Text semantic search and visual image embedding generation are separate paths.
   Cross-modal text-to-image search requires a compatible CLIP/SigLIP route.
-- LeRobot export writes frame JSONL, available MP4 artifacts, and per-frame
-  video references; training-ready Parquet shards require the optional
-  `export` dependencies. When `lerobot` is installed, validation records the
-  official loader result.
+- LeRobot export writes frame JSONL, available MP4 artifacts, and optional
+  Parquet shards. Per-frame video references stay in the JSONL readability copy;
+  Parquet rows omit video feature columns so video resolution follows LeRobot
+  episode metadata. When `lerobot` is installed, validation records the official
+  loader result.
 - Native Hugging Face Dataset export is reserved; use `format=lerobot`,
   `format=lance`, `format=jsonl`, or `format=vla` for current exports.
 - Lance subset export requires optional `pyarrow` and `lance` dependencies and
