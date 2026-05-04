@@ -301,6 +301,8 @@ Implemented:
 - Manual visual-model smoke workflow can verify a real Transformers
   CLIP/SigLIP-compatible model through matching text and image embedding
   providers.
+- Manual artifact-publish smoke workflow can verify local publish paths for
+  keyframes, previews, Rerun recordings, and exports.
 - Accepted annotations only.
 - Version lineage JSONL plus optional Lance mirror.
 
@@ -308,6 +310,4 @@ Next:
 
 - Run the real-dataset export smoke workflow with video materialization and on
   larger representative multi-camera subsets.
-- Run configured keyframe/preview cache publishing smoke workflows against
-  local or object storage.
 - Run the manual visual-model smoke workflow with the target CLIP/SigLIP model.

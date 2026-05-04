@@ -285,8 +285,8 @@ Definition of done:
    and larger representative downloaded or `hf://` Lance subsets.
 2. Run the opt-in real CLIP/SigLIP text-to-image search smoke workflow with
    generated visual embeddings.
-3. Run a configured keyframe/preview cache publishing smoke against local or
-   object storage.
+3. Run the manual artifact-publish smoke workflow against local publish
+   destinations.
 
 ## Validation Checklist
 

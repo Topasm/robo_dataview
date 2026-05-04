@@ -140,6 +140,11 @@ VISUAL_MODEL_SMOKE_MODEL=openai/clip-vit-base-patch32 \
 python3 -m pytest apps/api/tests/test_visual_model_smoke.py -q
 ```
 
+The manual GitHub Actions workflow `Artifact publish smoke` runs the local
+publish paths for keyframe cache files, preview cache files, Rerun recordings,
+and export artifacts. It uses local/fake destinations so it does not need cloud
+credentials.
+
 ## Start Commands
 
 API:
