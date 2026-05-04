@@ -28,9 +28,13 @@ class VlmJobServiceTest(unittest.TestCase):
         ]
 
         self.assertEqual(record.status, JobStatus.succeeded)
-        self.assertGreaterEqual(len(record.created_annotation_ids), 8)
+        self.assertGreaterEqual(len(record.created_annotation_ids), 20)
         self.assertEqual(len(created_by_job), len(record.created_annotation_ids))
         self.assertTrue(all(annotation.review_status == ReviewStatus.pending for annotation in created_by_job))
+        self.assertGreaterEqual(
+            sum(1 for annotation in created_by_job if annotation.label_type == "important_frame"),
+            8,
+        )
         self.assertIn("Generated", record.message or "")
 
         for annotation_id in record.created_annotation_ids:

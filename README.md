@@ -52,7 +52,8 @@ The repository has moved past a pure skeleton. The current MVP path can:
    load them through the Rerun React web viewer.
 6. Run basic filter search through a typed builder and deterministic
    text-embedding semantic search.
-7. Create heuristic VLM-style annotation proposals for review.
+7. Create heuristic VLM-style annotation proposals for review, including
+   deterministic keyframe index sampling.
 8. Export selected episodes as a metadata-oriented LeRobot v3 snapshot with
    validation and version lineage.
 9. Render the main web operations UI with dataset, episode, video viewer,

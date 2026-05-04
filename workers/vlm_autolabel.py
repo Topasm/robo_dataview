@@ -18,6 +18,8 @@ from apps.api.schemas.episodes import EpisodeDetail
 class AutoLabelConfig:
     model: str
     prompt_template: str
+    min_keyframes: int = 8
+    max_keyframes: int = 16
 
 
 def build_vlm_annotation_proposals(
@@ -90,19 +92,53 @@ def build_vlm_annotation_proposals(
             )
         )
 
-    for frame in sorted({0, frame_count // 2, last_frame}):
+    for frame in select_keyframes(
+        frame_count,
+        min_keyframes=config.min_keyframes,
+        max_keyframes=config.max_keyframes,
+    ):
         proposals.append(
             AnnotationCreate(
                 **base,
                 start_frame=frame,
                 end_frame=frame,
                 label_type="important_frame",
-                label_value=f"keyframe_{frame}",
+                label_value=f"keyframe_{frame:06d}",
                 confidence=0.46,
             )
         )
 
     return proposals
+
+
+def select_keyframes(
+    frame_count: int,
+    *,
+    min_keyframes: int = 8,
+    max_keyframes: int = 16,
+) -> list[int]:
+    """Select deterministic frame indices for VLM image prompts.
+
+    The local MVP does not decode image pixels yet; it records the frame indices
+    that a real worker/provider should extract. The sampler keeps first/last
+    frames, spreads coverage across the episode, and caps prompt size.
+    """
+
+    if frame_count <= 0:
+        return []
+    if max_keyframes <= 0:
+        return []
+
+    target_count = min(frame_count, max(min_keyframes, min(max_keyframes, frame_count)))
+    if target_count <= 1:
+        return [0]
+
+    last_frame = frame_count - 1
+    step = last_frame / (target_count - 1)
+    indices = {round(step * index) for index in range(target_count)}
+    indices.add(0)
+    indices.add(last_frame)
+    return sorted(int(index) for index in indices)
 
 
 def _phase_ranges(frame_count: int) -> list[tuple[str, int, int]]:

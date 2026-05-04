@@ -44,6 +44,7 @@ Working:
 - Typed filter builder UI for common episode fields.
 - Deterministic text-embedding semantic search endpoint.
 - VLM-label job endpoint with heuristic pending annotation proposals.
+- Deterministic keyframe index sampling for VLM prompt inputs.
 - Rerun session endpoint that generates `.rrd` cache files.
 - Rerun React viewer embed for ready `.rrd` sessions.
 - Frame listing endpoint with `frames.lance` preference, episode time-series
@@ -193,7 +194,8 @@ Definition of done:
 - [x] Job endpoint.
 - [x] Heuristic annotation proposal generator.
 - [x] Pending review annotations.
-- [ ] Add keyframe extraction.
+- [x] Add deterministic keyframe index sampling.
+- [ ] Add decoded keyframe image extraction from video blobs.
 - [ ] Add prompt registry/versioning.
 - [ ] Add VLM provider abstraction.
 - [ ] Add real model/API integration.

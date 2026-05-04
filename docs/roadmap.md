@@ -177,11 +177,12 @@ Implemented:
 - Synchronous job API.
 - Heuristic proposal generator.
 - Pending annotations are created for review.
+- Deterministic 8 to 16 frame index sampling for prompt inputs.
 
 Next:
 
 - Move job execution to RQ/Celery.
-- Add real keyframe extraction.
+- Decode sampled keyframe images from video blobs.
 - Add provider abstraction for local/API VLMs.
 - Store raw model response, prompt version, and confidence rationale.
 
