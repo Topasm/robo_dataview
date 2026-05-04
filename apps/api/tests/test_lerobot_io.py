@@ -119,6 +119,7 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertEqual(info["features"]["timestamp"]["shape"], [1])
             self.assertEqual(info["features"]["index"]["shape"], [1])
             self.assertEqual(info["features"]["cam_high"]["dtype"], "video")
+            self.assertEqual(info["total_frames"], 3)
             stats = json.loads((root / "meta/stats.json").read_text(encoding="utf-8"))
             self.assertEqual(stats["features"]["observation.state"]["min"], [0.0, 0.0])
             self.assertEqual(stats["features"]["observation.state"]["max"], [1.0, 1.0])
@@ -165,6 +166,109 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertEqual(episode_rows[0]["videos/cam_high/file_index"], 0)
             self.assertEqual(episode_rows[0]["videos/cam_high/from_timestamp"], 0.0)
             self.assertEqual(episode_rows[0]["videos/cam_high/to_timestamp"], 0.15)
+
+    def test_lerobot_snapshot_offsets_follow_materialized_frame_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir)
+            artifact = write_lerobot_v3_snapshot(
+                export_dir,
+                dataset_id="sample-xvla-soft-fold",
+                episodes=[
+                    EpisodeDetail(
+                        dataset_id="sample-xvla-soft-fold",
+                        episode_index=5,
+                        task_index=3,
+                        length=1,
+                        fps=20.0,
+                        camera_names=[],
+                    )
+                ],
+                annotations_by_episode={},
+                version_description="unit test",
+                timeseries_by_episode={
+                    5: {
+                        "timestamps": [0.0, 0.05],
+                        "states": [[0.0], [1.0]],
+                        "actions": [[2.0], [3.0]],
+                    }
+                },
+            )
+            root = Path(artifact["root"])
+
+            info = json.loads((root / "meta/info.json").read_text(encoding="utf-8"))
+            episode_rows = [
+                json.loads(line)
+                for line in (root / "meta/episodes/chunk-000/file-000.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+                if line.strip()
+            ]
+            data_index_rows = [
+                json.loads(line)
+                for line in (root / "data/chunk-000/file-000.index.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+                if line.strip()
+            ]
+            data_rows = [
+                json.loads(line)
+                for line in (root / "data/chunk-000/file-000.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+                if line.strip()
+            ]
+            validation = validate_lerobot_v3_snapshot(root)
+
+            self.assertEqual(info["total_frames"], 2)
+            self.assertEqual(episode_rows[0]["length"], 2)
+            self.assertEqual(episode_rows[0]["dataset_to_index"], 2)
+            self.assertEqual(data_index_rows[0]["data_end_idx"], 2)
+            self.assertEqual(len(data_rows), 2)
+            self.assertTrue(validation["metadata_ok"])
+
+    def test_validate_lerobot_snapshot_rejects_total_frame_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir)
+            artifact = write_lerobot_v3_snapshot(
+                export_dir,
+                dataset_id="sample-xvla-soft-fold",
+                episodes=[
+                    EpisodeDetail(
+                        dataset_id="sample-xvla-soft-fold",
+                        episode_index=0,
+                        task_index=3,
+                        length=2,
+                        fps=20.0,
+                        camera_names=[],
+                    )
+                ],
+                annotations_by_episode={},
+                version_description="unit test",
+                timeseries_by_episode={
+                    0: {
+                        "timestamps": [0.0, 0.05],
+                        "states": [[0.0], [1.0]],
+                        "actions": [[2.0], [3.0]],
+                    }
+                },
+            )
+            root = Path(artifact["root"])
+            info_path = root / "meta/info.json"
+            info = json.loads(info_path.read_text(encoding="utf-8"))
+            info["total_frames"] = 1
+            info_path.write_text(json.dumps(info, indent=2, sort_keys=True), encoding="utf-8")
+
+            validation = validate_lerobot_v3_snapshot(root)
+
+            self.assertFalse(validation["metadata_ok"])
+            self.assertIn(
+                "total_frames does not match episode metadata frame count",
+                validation["errors"],
+            )
+            self.assertIn(
+                "total_frames does not match materialized frame row count",
+                validation["errors"],
+            )
 
     def test_validate_lerobot_snapshot_rejects_invalid_mp4_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

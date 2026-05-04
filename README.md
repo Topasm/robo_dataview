@@ -128,8 +128,6 @@ The repository has moved past a pure skeleton. The current MVP path can:
 
 Known MVP gaps:
 
-- Expensive VLM, visual embedding, export, and Rerun session jobs can run
-  through optional Redis/RQ.
 - VLM labeling defaults to heuristic/local scaffolding; OpenAI-compatible model
   inference is available only when configured with environment variables.
 - Text semantic search and visual image embedding generation are separate paths.
@@ -138,6 +136,8 @@ Known MVP gaps:
   video references; training-ready Parquet shards require the optional
   `export` dependencies. When `lerobot` is installed, validation records the
   official loader result.
+- Native Hugging Face Dataset export is reserved; use `format=lerobot`,
+  `format=lance`, `format=jsonl`, or `format=vla` for current exports.
 - Lance subset export requires optional `pyarrow` and `lance` dependencies and
   fails clearly when they are missing.
 

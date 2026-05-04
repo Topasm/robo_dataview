@@ -13,9 +13,9 @@ planned    not implemented yet
 ```text
 Phase 0  Specification               done
 Phase 1  Lance Dataset Explorer       done
-Phase 2  Basic Web Viewer             partial
+Phase 2  Basic Web Viewer             done
 Phase 3  Rerun Web Viewer             partial
-Phase 4  Annotation System            partial
+Phase 4  Annotation System            done
 Phase 5  VLM Auto-Labeling            partial
 Phase 6  Search and Filtering         partial
 Phase 7  Export and Versioning        partial
@@ -30,8 +30,10 @@ Current verified baseline:
   camera streams.
 - Browser video endpoint supports MP4 byte ranges by slicing loaded episode
   blobs.
+- Basic viewer playback includes multi-camera sync, frame scrubber, and
+  state/action norm plots.
 - Rerun `.rrd` generation and React web viewer embedding work for scalar
-  timelines.
+  timelines and available camera MP4 references.
 
 ## Phase 0: Specification
 
@@ -123,7 +125,7 @@ Implemented:
 
 Next:
 
-- Add async Rerun cache worker.
+- Add gRPC streaming and deeper viewer control for long interactive replay.
 
 ## Phase 4: Annotation System
 
@@ -140,7 +142,7 @@ Features:
 - Review status
 - Annotation history
 
-Current status: partial.
+Current status: done for the local MVP path.
 
 Implemented:
 
@@ -148,6 +150,7 @@ Implemented:
 - JSONL persistence.
 - Optional Lance mirror.
 - Review status updates.
+- Immutable annotation history API and JSONL audit trail.
 - Segment edit form and midpoint split action in the web UI.
 - Episode-level label editing for caption, success/failure, failure reason,
   quality, split, and review status.
@@ -156,7 +159,7 @@ Implemented:
 
 Next:
 
-- Add annotation history and audit fields beyond `created_at`/`updated_at`.
+- Add a dedicated history browser and richer reviewer workflow UI.
 
 ## Phase 5: VLM Auto-Labeling
 

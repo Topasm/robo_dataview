@@ -89,6 +89,7 @@ def write_lerobot_v3_snapshot(
         video_rows,
         episode_index_by_source=episode_index_by_source,
         task_index_by_episode=task_index_by_episode,
+        frame_counts_by_source=_frame_counts_by_source_episode(frame_rows),
     )
     annotation_rows = [
         _annotation_row(annotation)
@@ -115,7 +116,7 @@ def write_lerobot_v3_snapshot(
         "version_description": version_description,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "total_episodes": len(episodes),
-        "total_frames": sum(episode.length or 0 for episode in episodes),
+        "total_frames": sum(int(row.get("length") or 0) for row in episode_rows),
         "total_tasks": len(task_rows),
         "fps": fps,
         "chunks_size": 1000,
@@ -289,6 +290,9 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         errors.append("total_tasks does not match task metadata rows")
     if int(info.get("total_episodes") or 0) != len(episode_rows):
         errors.append("total_episodes does not match episode metadata rows")
+    episode_frame_count = sum(int(row.get("length") or 0) for row in episode_rows)
+    if int(info.get("total_frames") or 0) != episode_frame_count:
+        errors.append("total_frames does not match episode metadata frame count")
     if len(data_index_rows) != len(episode_rows):
         errors.append("data index row count does not match episode metadata rows")
     frame_materialized_statuses = {"data_jsonl", "data_jsonl_mp4", "parquet", "parquet_mp4"}
@@ -310,6 +314,8 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         previous_end = end
     if data_rows and len(data_rows) != previous_end:
         errors.append("materialized frame row count does not match indexed frame count")
+    if data_rows and int(info.get("total_frames") or 0) != len(data_rows):
+        errors.append("total_frames does not match materialized frame row count")
     if data_rows and not _frame_rows_have_official_indices(data_rows):
         errors.append("frame rows must include contiguous global index values")
     if episode_rows and not _episode_rows_have_dataset_offsets(episode_rows):
@@ -666,13 +672,15 @@ def _episode_rows(
     *,
     episode_index_by_source: dict[int, int],
     task_index_by_episode: dict[int, int],
+    frame_counts_by_source: dict[int, int] | None = None,
 ) -> list[dict[str, Any]]:
     rows = []
     data_start_idx = 0
     video_index = _video_index_by_episode(video_rows)
+    frame_counts_by_source = frame_counts_by_source or {}
     for episode in episodes:
         local_episode_index = episode_index_by_source[episode.episode_index]
-        length = episode.length or 0
+        length = frame_counts_by_source.get(episode.episode_index, episode.length or 0)
         data_end_idx = data_start_idx + length
         task = _episode_task(episode)
         local_task_index = task_index_by_episode[episode.episode_index]
@@ -705,6 +713,16 @@ def _episode_rows(
         rows.append(row)
         data_start_idx = data_end_idx
     return rows
+
+
+def _frame_counts_by_source_episode(frame_rows: list[dict[str, Any]]) -> dict[int, int]:
+    counts: dict[int, int] = {}
+    for row in frame_rows:
+        source_episode_index = row.get("source_episode_index")
+        if source_episode_index is None:
+            continue
+        counts[int(source_episode_index)] = counts.get(int(source_episode_index), 0) + 1
+    return counts
 
 
 def _video_index_by_episode(video_rows: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
