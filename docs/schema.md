@@ -173,6 +173,12 @@ writes `annotations.jsonl` for restart-safe local development. When `pyarrow`
 and `lance` are installed, the same records are mirrored to
 `annotations.lance` with the schema above.
 
+Every create, update, and delete also appends an immutable event to
+`history.jsonl` in the same dataset directory. History events include the
+annotation id, episode index, action, actor, timestamp, and before/after
+annotation snapshots so review changes can be audited without mutating raw Lance
+tables.
+
 Allowed `source` values:
 
 ```text

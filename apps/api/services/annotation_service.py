@@ -7,7 +7,12 @@ from pathlib import Path
 import re
 from uuid import uuid4
 
-from apps.api.schemas.annotations import AnnotationCreate, AnnotationRecord, AnnotationUpdate
+from apps.api.schemas.annotations import (
+    AnnotationCreate,
+    AnnotationHistoryRecord,
+    AnnotationRecord,
+    AnnotationUpdate,
+)
 from apps.api.services.pydantic_compat import model_dump
 from packages.robot_schema import build_annotations_pyarrow_schema
 
@@ -27,6 +32,7 @@ class AnnotationStore:
         self.persist = persist
         self.mirror_lance = mirror_lance
         self._records: dict[str, AnnotationRecord] = {}
+        self._history: list[AnnotationHistoryRecord] = []
         if self.persist:
             self._load_records()
 
@@ -48,6 +54,15 @@ class AnnotationStore:
             **model_dump(payload),
         )
         self._records[record.annotation_id] = record
+        self._append_history(
+            dataset_id=record.dataset_id,
+            annotation_id=record.annotation_id,
+            episode_index=record.episode_index,
+            action="create",
+            actor=record.created_by,
+            before=None,
+            after=self._json_row(record),
+        )
         self._persist_dataset(record.dataset_id)
         return record
 
@@ -56,7 +71,7 @@ class AnnotationStore:
         if existing is None:
             return None
         update_data = model_dump(payload, exclude_unset=True)
-        update_data.pop("updated_by", None)
+        actor = str(update_data.pop("updated_by", None) or "local")
         merged = model_dump(existing)
         merged.update(update_data)
         if merged["end_frame"] < merged["start_frame"]:
@@ -64,6 +79,15 @@ class AnnotationStore:
         merged["updated_at"] = datetime.now(timezone.utc)
         record = AnnotationRecord(**merged)
         self._records[annotation_id] = record
+        self._append_history(
+            dataset_id=record.dataset_id,
+            annotation_id=record.annotation_id,
+            episode_index=record.episode_index,
+            action="update",
+            actor=actor,
+            before=self._json_row(existing),
+            after=self._json_row(record),
+        )
         self._persist_dataset(record.dataset_id)
         return record
 
@@ -71,14 +95,39 @@ class AnnotationStore:
         existing = self._records.pop(annotation_id, None)
         if existing is None:
             return False
+        self._append_history(
+            dataset_id=existing.dataset_id,
+            annotation_id=existing.annotation_id,
+            episode_index=existing.episode_index,
+            action="delete",
+            actor="local",
+            before=self._json_row(existing),
+            after=None,
+        )
         self._persist_dataset(existing.dataset_id)
         return True
+
+    def list_history(
+        self,
+        dataset_id: str,
+        *,
+        episode_index: int | None = None,
+        annotation_id: str | None = None,
+    ) -> list[AnnotationHistoryRecord]:
+        return [
+            event
+            for event in self._history
+            if event.dataset_id == dataset_id
+            and (episode_index is None or event.episode_index == episode_index)
+            and (annotation_id is None or event.annotation_id == annotation_id)
+        ]
 
     def storage_paths(self, dataset_id: str) -> dict[str, str]:
         dataset_dir = self._dataset_dir(dataset_id)
         return {
             "jsonl": str(dataset_dir / "annotations.jsonl"),
             "lance": str(dataset_dir / "annotations.lance"),
+            "history": str(dataset_dir / "history.jsonl"),
         }
 
     def _load_records(self) -> None:
@@ -90,6 +139,11 @@ class AnnotationStore:
                     continue
                 record = AnnotationRecord(**json.loads(line))
                 self._records[record.annotation_id] = record
+        for history_path in self.storage_root.glob("*/history.jsonl"):
+            for line in history_path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                self._history.append(AnnotationHistoryRecord(**json.loads(line)))
 
     def _persist_dataset(self, dataset_id: str) -> None:
         if not self.persist:
@@ -101,6 +155,37 @@ class AnnotationStore:
         lines = [json.dumps(self._json_row(record), sort_keys=True) for record in records]
         jsonl_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
         self._mirror_lance(dataset_dir / "annotations.lance", records)
+
+    def _append_history(
+        self,
+        *,
+        dataset_id: str,
+        annotation_id: str,
+        episode_index: int,
+        action: str,
+        actor: str,
+        before: dict[str, object] | None,
+        after: dict[str, object] | None,
+    ) -> None:
+        event = AnnotationHistoryRecord(
+            event_id=str(uuid4()),
+            dataset_id=dataset_id,
+            annotation_id=annotation_id,
+            episode_index=episode_index,
+            action=action,
+            actor=actor,
+            before=before,
+            after=after,
+            created_at=datetime.now(timezone.utc),
+        )
+        self._history.append(event)
+        if not self.persist:
+            return
+        dataset_dir = self._dataset_dir(dataset_id)
+        dataset_dir.mkdir(parents=True, exist_ok=True)
+        history_path = dataset_dir / "history.jsonl"
+        with history_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(self._history_json_row(event), sort_keys=True) + "\n")
 
     def _mirror_lance(self, lance_path: Path, records: list[AnnotationRecord]) -> None:
         if not self.mirror_lance:
@@ -135,6 +220,13 @@ class AnnotationStore:
             "review_status": record.review_status.value,
             "created_at": record.created_at.isoformat(),
             "updated_at": record.updated_at.isoformat(),
+        }
+
+    @staticmethod
+    def _history_json_row(record: AnnotationHistoryRecord) -> dict[str, object]:
+        return {
+            **model_dump(record),
+            "created_at": record.created_at.isoformat(),
         }
 
     @staticmethod

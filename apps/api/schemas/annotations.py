@@ -68,3 +68,15 @@ class AnnotationRecord(BaseModel):
     created_by: str
     created_at: datetime
     updated_at: datetime
+
+
+class AnnotationHistoryRecord(BaseModel):
+    event_id: str
+    dataset_id: str
+    annotation_id: str
+    episode_index: int
+    action: str
+    actor: str
+    before: dict[str, Any] | None = None
+    after: dict[str, Any] | None = None
+    created_at: datetime

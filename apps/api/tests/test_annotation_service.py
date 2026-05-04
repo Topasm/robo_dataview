@@ -53,6 +53,7 @@ class AnnotationServiceTest(unittest.TestCase):
 
             self.assertTrue(paths["jsonl"].endswith("/annotations.jsonl"))
             self.assertTrue(paths["lance"].endswith("/annotations.lance"))
+            self.assertTrue(paths["history"].endswith("/history.jsonl"))
 
     def test_persisted_jsonl_uses_schema_column_names(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -74,6 +75,55 @@ class AnnotationServiceTest(unittest.TestCase):
             self.assertEqual(row["dataset_id"], "sample-xvla-soft-fold")
             self.assertEqual(row["source"], "human")
             self.assertEqual(row["review_status"], "pending")
+
+    def test_annotation_store_records_history_jsonl_across_instances(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage_root = Path(tmpdir)
+            first_store = AnnotationStore(storage_root=storage_root, mirror_lance=False)
+            created = first_store.create(
+                AnnotationCreate(
+                    dataset_id="sample-xvla-soft-fold",
+                    episode_index=4,
+                    start_frame=10,
+                    end_frame=20,
+                    label_type="phase",
+                    label_value="approach",
+                    created_by="alice",
+                )
+            )
+            updated = first_store.update(
+                created.annotation_id,
+                AnnotationUpdate(
+                    label_value="grasp",
+                    review_status=ReviewStatus.edited,
+                    updated_by="bob",
+                ),
+            )
+            self.assertIsNotNone(updated)
+            deleted = first_store.delete(created.annotation_id)
+
+            second_store = AnnotationStore(storage_root=storage_root, mirror_lance=False)
+            events = second_store.list_history(
+                "sample-xvla-soft-fold",
+                annotation_id=created.annotation_id,
+            )
+            history_path = Path(second_store.storage_paths("sample-xvla-soft-fold")["history"])
+            rows = [
+                json.loads(line)
+                for line in history_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+
+            self.assertTrue(deleted)
+            self.assertEqual([event.action for event in events], ["create", "update", "delete"])
+            self.assertEqual([event.actor for event in events], ["alice", "bob", "local"])
+            self.assertIsNone(events[0].before)
+            self.assertEqual(events[0].after["label_value"], "approach")
+            self.assertEqual(events[1].before["label_value"], "approach")
+            self.assertEqual(events[1].after["label_value"], "grasp")
+            self.assertEqual(events[2].before["label_value"], "grasp")
+            self.assertIsNone(events[2].after)
+            self.assertEqual([row["action"] for row in rows], ["create", "update", "delete"])
 
 
 if __name__ == "__main__":

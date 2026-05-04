@@ -131,6 +131,7 @@ Response shape:
 
 ```text
 GET    /annotations?dataset_id=...&episode_index=...
+GET    /annotations/history?dataset_id=...&episode_index=...&annotation_id=...
 POST   /annotations
 PATCH  /annotations/{annotation_id}
 DELETE /annotations/{annotation_id}
@@ -151,6 +152,11 @@ DELETE /annotations/{annotation_id}
   "review_status": "accepted"
 }
 ```
+
+`GET /annotations/history` returns immutable audit events for annotation
+creates, updates, and deletes. Each event includes `action`, `actor`, `before`,
+`after`, and `created_at`. `episode_index` and `annotation_id` filters are
+optional.
 
 ## Search
 

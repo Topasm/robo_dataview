@@ -1,6 +1,11 @@
 from fastapi import APIRouter, HTTPException, Query
 
-from apps.api.schemas.annotations import AnnotationCreate, AnnotationRecord, AnnotationUpdate
+from apps.api.schemas.annotations import (
+    AnnotationCreate,
+    AnnotationHistoryRecord,
+    AnnotationRecord,
+    AnnotationUpdate,
+)
 from apps.api.services.annotation_service import annotation_store
 
 
@@ -13,6 +18,19 @@ def list_annotations(
     episode_index: int | None = Query(default=None),
 ) -> list[AnnotationRecord]:
     return annotation_store.list(dataset_id=dataset_id, episode_index=episode_index)
+
+
+@router.get("/annotations/history", response_model=list[AnnotationHistoryRecord])
+def list_annotation_history(
+    dataset_id: str = Query(...),
+    episode_index: int | None = Query(default=None),
+    annotation_id: str | None = Query(default=None),
+) -> list[AnnotationHistoryRecord]:
+    return annotation_store.list_history(
+        dataset_id=dataset_id,
+        episode_index=episode_index,
+        annotation_id=annotation_id,
+    )
 
 
 @router.post("/annotations", response_model=AnnotationRecord)
