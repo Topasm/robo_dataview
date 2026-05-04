@@ -1275,7 +1275,7 @@ def _write_optional_data_parquet(
     try:
         hf_features = _hf_features_from_lerobot_features(features, datasets)
         columns = {
-            key: [row.get(key) for row in rows]
+            key: [_hf_dataset_column_value(row.get(key), features[key]) for row in rows]
             for key in hf_features
         }
         dataset = datasets.Dataset.from_dict(columns, features=hf_features, split="train")
@@ -1284,6 +1284,19 @@ def _write_optional_data_parquet(
     except Exception:
         return _write_optional_parquet(path, rows)
     return True
+
+
+def _hf_dataset_column_value(value: Any, feature: dict[str, Any]) -> Any:
+    if value is None:
+        return None
+    shape = tuple(feature.get("shape") or ())
+    if shape != (1,):
+        return value
+    if hasattr(value, "tolist"):
+        value = value.tolist()
+    if isinstance(value, (list, tuple)) and len(value) == 1:
+        return value[0]
+    return value
 
 
 def _hf_features_from_lerobot_features(features: dict[str, dict[str, Any]], datasets: Any) -> Any:

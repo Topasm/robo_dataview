@@ -423,6 +423,8 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertNotIn("cam_high", dataset_payload["features"])
             self.assertNotIn("cam_high", dataset_payload["columns"])
             self.assertEqual(dataset_payload["columns"]["episode_index"], [0])
+            self.assertEqual(dataset_payload["columns"]["action"], [2.0])
+            self.assertEqual(dataset_payload["columns"]["observation.state"], [[0.0, 1.0]])
 
     def test_validate_lerobot_snapshot_rejects_total_frame_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
