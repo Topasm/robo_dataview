@@ -65,9 +65,9 @@ def write_lerobot_v3_snapshot(
     validation_path = root / VALIDATION_JSON_PATH
 
     task_rows = _task_rows(episodes)
-    episode_rows = _episode_rows(episodes, annotations_by_episode)
     frame_rows = _frame_rows(episodes, timeseries_by_episode or {})
     video_rows = _write_video_blobs(root, episodes, video_blobs_by_episode or {})
+    episode_rows = _episode_rows(episodes, annotations_by_episode, video_rows)
     annotation_rows = [
         _annotation_row(annotation)
         for annotations in annotations_by_episode.values()
@@ -106,7 +106,7 @@ def write_lerobot_v3_snapshot(
             "data": "data/chunk-000/file-000.parquet",
             "data_jsonl": "data/chunk-000/file-000.jsonl",
             "data_index": "data/chunk-000/file-000.index.jsonl",
-            "videos": "videos/{camera}/chunk-000/file-000.mp4",
+            "videos": "videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4",
             "video_index": "videos/video_index.jsonl",
             "tasks": "meta/tasks.parquet",
             "tasks_jsonl": "meta/tasks.jsonl",
@@ -382,32 +382,46 @@ def _task_rows(episodes: list[EpisodeDetail]) -> list[dict[str, Any]]:
 def _episode_rows(
     episodes: list[EpisodeDetail],
     annotations_by_episode: dict[int, list[AnnotationRecord]],
+    video_rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     rows = []
     data_start_idx = 0
+    video_index = _video_index_by_episode(video_rows)
     for episode in episodes:
         length = episode.length or 0
         data_end_idx = data_start_idx + length
-        rows.append(
-            {
-                "episode_index": episode.episode_index,
-                "task_index": episode.task_index,
-                "length": length,
-                "data_start_idx": data_start_idx,
-                "data_end_idx": data_end_idx,
-                "fps": episode.fps,
-                "split": episode.split,
-                "success_label": episode.success_label,
-                "quality_score": episode.quality_score,
-                "review_status": episode.review_status,
-                "caption": episode.caption,
-                "language_instruction": episode.language_instruction,
-                "camera_names": episode.camera_names,
-                "accepted_annotation_count": len(annotations_by_episode.get(episode.episode_index, [])),
-            }
-        )
+        row = {
+            "episode_index": episode.episode_index,
+            "task_index": episode.task_index,
+            "length": length,
+            "data_start_idx": data_start_idx,
+            "data_end_idx": data_end_idx,
+            "data/chunk_index": 0,
+            "data/file_index": 0,
+            "fps": episode.fps,
+            "split": episode.split,
+            "success_label": episode.success_label,
+            "quality_score": episode.quality_score,
+            "review_status": episode.review_status,
+            "caption": episode.caption,
+            "language_instruction": episode.language_instruction,
+            "camera_names": episode.camera_names,
+            "accepted_annotation_count": len(annotations_by_episode.get(episode.episode_index, [])),
+        }
+        row.update(video_index.get(episode.episode_index, {}))
+        rows.append(row)
         data_start_idx = data_end_idx
     return rows
+
+
+def _video_index_by_episode(video_rows: list[dict[str, Any]]) -> dict[int, dict[str, int]]:
+    index: dict[int, dict[str, int]] = {}
+    for row in video_rows:
+        episode_index = int(row["episode_index"])
+        video_key = str(row["video_key"])
+        index.setdefault(episode_index, {})[f"videos/{video_key}/chunk_index"] = int(row["chunk_index"])
+        index[episode_index][f"videos/{video_key}/file_index"] = int(row["file_index"])
+    return index
 
 
 def _data_index_rows(episode_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -467,7 +481,7 @@ def _write_video_blobs(
                 Path("videos")
                 / _safe_path_name(camera)
                 / "chunk-000"
-                / f"episode_{episode.episode_index:06d}.mp4"
+                / f"file-{episode.episode_index:03d}.mp4"
             )
             path = root / relative_path
             path.write_bytes(blob)
@@ -475,6 +489,9 @@ def _write_video_blobs(
                 {
                     "episode_index": episode.episode_index,
                     "camera": camera,
+                    "video_key": _safe_path_name(camera),
+                    "chunk_index": 0,
+                    "file_index": episode.episode_index,
                     "video_file": relative_path.as_posix(),
                     "file_size_bytes": len(blob),
                 }

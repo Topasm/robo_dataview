@@ -109,11 +109,22 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertEqual(validation["materialized_video_count"], 1)
             self.assertTrue(Path(artifact["files"]["data_jsonl"]).exists())
             self.assertTrue(Path(artifact["files"]["video_index"]).exists())
-            self.assertTrue((root / "videos/cam_high/chunk-000/episode_000000.mp4").exists())
+            self.assertTrue((root / "videos/cam_high/chunk-000/file-000.mp4").exists())
             info = json.loads((root / "meta/info.json").read_text(encoding="utf-8"))
             self.assertEqual(info["features"]["observation.state"]["shape"], [2])
             self.assertEqual(info["features"]["action"]["shape"], [2])
             self.assertEqual(info["features"]["timestamp"]["shape"], [1])
+            episode_rows = [
+                json.loads(line)
+                for line in (root / "meta/episodes/chunk-000/file-000.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+                if line.strip()
+            ]
+            self.assertEqual(episode_rows[0]["data/chunk_index"], 0)
+            self.assertEqual(episode_rows[0]["data/file_index"], 0)
+            self.assertEqual(episode_rows[0]["videos/cam_high/chunk_index"], 0)
+            self.assertEqual(episode_rows[0]["videos/cam_high/file_index"], 0)
 
     def test_validate_lerobot_snapshot_records_official_loader_success(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
