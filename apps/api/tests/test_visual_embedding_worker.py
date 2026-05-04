@@ -7,6 +7,8 @@ import unittest
 from unittest.mock import patch
 
 from apps.api.schemas.episodes import EpisodeDetail
+from apps.api.schemas.search import SemanticSearchRequest
+from apps.api.services.embedding_service import EmbeddingIndex
 from apps.api.services.lance_store import VideoSource
 from workers.keyframe_extractor import KeyframeArtifact
 from workers.visual_embedding_worker import (
@@ -51,8 +53,9 @@ class VisualEmbeddingWorkerTest(unittest.TestCase):
                     side_effect=fake_extract,
                 ),
             ):
+                dataset_store = FakeVisualStore(video_path)
                 result = build_visual_embedding_records(
-                    dataset_store=FakeVisualStore(video_path),
+                    dataset_store=dataset_store,
                     dataset_id="dataset-a",
                     episode_indices=[3],
                     config=VisualEmbeddingConfig(
@@ -79,6 +82,88 @@ class VisualEmbeddingWorkerTest(unittest.TestCase):
             self.assertIsNotNone(record.content_hash)
             self.assertEqual(Path(record.source_uri).read_bytes(), b"fake-jpeg")
             self.assertAlmostEqual(sum(value * value for value in record.embedding), 1.0)
+
+    def test_generated_visual_embeddings_are_searchable_by_compatible_text_provider(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            publish_root = root / "published"
+            video_path = root / "episode.mp4"
+            video_path.write_bytes(b"fake-video")
+            image_path = root / "cam_high_frame_000000.jpg"
+
+            def fake_extract(*, path, camera, frame_indices, output_dir):
+                del frame_indices
+                self.assertEqual(path, video_path)
+                self.assertEqual(camera, "cam_high")
+                output_dir.mkdir(parents=True, exist_ok=True)
+                image_path.write_bytes(b"fake-jpeg")
+                return [
+                    KeyframeArtifact(
+                        camera=camera,
+                        frame_index=0,
+                        uri=str(image_path),
+                        width=32,
+                        height=24,
+                    )
+                ]
+
+            with (
+                patch.dict(
+                    os.environ,
+                    {"ROBOT_DATA_STUDIO_KEYFRAME_CACHE_PUBLISH_URI": str(publish_root)},
+                    clear=False,
+                ),
+                patch(
+                    "workers.visual_embedding_worker.extract_keyframes_from_path",
+                    side_effect=fake_extract,
+                ),
+            ):
+                dataset_store = FakeVisualStore(video_path)
+                result = build_visual_embedding_records(
+                    dataset_store=dataset_store,
+                    dataset_id="dataset-a",
+                    episode_indices=[3],
+                    config=VisualEmbeddingConfig(
+                        model="fake-vision",
+                        camera_names=("cam_high",),
+                        min_keyframes=1,
+                        max_keyframes=1,
+                    ),
+                    provider=FakeVisualProvider(),
+                    cache_root=root / "cache",
+                )
+
+                index = EmbeddingIndex(
+                    storage_root=root / "embeddings",
+                    embedding_provider=FakeCompatibleTextProvider(),
+                    mirror_lance=False,
+                    mirror_lancedb=False,
+                )
+                index.upsert_records("dataset-a", result.records)
+                episode = dataset_store.get_episode("dataset-a", 3)
+                self.assertIsNotNone(episode)
+                assert episode is not None
+                results = index.search(
+                    SemanticSearchRequest(
+                        dataset_id="dataset-a",
+                        text="cloth edge grasp",
+                        modalities=["image"],
+                        limit=1,
+                    ),
+                    episodes=[episode],
+                    annotations=[],
+                )
+
+            self.assertEqual(result.artifact_count, 1)
+            self.assertEqual(result.skipped, [])
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0].episode_index, 3)
+            self.assertEqual(results[0].frame_index, 0)
+            self.assertEqual(results[0].match_type, "semantic_visual_embedding")
+            self.assertEqual(results[0].modality, "image")
+            self.assertEqual(results[0].source_model, "fake-vision-provider")
+            self.assertEqual(results[0].camera, "cam_high")
+            self.assertEqual(results[0].source_uri, str(publish_root / "keyframes/cam_high_frame_000000.jpg"))
 
 
 class FakeVisualStore:
@@ -115,6 +200,13 @@ class FakeVisualProvider:
 
     def embed_images(self, image_paths: list[Path]) -> list[list[float]]:
         return [[3.0, 4.0] for _ in image_paths]
+
+
+class FakeCompatibleTextProvider:
+    source_model = "fake-vision-provider"
+
+    def embed_many(self, texts: list[str]) -> list[list[float]]:
+        return [[3.0, 4.0] if "cloth" in text else [0.0, 1.0] for text in texts]
 
 
 if __name__ == "__main__":

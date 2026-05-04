@@ -15,6 +15,7 @@ from apps.api.schemas.frames import FrameRecord
 from apps.api.services.annotation_service import annotation_store
 from apps.api.services import export_service
 from apps.api.services.export_service import ExportStore
+from apps.api.services.hf_dataset_export import validate_hf_dataset_export
 from apps.api.services.version_service import VersionStore
 
 
@@ -212,6 +213,36 @@ class ExportServiceTest(unittest.TestCase):
         self.assertEqual(frames[0]["frame_index"], 0)
         self.assertIn("observation_state", frames[0])
         self.assertEqual(versions.list("sample-xvla-soft-fold")[0].export_format, "hf_dataset")
+
+    def test_hf_dataset_validation_rejects_corrupt_metadata_contract(self) -> None:
+        fake_datasets = _fake_datasets_module()
+        versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
+        exports = ExportStore(versions=versions)
+
+        with patch.dict(sys.modules, {"datasets": fake_datasets}):
+            record = exports.create(
+                ExportCreateRequest(
+                    dataset_id="sample-xvla-soft-fold",
+                    episode_indices=[0],
+                    format=ExportFormat.hf_dataset,
+                    version_description="hf dataset export",
+                )
+            )
+
+            manifest = json.loads(Path(record.output_uri or "").read_text(encoding="utf-8"))
+            artifact = manifest["artifacts"]["hf_dataset"]
+            metadata_path = Path(artifact["files"]["metadata"])
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata["format"] = "wrong-format"
+            metadata["frame_rows"] = 1
+            metadata_path.write_text(json.dumps(metadata, sort_keys=True), encoding="utf-8")
+
+            validation = validate_hf_dataset_export(Path(artifact["root"]), expected_frame_rows=180)
+
+        self.assertFalse(validation["metadata_ok"])
+        self.assertIn("metadata format does not match HF Dataset export format", validation["errors"])
+        self.assertIn("metadata frame_rows does not match frames.jsonl row count", validation["errors"])
+        self.assertIn("metadata frame_rows does not match expected frame count", validation["errors"])
 
     def test_lance_export_fails_when_dependencies_are_missing(self) -> None:
         versions = VersionStore(storage_root=self.version_root, mirror_lance=False)

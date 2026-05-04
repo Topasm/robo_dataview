@@ -102,6 +102,25 @@ def validate_hf_dataset_export(root: Path, *, expected_frame_rows: int | None = 
         errors.append("missing frames.jsonl readability copy")
 
     frame_rows = _read_jsonl(rows_path) if present["frames_jsonl"] else []
+    metadata: dict[str, Any] = {}
+    if present["metadata"]:
+        try:
+            loaded_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            errors.append(f"metadata.json is not valid JSON: {exc}")
+        else:
+            if not isinstance(loaded_metadata, dict):
+                errors.append("metadata.json must contain a JSON object")
+            else:
+                metadata = loaded_metadata
+                errors.extend(
+                    _validate_metadata_contract(
+                        metadata,
+                        frame_row_count=len(frame_rows),
+                        expected_frame_rows=expected_frame_rows,
+                    )
+                )
+
     if expected_frame_rows is not None and len(frame_rows) != expected_frame_rows:
         errors.append("frames.jsonl row count does not match expected frame count")
 
@@ -120,6 +139,7 @@ def validate_hf_dataset_export(root: Path, *, expected_frame_rows: int | None = 
         "loadable": bool(load_result["available"] and load_result["ok"] and not errors),
         "load": load_result,
         "frame_count": len(frame_rows),
+        "metadata": metadata,
         "files": {
             "dataset": str(dataset_dir),
             "metadata": str(metadata_path),
@@ -140,6 +160,30 @@ def _datasets_module() -> Any:
             'Install it with `python3 -m pip install -e ".[export]"`.'
         ) from exc
     return datasets
+
+
+def _validate_metadata_contract(
+    metadata: dict[str, Any],
+    *,
+    frame_row_count: int,
+    expected_frame_rows: int | None,
+) -> list[str]:
+    errors: list[str] = []
+    if metadata.get("format") != HF_DATASET_EXPORT_FORMAT:
+        errors.append("metadata format does not match HF Dataset export format")
+    for key in ("episode_rows", "frame_rows", "annotation_rows"):
+        value = metadata.get(key)
+        if not isinstance(value, int) or value < 0:
+            errors.append(f"metadata {key} must be a non-negative integer")
+    frame_rows = metadata.get("frame_rows")
+    if isinstance(frame_rows, int):
+        if frame_rows != frame_row_count:
+            errors.append("metadata frame_rows does not match frames.jsonl row count")
+        if expected_frame_rows is not None and frame_rows != expected_frame_rows:
+            errors.append("metadata frame_rows does not match expected frame count")
+    if not isinstance(metadata.get("dataset_id"), str) or not metadata.get("dataset_id"):
+        errors.append("metadata dataset_id must be a non-empty string")
+    return errors
 
 
 def _validate_hf_dataset_load(dataset_dir: Path) -> dict[str, Any]:
