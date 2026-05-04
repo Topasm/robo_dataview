@@ -33,6 +33,7 @@ VIDEO_CAMERA_COLUMNS = ("camera_angle", "camera", "camera_name", "video_key")
 VIDEO_BLOB_COLUMNS = ("video_blob", "blob", "mp4_blob", "video")
 VIDEO_CHUNK_COLUMNS = ("chunk_index", "chunk")
 VIDEO_FILE_COLUMNS = ("file_index", "file")
+VIDEO_PATH_COLUMNS = ("video_file", "relative_path", "path", "filename")
 EPISODE_TEXT_COLUMNS = ("episode_caption", "caption", "language_instruction", "instruction")
 FILTER_ALIASES = {
     "success": "success_label",
@@ -370,6 +371,57 @@ def _video_shard_ref(row: dict[str, Any], camera: str) -> tuple[int, int] | None
         if chunk is not None and file_index is not None:
             return chunk, file_index
     return None
+
+
+def _read_video_file_from_row(
+    base_uri: str,
+    row: dict[str, Any],
+    path_name: str | None,
+) -> bytes | None:
+    if path_name is None:
+        return None
+    raw_path = row.get(path_name)
+    if not raw_path:
+        return None
+    path_text = str(raw_path)
+    for candidate in _video_path_candidates(base_uri, path_text):
+        if candidate.is_file():
+            return candidate.read_bytes()
+    return None
+
+
+def _video_path_candidates(base_uri: str, path_text: str) -> list[Path]:
+    path = _local_path_from_uri(path_text)
+    if path is not None and path.is_absolute():
+        return [path]
+
+    base_path = _local_path_from_uri(base_uri)
+    if base_path is None:
+        return []
+    if base_path.suffix == ".lance":
+        base_path = base_path.parent
+
+    relative_path = path if path is not None else Path(path_text)
+    candidates = [
+        base_path / relative_path,
+        base_path.parent / relative_path,
+    ]
+    if len(relative_path.parts) == 1:
+        candidates.extend(
+            [
+                base_path / "videos" / relative_path,
+                base_path.parent / "videos" / relative_path,
+            ]
+        )
+
+    unique_candidates: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key not in seen:
+            seen.add(key)
+            unique_candidates.append(candidate)
+    return unique_candidates
 
 
 def _blob_to_bytes(value: Any) -> bytes | None:
@@ -1285,7 +1337,8 @@ class LanceDatasetStore:
         schema = bundle.schemas.get("videos", [])
         camera_name = _first_present_name(schema, VIDEO_CAMERA_COLUMNS)
         blob_name = _first_present_name(schema, VIDEO_BLOB_COLUMNS)
-        if camera_name is None or blob_name is None:
+        path_name = _first_present_name(schema, VIDEO_PATH_COLUMNS)
+        if camera_name is None or (blob_name is None and path_name is None):
             return None
 
         chunk_name = _first_present_name(schema, VIDEO_CHUNK_COLUMNS)
@@ -1297,8 +1350,7 @@ class LanceDatasetStore:
                 camera_name,
                 chunk_name,
                 file_name,
-                "relative_path",
-                "filename",
+                path_name,
                 blob_name,
             ],
         )
@@ -1330,6 +1382,9 @@ class LanceDatasetStore:
             blob = _blob_to_bytes(row.get(blob_name))
             if blob is not None:
                 return blob
+            file_blob = _read_video_file_from_row(bundle.base_uri, row, path_name)
+            if file_blob is not None:
+                return file_blob
         return None
 
     def _read_video_rows(

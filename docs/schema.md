@@ -132,8 +132,10 @@ Current status: playback prefers per-episode video blob columns from
 If those are absent, the API can fall back to `videos.lance` rows when they
 carry an `episode_index` plus camera column, or when episode metadata contains
 LeRobot-style `videos/<video_key>/chunk_index` and
-`videos/<video_key>/file_index` shard references. SHA256 validation is not wired
-yet.
+`videos/<video_key>/file_index` shard references. The fallback reads
+materialized `video_blob` values first, then local path provenance such as
+`relative_path` or `video_file` when the referenced MP4 exists under the local
+dataset root. SHA256 validation is not wired yet.
 
 ## annotations.lance
 

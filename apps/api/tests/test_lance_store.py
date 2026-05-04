@@ -366,6 +366,50 @@ class LanceDatasetStoreTest(unittest.TestCase):
 
         self.assertEqual(video_blob, b"shard-video")
 
+    def test_video_blob_falls_back_to_videos_lance_relative_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dataset_root = Path(tmpdir) / "dataset"
+            video_path = dataset_root / "videos" / "cam_high" / "episode_000003.mp4"
+            video_path.parent.mkdir(parents=True)
+            video_path.write_bytes(b"file-video")
+            episode_rows = [
+                {
+                    "episode_index": 3,
+                    "task_index": 3,
+                    "fps": 20.0,
+                    "timestamps": [0.0],
+                    "videos/cam_high/chunk_index": 0,
+                    "videos/cam_high/file_index": 3,
+                },
+            ]
+            video_rows = [
+                {
+                    "camera_angle": "cam_high",
+                    "chunk_index": 0,
+                    "file_index": 3,
+                    "relative_path": "videos/cam_high/episode_000003.mp4",
+                    "file_size_bytes": len(b"file-video"),
+                },
+            ]
+            fake_tables = {
+                str(dataset_root / "episodes.lance"): FakeDataset(
+                    episode_rows,
+                    list(episode_rows[0].keys()),
+                ),
+                str(dataset_root / "frames.lance"): FakeDataset([], ["episode_index"]),
+                str(dataset_root / "videos.lance"): FakeDataset(
+                    video_rows,
+                    list(video_rows[0].keys()),
+                ),
+            }
+            sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+
+            store = LanceDatasetStore()
+            record = store.open_dataset(DatasetOpenRequest(uri=str(dataset_root), name="path-videos"))
+            video_blob = store.get_video_blob(record.dataset_id, 3, "cam_high")
+
+        self.assertEqual(video_blob, b"file-video")
+
     def test_episode_video_columns_take_precedence_over_videos_lance(self) -> None:
         episode_rows = [
             {

@@ -65,16 +65,18 @@ overlay without mutating the raw Lance dataset. Supported fields:
 episode table has a matching video blob column, including
 `observation_images_<camera>_video_blob` layouts. If the episode table has no
 matching blob, the store falls back to `videos.lance` rows that can be matched by
-`episode_index` and camera or by LeRobot-style episode shard metadata. It
-supports `GET` and `HEAD`, returns `Accept-Ranges: bytes`, and handles single
-byte-range requests for browser video playback.
+`episode_index` and camera or by LeRobot-style episode shard metadata. Fallback
+rows may provide either a materialized `video_blob` or a local path such as
+`relative_path`/`video_file`. It supports `GET` and `HEAD`, returns
+`Accept-Ranges: bytes`, and handles single byte-range requests for browser video
+playback.
 
 Current implementation detail:
 
 - The store reads the full episode-table video blob through `take_blobs` or a
   row fallback, then the API slices the requested byte range in process.
-- `videos.lance` fallback requires a materialized `video_blob`; path-only
-  provenance rows are not streamed yet.
+- Path-only `videos.lance` fallback is local-filesystem only; remote object
+  storage/HF path streaming is not implemented yet.
 - Suffix byte ranges such as `bytes=-500` are not supported.
 
 ## Frames

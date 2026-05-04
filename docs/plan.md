@@ -40,6 +40,7 @@ Working:
 - MP4 video blob serving with `HEAD` and byte-range support.
 - `videos.lance` fallback for episode-indexed video blobs and LeRobot-style
   video shard references.
+- Local path-only `videos.lance` provenance fallback for downloaded datasets.
 - Annotation CRUD with JSONL persistence and optional Lance mirroring.
 - Segment edit and midpoint split actions in the web UI.
 - Search filter endpoint.
@@ -85,8 +86,8 @@ Known limits:
   shards require optional `pyarrow`/LeRobot dependencies.
 - Video ranges are sliced after loading the full episode blob; direct Lance blob
   range streaming is not implemented.
-- `videos.lance` path-only provenance rows and SHA256 validation are not used by
-  playback yet.
+- Remote object-store/HF video path streaming and SHA256 video validation are not
+  wired yet.
 - General frame-table mutation and full frame-table browser UX are not
   implemented yet.
 
