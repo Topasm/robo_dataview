@@ -939,10 +939,9 @@ def _stats(frame_rows: list[dict[str, Any]]) -> dict[str, Any]:
         if vectors:
             features[key] = _vector_stats(vectors)
 
-    result: dict[str, Any] = {"features": features}
-    if not features:
-        result["note"] = "Statistics are not materialized because no frame rows were exported."
-    return result
+    if features:
+        return features
+    return {"note": "Statistics are not materialized because no frame rows were exported."}
 
 
 def _scalar_stats(values: list[float]) -> dict[str, list[float]]:
@@ -960,6 +959,7 @@ def _vector_stats(vectors: list[list[float]]) -> dict[str, list[float]]:
         "std": [_std(column) for column in columns],
         "min": [min(column) if column else 0.0 for column in columns],
         "max": [max(column) if column else 0.0 for column in columns],
+        "count": [len(column) for column in columns],
     }
 
 

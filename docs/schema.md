@@ -314,8 +314,9 @@ accepted annotations. It writes frame JSONL and available camera MP4 blobs, and
 also writes Parquet shards when `pyarrow` is installed. For materialized frame
 exports, `meta/info.json` derives concrete `observation.state` and `action`
 feature dimensions from exported rows, and `meta/stats.json` contains
-mean/std/min/max statistics for exported numeric frame features. Frame rows
-include LeRobot's global `index` column in addition to compact local
+top-level mean/std/min/max/count statistics keyed by exported numeric frame
+feature, matching the official LeRobot stats layout. Frame rows include
+LeRobot's global `index` column in addition to compact local
 `episode_index`, `frame_index`, `timestamp`, compact local `task_index`,
 `source_episode_index`, `source_task_index`, `observation.state`, and `action`.
 When camera MP4 artifacts are present, the frame JSONL readability copy also

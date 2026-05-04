@@ -121,9 +121,10 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertEqual(info["features"]["cam_high"]["dtype"], "video")
             self.assertEqual(info["total_frames"], 3)
             stats = json.loads((root / "meta/stats.json").read_text(encoding="utf-8"))
-            self.assertEqual(stats["features"]["observation.state"]["min"], [0.0, 0.0])
-            self.assertEqual(stats["features"]["observation.state"]["max"], [1.0, 1.0])
-            self.assertEqual(stats["features"]["action"]["max"], [3.0, 4.0])
+            self.assertEqual(stats["observation.state"]["min"], [0.0, 0.0])
+            self.assertEqual(stats["observation.state"]["max"], [1.0, 1.0])
+            self.assertEqual(stats["observation.state"]["count"], [3, 3])
+            self.assertEqual(stats["action"]["max"], [3.0, 4.0])
             data_rows = [
                 json.loads(line)
                 for line in (root / "data/chunk-000/file-000.jsonl")
