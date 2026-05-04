@@ -252,7 +252,7 @@ Definition of done:
 ### P8: Production Shape
 
 - [x] Add SQLite/Postgres app metadata store.
-- [ ] Add Redis + RQ/Celery worker queue.
+- [x] Add Redis + RQ/Celery worker queue.
 - [ ] Add background job progress events.
 - [ ] Add auth and user identities.
 - [ ] Add multi-user review assignment.
@@ -262,7 +262,7 @@ Definition of done:
 ## Recommended Immediate Order
 
 1. Materialize fully LeRobot-loadable Parquet/MP4 export.
-2. Move Rerun/export/VLM/embedding work into queue-backed workers.
+2. Move Rerun/export work into queue-backed workers and add progress events.
 3. Add cross-modal visual search over compatible CLIP/SigLIP records.
 4. Add direct Lance/object-store byte-range reads for video blobs.
 5. Add production metadata store and deployment docs.

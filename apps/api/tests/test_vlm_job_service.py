@@ -10,10 +10,16 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 
 from apps.api.schemas.common import JobStatus, ReviewStatus
-from apps.api.schemas.jobs import JobCreateRequest, VisualEmbeddingJobCreateRequest
+from apps.api.schemas.jobs import JobCreateRequest, JobRecord, VisualEmbeddingJobCreateRequest
 from apps.api.services.embedding_service import EmbeddingRecord
 from apps.api.services.annotation_service import annotation_store
 from apps.api.services.job_service import JobStore
+from apps.api.services.job_queue import (
+    JobQueueUnavailableError,
+    RQJobQueueBackend,
+    build_job_queue_from_env,
+)
+from workers.job_runner import run_queued_job
 from workers.visual_embedding_worker import VisualEmbeddingResult
 
 
@@ -161,6 +167,136 @@ class VlmJobServiceTest(unittest.TestCase):
         self.assertEqual(loaded.dataset_id, "sample-xvla-soft-fold")
         self.assertEqual(loaded.episode_indices, [0])
 
+    def test_job_store_enqueues_when_queue_backend_is_configured(self) -> None:
+        queue = FakeQueueBackend(queue_job_id="rq-job-1")
+        jobs = JobStore(queue_backend=queue)
+        payload = VisualEmbeddingJobCreateRequest(
+            dataset_id="sample-xvla-soft-fold",
+            episode_indices=[0],
+            model="fake-vision",
+        )
+
+        record = jobs.create(kind="visual_embedding", payload=payload)
+
+        self.assertEqual(record.status, JobStatus.queued)
+        self.assertEqual(record.queue_job_id, "rq-job-1")
+        self.assertEqual(record.message, "Queued for background worker.")
+        self.assertEqual(queue.enqueued, [("visual_embedding", payload)])
+
+    def test_queued_job_runner_updates_existing_record(self) -> None:
+        queue = FakeQueueBackend(queue_job_id="rq-job-1")
+        jobs = JobStore(queue_backend=queue)
+        payload = VisualEmbeddingJobCreateRequest(
+            dataset_id="sample-xvla-soft-fold",
+            episode_indices=[0],
+            model="fake-vision",
+        )
+        queued = jobs.create(kind="visual_embedding", payload=payload)
+        record = EmbeddingRecord(
+            embedding_id="embedding-1",
+            episode_index=0,
+            frame_index=0,
+            clip_start_frame=0,
+            clip_end_frame=0,
+            modality="image",
+            embedding=[1.0, 0.0],
+            text="cam_high frame 0 visual keyframe",
+            source_model="fake-vision",
+            created_at=datetime.now(timezone.utc),
+            camera="cam_high",
+            source_uri="/tmp/keyframe.jpg",
+            content_hash="abc123",
+        )
+        fake_index = FakeEmbeddingIndex()
+
+        with (
+            patch(
+                "apps.api.services.job_service.build_visual_embedding_records",
+                return_value=VisualEmbeddingResult(
+                    records=[record],
+                    artifact_count=1,
+                    skipped=[],
+                    provider="fake-vision",
+                ),
+            ),
+            patch("apps.api.services.job_service.embedding_index", fake_index),
+        ):
+            result = jobs.run(queued.job_id, "visual_embedding", queue.payloads[0])
+
+        self.assertEqual(result.status, JobStatus.succeeded)
+        self.assertEqual(result.progress, 1.0)
+        self.assertEqual(result.created_embedding_ids, ["embedding-1"])
+        self.assertEqual(jobs.get(queued.job_id).status, JobStatus.succeeded)
+
+    def test_job_store_reports_queue_enqueue_failure(self) -> None:
+        jobs = JobStore(queue_backend=FakeQueueBackend(error="redis unavailable"))
+
+        record = jobs.create(
+            kind="visual_embedding",
+            payload=VisualEmbeddingJobCreateRequest(
+                dataset_id="sample-xvla-soft-fold",
+                episode_indices=[0],
+            ),
+        )
+
+        self.assertEqual(record.status, JobStatus.failed)
+        self.assertEqual(record.progress, 1.0)
+        self.assertIn("redis unavailable", record.message or "")
+
+    def test_worker_entrypoint_delegates_to_job_store(self) -> None:
+        fake_jobs = FakeJobs()
+
+        with patch("apps.api.services.job_service.jobs", fake_jobs):
+            result = run_queued_job(
+                "job-1",
+                "visual_embedding",
+                {"dataset_id": "sample-xvla-soft-fold", "episode_indices": [0]},
+            )
+
+        self.assertEqual(fake_jobs.calls, [("job-1", "visual_embedding")])
+        self.assertEqual(result["job_id"], "job-1")
+        self.assertEqual(result["status"], JobStatus.succeeded)
+
+    def test_build_job_queue_from_env_returns_none_for_sync_mode(self) -> None:
+        with patch.dict(os.environ, {"ROBOT_DATA_STUDIO_JOB_QUEUE": "sync"}, clear=False):
+            self.assertIsNone(build_job_queue_from_env())
+
+    def test_build_job_queue_from_env_builds_rq_backend(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "ROBOT_DATA_STUDIO_JOB_QUEUE": "rq",
+                "ROBOT_DATA_STUDIO_REDIS_URL": "redis://example:6379/2",
+                "ROBOT_DATA_STUDIO_RQ_QUEUE": "robot-data-studio-test",
+                "ROBOT_DATA_STUDIO_JOB_TIMEOUT_SECONDS": "42",
+            },
+            clear=False,
+        ):
+            backend = build_job_queue_from_env()
+
+        self.assertIsInstance(backend, RQJobQueueBackend)
+        assert isinstance(backend, RQJobQueueBackend)
+        self.assertEqual(backend.redis_url, "redis://example:6379/2")
+        self.assertEqual(backend.queue_name, "robot-data-studio-test")
+        self.assertEqual(backend.job_timeout_seconds, 42)
+
+    def test_build_job_queue_from_env_rejects_unknown_backend(self) -> None:
+        with patch.dict(os.environ, {"ROBOT_DATA_STUDIO_JOB_QUEUE": "unknown"}, clear=False):
+            with self.assertRaises(JobQueueUnavailableError):
+                build_job_queue_from_env()
+
+    def test_build_job_queue_from_env_rejects_invalid_timeout(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "ROBOT_DATA_STUDIO_JOB_QUEUE": "rq",
+                "ROBOT_DATA_STUDIO_JOB_TIMEOUT_SECONDS": "slow",
+            },
+            clear=False,
+        ):
+            with self.assertRaises(JobQueueUnavailableError):
+                build_job_queue_from_env()
+
 
 class FakeEmbeddingIndex:
     def __init__(self) -> None:
@@ -171,6 +307,38 @@ class FakeEmbeddingIndex:
         self.dataset_id = dataset_id
         self.records = records
         return records
+
+
+class FakeQueueBackend:
+    def __init__(self, queue_job_id: str | None = None, error: str | None = None) -> None:
+        self.queue_job_id = queue_job_id
+        self.error = error
+        self.enqueued: list[tuple[str, VisualEmbeddingJobCreateRequest]] = []
+        self.payloads: list[dict[str, object]] = []
+
+    def enqueue(self, job_id: str, kind: str, payload: dict[str, object]) -> str | None:
+        del job_id
+        if self.error is not None:
+            raise JobQueueUnavailableError(self.error)
+        self.payloads.append(payload)
+        if kind == "visual_embedding":
+            self.enqueued.append((kind, VisualEmbeddingJobCreateRequest(**payload)))
+        return self.queue_job_id
+
+
+class FakeJobs:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
+    def run(self, job_id: str, kind: str, payload: dict[str, object]) -> JobRecord:
+        self.calls.append((job_id, kind))
+        return JobRecord(
+            job_id=job_id,
+            kind=kind,
+            status=JobStatus.succeeded,
+            dataset_id=str(payload["dataset_id"]),
+            episode_indices=list(payload["episode_indices"]),
+        )
 
 
 if __name__ == "__main__":

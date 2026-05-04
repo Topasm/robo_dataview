@@ -26,6 +26,10 @@ export = [
   "pandas>=2.0.0",
   "pyarrow>=16.0.0",
 ]
+queue = [
+  "redis>=5.0.0",
+  "rq>=1.16.0",
+]
 video = [
   "opencv-python-headless>=4.8.0",
 ]

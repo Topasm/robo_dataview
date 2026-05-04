@@ -44,3 +44,4 @@ class JobRecord(BaseModel):
     raw_response_uri: str | None = None
     created_embedding_ids: list[str] = Field(default_factory=list)
     artifact_count: int = 0
+    queue_job_id: str | None = None

@@ -60,6 +60,7 @@ python3 -m pip install -e ".[rerun]"      # Rerun .rrd generation
 python3 -m pip install -e ".[video]"      # OpenCV keyframe/preview extraction
 python3 -m pip install -e ".[lerobot]"    # official LeRobotDataset validation
 python3 -m pip install -e ".[export]"     # training-ready LeRobot Parquet/MP4 export
+python3 -m pip install -e ".[queue]"      # Redis/RQ background job queue
 ```
 
 Run API and web together:
@@ -67,6 +68,17 @@ Run API and web together:
 ```bash
 npm run dev
 ```
+
+Optional RQ worker mode:
+
+```bash
+export ROBOT_DATA_STUDIO_JOB_QUEUE=rq
+export ROBOT_DATA_STUDIO_REDIS_URL=redis://127.0.0.1:6379/0
+rq worker robot-data-studio --url "$ROBOT_DATA_STUDIO_REDIS_URL"
+```
+
+With `ROBOT_DATA_STUDIO_JOB_QUEUE` unset, jobs run inline in the API process for
+local development.
 
 The script starts FastAPI on `http://127.0.0.1:8000` and Next.js on
 `http://127.0.0.1:3000` by default. Override `API_HOST`, `API_PORT`,
@@ -110,8 +122,9 @@ The repository has moved past a pure skeleton. The current MVP path can:
 
 Known MVP gaps:
 
-- Expensive jobs still run synchronously in the API process; Rerun and visual
-  embedding generation have worker modules, but no Redis/RQ/Celery queue yet.
+- Expensive VLM and visual embedding jobs can run through optional Redis/RQ, but
+  progress streaming events are not wired yet. Rerun/export jobs still use their
+  current service paths.
 - VLM labeling defaults to heuristic/local scaffolding; OpenAI-compatible model
   inference is available only when configured with environment variables.
 - Text semantic search and visual image embedding generation are separate paths.

@@ -12,6 +12,11 @@ from apps.api.schemas.episodes import EpisodeDetail
 from apps.api.schemas.jobs import JobCreateRequest, JobRecord, VisualEmbeddingJobCreateRequest
 from apps.api.services.annotation_service import annotation_store
 from apps.api.services.embedding_service import embedding_index
+from apps.api.services.job_queue import (
+    JobQueueBackend,
+    JobQueueUnavailableError,
+    build_job_queue_from_env,
+)
 from apps.api.services.lance_store import store
 from apps.api.services.pydantic_compat import model_copy, model_dump
 from apps.api.services.vlm_response_service import vlm_response_store
@@ -81,9 +86,14 @@ class SQLiteJobRecordStore:
 
 
 class JobStore:
-    def __init__(self, sqlite_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        sqlite_path: Path | None = None,
+        queue_backend: JobQueueBackend | None = None,
+    ) -> None:
         self._records: dict[str, JobRecord] = {}
         self._sqlite = SQLiteJobRecordStore(sqlite_path) if sqlite_path is not None else None
+        self._queue_backend = queue_backend
         if self._sqlite is not None:
             self._records.update({record.job_id: record for record in self._sqlite.list()})
 
@@ -93,16 +103,12 @@ class JobStore:
         payload: JobCreateRequest | VisualEmbeddingJobCreateRequest,
     ) -> JobRecord:
         job_id = str(uuid4())
-        prompt = None
-        if kind == "vlm_label":
-            try:
-                prompt = get_prompt_template(payload.prompt_template)
-            except UnknownPromptTemplateError as exc:
-                raise HTTPException(status_code=400, detail=str(exc)) from exc
+        prompt = self._prompt_for(kind, payload)
+        status = JobStatus.queued if self._queue_backend is not None else JobStatus.running
         record = JobRecord(
             job_id=job_id,
             kind=kind,
-            status=JobStatus.running,
+            status=status,
             dataset_id=payload.dataset_id,
             episode_indices=payload.episode_indices,
             progress=0.0,
@@ -110,6 +116,52 @@ class JobStore:
             prompt_template=getattr(payload, "prompt_template", None),
             prompt_version=prompt.version if prompt is not None else None,
         )
+        self._save(record)
+
+        if self._queue_backend is not None:
+            try:
+                queue_job_id = self._queue_backend.enqueue(job_id, kind, model_dump(payload))
+            except JobQueueUnavailableError as exc:
+                record = model_copy(
+                    record,
+                    update={
+                        "status": JobStatus.failed,
+                        "progress": 1.0,
+                        "message": str(exc),
+                    },
+                )
+            else:
+                record = model_copy(
+                    record,
+                    update={
+                        "queue_job_id": queue_job_id,
+                        "message": "Queued for background worker.",
+                    },
+                )
+            self._save(record)
+            return record
+
+        return self.run(job_id, kind, payload)
+
+    def run(
+        self,
+        job_id: str,
+        kind: str,
+        payload: JobCreateRequest | VisualEmbeddingJobCreateRequest | dict[str, object],
+    ) -> JobRecord:
+        payload = self._coerce_payload(kind, payload)
+        record = self.get(job_id)
+        record = model_copy(
+            record,
+            update={
+                "status": JobStatus.running,
+                "progress": max(record.progress, 0.01),
+                "message": "Running job.",
+            },
+        )
+        self._save(record)
+
+        prompt = self._prompt_for(kind, payload)
         if kind == "vlm_label":
             record = self._run_vlm_label_job(
                 record,
@@ -127,9 +179,7 @@ class JobStore:
                     "message": "Worker queue integration is not configured for this job type.",
                 }
             )
-        self._records[job_id] = record
-        if self._sqlite is not None:
-            self._sqlite.save(record)
+        self._save(record)
         return record
 
     def get(self, job_id: str) -> JobRecord:
@@ -141,6 +191,34 @@ class JobStore:
         if record is None:
             raise HTTPException(status_code=404, detail="Job not found")
         return record
+
+    def _save(self, record: JobRecord) -> None:
+        self._records[record.job_id] = record
+        if self._sqlite is not None:
+            self._sqlite.save(record)
+
+    @staticmethod
+    def _prompt_for(
+        kind: str,
+        payload: JobCreateRequest | VisualEmbeddingJobCreateRequest,
+    ):
+        if kind != "vlm_label":
+            return None
+        try:
+            return get_prompt_template(payload.prompt_template)
+        except UnknownPromptTemplateError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @staticmethod
+    def _coerce_payload(
+        kind: str,
+        payload: JobCreateRequest | VisualEmbeddingJobCreateRequest | dict[str, object],
+    ) -> JobCreateRequest | VisualEmbeddingJobCreateRequest:
+        if isinstance(payload, (JobCreateRequest, VisualEmbeddingJobCreateRequest)):
+            return payload
+        if kind == "visual_embedding":
+            return VisualEmbeddingJobCreateRequest(**payload)
+        return JobCreateRequest(**payload)
 
     def _run_vlm_label_job(
         self,
@@ -294,4 +372,4 @@ class JobStore:
         return blobs
 
 
-jobs = JobStore(sqlite_path=APP_METADATA_DB_PATH)
+jobs = JobStore(sqlite_path=APP_METADATA_DB_PATH, queue_backend=build_job_queue_from_env())

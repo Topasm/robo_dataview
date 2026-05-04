@@ -70,7 +70,7 @@ packages/robot_schema
 workers
   Heuristic VLM proposal generator, optional OpenAI-compatible provider, and
   provider interface
-  Future async worker entry points are added when queue-backed jobs are real
+  Optional RQ entry point for queued VLM and visual embedding jobs
 
 data
   Local annotations, embeddings, versions, keyframe cache, Rerun cache, and
@@ -106,6 +106,7 @@ Implemented now:
   HTTP inference.
 - Generated-label review queue for pending VLM/heuristic proposals.
 - SQLite job metadata store under `data/app/metadata.sqlite3`.
+- Optional Redis/RQ queue backend for VLM labeling and visual embedding jobs.
 - Rerun `.rrd` cache generation for state/action scalar timelines, optional
   camera video assets, deterministic cache keys, and web viewer embedding
   through `@rerun-io/web-viewer-react`.
@@ -121,7 +122,8 @@ Implemented now:
 Not implemented yet:
 
 - Durable external database for sessions, users, and app settings.
-- Real worker queue such as RQ/Celery plus Redis.
+- Queue-backed Rerun/export jobs.
+- Background job progress events.
 - Local VLM/video-model inference.
 - Cross-modal visual search over compatible text/image model embeddings.
 - Full LeRobot Parquet/MP4 materialization.

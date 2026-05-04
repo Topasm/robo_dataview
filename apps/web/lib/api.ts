@@ -114,6 +114,7 @@ type JobRecordResponse = {
   raw_response_uri: string | null;
   created_embedding_ids: string[];
   artifact_count: number;
+  queue_job_id: string | null;
 };
 
 type ExportRecordResponse = {
@@ -844,7 +845,8 @@ function toJobRecord(raw: JobRecordResponse): JobRecord {
     rawResponseIds: raw.raw_response_ids,
     rawResponseUri: raw.raw_response_uri,
     createdEmbeddingIds: raw.created_embedding_ids,
-    artifactCount: raw.artifact_count
+    artifactCount: raw.artifact_count,
+    queueJobId: raw.queue_job_id
   };
 }
 

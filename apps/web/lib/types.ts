@@ -149,6 +149,7 @@ export type JobRecord = {
   rawResponseUri: string | null;
   createdEmbeddingIds: string[];
   artifactCount: number;
+  queueJobId: string | null;
 };
 
 export type ExportRecord = {
