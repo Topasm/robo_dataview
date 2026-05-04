@@ -370,7 +370,9 @@ The subset includes selected episode metadata, frame-level state/action samples
 from `frames.lance` or the episode time-series fallback, available camera video
 blobs/provenance rows, and accepted annotations only. Missing optional Lance
 dependencies fail the export explicitly so callers do not mistake a
-manifest-only export for a usable Lance dataset.
+manifest-only export for a usable Lance dataset. Validation opens each Lance
+table when the Lance dependency is available and checks table row counts against
+the export metadata.
 
 ## JSONL and VLA exports
 

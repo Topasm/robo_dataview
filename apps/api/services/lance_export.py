@@ -142,6 +142,28 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
         if not present[table_name]:
             errors.append(f"missing {table_name}.lance")
 
+    table_readability = _lance_table_readability(paths, present)
+    for name, status in table_readability.items():
+        if not status.get("present"):
+            continue
+        label = str(status["label"])
+        readable = status.get("readable")
+        if readable is False:
+            errors.append(f"{label} is not readable as Lance: {status.get('error')}")
+        elif readable is None:
+            warnings.append(f"{label} could not be verified because {status.get('error')}")
+    errors.extend(
+        _lance_table_row_count_errors(
+            table_readability,
+            {
+                "episodes": int(metadata.get("total_episodes") or 0),
+                "frames": int(metadata.get("total_frames") or 0),
+                "videos": int(metadata.get("total_videos") or 0),
+                "annotations": int(metadata.get("total_annotations") or 0),
+            },
+        )
+    )
+
     return {
         "metadata_ok": not errors,
         "episode_count": int(metadata.get("total_episodes") or 0),
@@ -150,9 +172,95 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
         "annotation_count": int(metadata.get("total_annotations") or 0),
         "files": {name: str(path) for name, path in paths.items()},
         "present": present,
+        "table_readability": table_readability,
         "errors": errors,
         "warnings": warnings,
     }
+
+
+def _lance_table_readability(
+    paths: dict[str, Path],
+    present: dict[str, bool],
+) -> dict[str, dict[str, Any]]:
+    labels = {
+        "episodes": "episodes.lance",
+        "frames": "frames.lance",
+        "videos": "videos.lance",
+        "annotations": "annotations.lance",
+    }
+    return {
+        name: _lance_table_status(paths[name], label=label, present=present[name])
+        for name, label in labels.items()
+    }
+
+
+def _lance_table_status(path: Path, *, label: str, present: bool) -> dict[str, Any]:
+    if not present:
+        return {
+            "present": False,
+            "checked": False,
+            "readable": False,
+            "row_count": None,
+            "label": label,
+            "error": "table is not present",
+        }
+    try:
+        import lance
+    except ImportError as exc:
+        return {
+            "present": True,
+            "checked": False,
+            "readable": None,
+            "row_count": None,
+            "label": label,
+            "error": f"lance is unavailable: {exc}",
+        }
+    try:
+        dataset = lance.dataset(str(path))
+        row_count = _lance_row_count(dataset)
+    except Exception as exc:
+        return {
+            "present": True,
+            "checked": True,
+            "readable": False,
+            "row_count": None,
+            "label": label,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    return {
+        "present": True,
+        "checked": True,
+        "readable": True,
+        "row_count": row_count,
+        "label": label,
+        "error": None,
+    }
+
+
+def _lance_row_count(dataset: Any) -> int:
+    if hasattr(dataset, "count_rows"):
+        return int(dataset.count_rows())
+    table = dataset.to_table()
+    return int(getattr(table, "num_rows", 0))
+
+
+def _lance_table_row_count_errors(
+    table_readability: dict[str, dict[str, Any]],
+    expected_rows: dict[str, int],
+) -> list[str]:
+    errors = []
+    for name, expected in expected_rows.items():
+        status = table_readability.get(name, {})
+        if not status.get("present") or status.get("readable") is not True:
+            continue
+        actual = status.get("row_count")
+        if actual is None:
+            continue
+        if int(actual) != int(expected):
+            errors.append(
+                f"{status.get('label', name)} row count {actual} does not match expected {expected}"
+            )
+    return errors
 
 
 def _episode_rows(

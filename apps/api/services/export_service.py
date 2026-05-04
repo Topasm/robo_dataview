@@ -183,6 +183,18 @@ class ExportStore:
                     },
                     version_description=payload.version_description,
                 )
+                validation = artifacts["lance_subset"].get("validation", {})
+                if not validation.get("metadata_ok", False):
+                    errors = validation.get("errors") or ["Lance subset export validation failed."]
+                    return model_copy(
+                        record,
+                        update={
+                            "status": JobStatus.failed,
+                            "output_uri": None,
+                            "message": f"Lance subset export validation failed: {errors[0]}",
+                            "artifacts": artifacts,
+                        },
+                    )
             except LanceExportDependencyError as exc:
                 return model_copy(
                     record,

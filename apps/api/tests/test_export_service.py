@@ -24,6 +24,7 @@ class ExportServiceTest(unittest.TestCase):
         self.export_root = Path("/tmp/robot-data-studio-test-exports")
         self.version_root = Path("/tmp/robot-data-studio-test-versions")
         export_service.EXPORT_ROOT = self.export_root
+        self._delete_test_annotations()
 
     def tearDown(self) -> None:
         export_service.EXPORT_ROOT = self.previous_export_root
@@ -41,6 +42,18 @@ class ExportServiceTest(unittest.TestCase):
                 elif path.is_dir():
                     path.rmdir()
             self.version_root.rmdir()
+
+    def _delete_test_annotations(self) -> None:
+        test_values = {
+            "accepted_phase",
+            "rejected_phase",
+            "accepted_exact_frame",
+            "rejected_exact_frame",
+            "jsonl_phase",
+        }
+        for annotation in annotation_store.list("sample-xvla-soft-fold", episode_index=0):
+            if annotation.label_value in test_values:
+                annotation_store.delete(annotation.annotation_id)
 
     def test_create_writes_manifest_with_accepted_annotations_only(self) -> None:
         accepted = annotation_store.create(
@@ -256,6 +269,10 @@ class ExportServiceTest(unittest.TestCase):
         self.assertEqual(artifact["materialized"]["video_rows"], 0)
         self.assertEqual(artifact["materialized"]["annotation_rows"], 1)
         self.assertTrue(artifact["validation"]["metadata_ok"])
+        self.assertEqual(artifact["validation"]["table_readability"]["episodes"]["row_count"], 1)
+        self.assertEqual(artifact["validation"]["table_readability"]["frames"]["row_count"], 180)
+        self.assertEqual(artifact["validation"]["table_readability"]["videos"]["row_count"], 0)
+        self.assertEqual(artifact["validation"]["table_readability"]["annotations"]["row_count"], 1)
         self.assertTrue(Path(artifact["files"]["episodes"]).exists())
         self.assertTrue(Path(artifact["files"]["frames"]).exists())
         self.assertTrue(Path(artifact["files"]["videos"]).exists())
@@ -296,6 +313,34 @@ class ExportServiceTest(unittest.TestCase):
         self.assertEqual(artifact["validation"]["video_count"], 1)
         self.assertTrue(Path(artifact["files"]["videos"]).exists())
         self.assertTrue(any(path.endswith("videos.lance") for path in written_paths))
+
+    def test_lance_export_fails_when_validation_fails(self) -> None:
+        fake_pyarrow = _fake_pyarrow_module()
+        fake_lance, _written_paths = _fake_lance_module(row_count_overrides={"frames": 2})
+        versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
+        exports = ExportStore(versions=versions)
+
+        with patch.dict(
+            sys.modules,
+            {"pyarrow": fake_pyarrow, "lance": fake_lance},
+        ):
+            record = exports.create(
+                ExportCreateRequest(
+                    dataset_id="sample-xvla-soft-fold",
+                    episode_indices=[0],
+                    format=ExportFormat.lance,
+                    version_description="bad lance subset",
+                )
+            )
+
+        self.assertEqual(record.status, JobStatus.failed)
+        self.assertIsNone(record.output_uri)
+        self.assertIn("Lance subset export validation failed", record.message or "")
+        self.assertIn("frames.lance row count 2 does not match expected 180", record.message or "")
+        self.assertIsNotNone(record.artifacts)
+        assert record.artifacts is not None
+        self.assertFalse(record.artifacts["lance_subset"]["validation"]["metadata_ok"])
+        self.assertEqual(versions.list("sample-xvla-soft-fold"), [])
 
     def test_jsonl_export_writes_caption_and_annotation_files(self) -> None:
         accepted = annotation_store.create(
@@ -387,17 +432,37 @@ def _fake_pyarrow_module() -> ModuleType:
     return module
 
 
-def _fake_lance_module() -> tuple[ModuleType, list[str]]:
+class _FakeLanceDataset:
+    def __init__(self, row_count: int) -> None:
+        self._row_count = row_count
+
+    def count_rows(self) -> int:
+        return self._row_count
+
+
+def _fake_lance_module(
+    row_count_overrides: dict[str, int] | None = None,
+) -> tuple[ModuleType, list[str]]:
     module = ModuleType("lance")
     written_paths: list[str] = []
+    row_counts: dict[str, int] = {}
+    row_count_overrides = row_count_overrides or {}
 
     def write_dataset(table: object, path: str, mode: str = "overwrite") -> None:
-        del table, mode
+        del mode
         path_obj = Path(path)
         path_obj.mkdir(parents=True, exist_ok=True)
         (path_obj / "_SUCCESS").write_text("ok", encoding="utf-8")
         written_paths.append(path)
+        key = path_obj.name.removesuffix(".lance")
+        row_counts[str(path_obj)] = int(row_count_overrides.get(key, len(table["rows"])))
 
+    def dataset(path: str) -> _FakeLanceDataset:
+        if path not in row_counts:
+            raise FileNotFoundError(path)
+        return _FakeLanceDataset(row_counts[path])
+
+    module.dataset = dataset
     module.write_dataset = write_dataset
     return module, written_paths
 

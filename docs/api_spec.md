@@ -391,7 +391,9 @@ For `format=lance`, the response contains `artifacts.lance_subset` when optional
 `episodes.lance`, `frames.lance`, `videos.lance`, and `annotations.lance`
 tables for selected episodes, available camera video blobs, and accepted
 annotations only. If those optional dependencies are missing, the export fails
-with a dependency message instead of returning an empty successful artifact.
+with a dependency message instead of returning an empty successful artifact. The
+validation report opens each Lance table when possible and checks table row
+counts against the export metadata; failed validation returns `status=failed`.
 
 For `format=jsonl`, the response contains `artifacts.jsonl` with
 `episodes.jsonl`, `captions.jsonl`, and accepted `annotations.jsonl`. For
