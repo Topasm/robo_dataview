@@ -303,7 +303,9 @@ the existing `.rrd` file.
 GET  /jobs/vlm-prompts
 POST /jobs/vlm-label
 POST /jobs/visual-embeddings
+POST /jobs/export
 GET  /jobs/{job_id}
+GET  /jobs/{job_id}/events
 ```
 
 `GET /jobs/vlm-prompts` returns registered VLM prompt templates and versions.
@@ -344,6 +346,13 @@ uses deterministic image hashing for local development. Use
 such as `clip:`, `siglip:`, `dino:`, or `transformers:` to route images through
 an optional Transformers vision model.
 
+`POST /jobs/export` accepts the same payload as `POST /exports`, returns a
+`JobRecord`, and runs through the configured job backend when
+`ROBOT_DATA_STUDIO_JOB_QUEUE=rq`. The completed job records
+`created_export_id`, `export_format`, and `export_uri`. `GET /jobs/{job_id}/events`
+streams those fields with the existing job progress event so clients can track
+long-running LeRobot, Lance, JSONL, or VLA exports without blocking the request.
+
 ## Exports
 
 ```text
@@ -363,6 +372,10 @@ GET  /versions?dataset_id=...
   "version_description": "accepted successful episodes"
 }
 ```
+
+`POST /exports` runs synchronously and returns the final export record. Use
+`POST /jobs/export` with the same payload when the export should be queued and
+tracked through `/jobs/{job_id}` or `/jobs/{job_id}/events`.
 
 When `episode_indices` is empty, `splits` can select all episodes whose saved
 split matches values such as `train`, `val`, or `test`.
@@ -417,4 +430,5 @@ the same records are mirrored to `versions.lance`.
   artifacts.
 - Annotation, embedding, export, and version records are persisted under
   `data/`.
-- Real queue-backed async jobs are planned but not wired yet.
+- VLM, visual embedding, and export jobs can run through the optional RQ backend;
+  Rerun session generation remains synchronous.

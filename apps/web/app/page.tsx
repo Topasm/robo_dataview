@@ -17,6 +17,7 @@ export default function Home() {
     annotationRows,
     dataStatus,
     episodeRows,
+    exportJob,
     exportRecord,
     filterPresets,
     frameBrowserLimit,
@@ -164,6 +165,7 @@ export default function Home() {
           </div>
           <ExportStrip
             episodeIndex={selectedEpisode.episodeIndex}
+            exportJob={exportJob}
             exportRecord={exportRecord}
             onCreateExport={handleCreateExport}
             split={selectedEpisode.split}

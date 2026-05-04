@@ -155,6 +155,9 @@ export type JobRecord = {
   rawResponseUri: string | null;
   createdEmbeddingIds: string[];
   artifactCount: number;
+  createdExportId: string | null;
+  exportFormat: string | null;
+  exportUri: string | null;
   queueJobId: string | null;
 };
 
@@ -165,6 +168,9 @@ export type JobProgressEvent = {
   progress: number;
   message: string | null;
   queueJobId: string | null;
+  createdExportId: string | null;
+  exportFormat: string | null;
+  exportUri: string | null;
 };
 
 export type ExportRecord = {

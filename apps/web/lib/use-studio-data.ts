@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
-  createExport,
+  createExportJob,
   createFilterPreset,
   createRerunSession,
   createSegmentAnnotation,
@@ -13,6 +13,7 @@ import {
   fetchAnnotations,
   fetchDatasetSummaries,
   fetchEpisodes,
+  fetchExport,
   fetchFilterPresets,
   fetchFrameRecord,
   fetchFrameWindowPage,
@@ -93,7 +94,10 @@ function mergeJobEvent(record: JobRecord, event: JobProgressEvent): JobRecord {
     status: event.status,
     progress: event.progress,
     message: event.message,
-    queueJobId: event.queueJobId
+    queueJobId: event.queueJobId,
+    createdExportId: event.createdExportId,
+    exportFormat: event.exportFormat,
+    exportUri: event.exportUri
   };
 }
 
@@ -105,6 +109,7 @@ export function useStudioData() {
   const [annotationRows, setAnnotationRows] = useState<SegmentAnnotation[]>(annotations);
   const [rerunSession, setRerunSession] = useState<RerunSession | null>(null);
   const [vlmJob, setVlmJob] = useState<JobRecord | null>(null);
+  const [exportJob, setExportJob] = useState<JobRecord | null>(null);
   const [exportRecord, setExportRecord] = useState<ExportRecord | null>(null);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [filterPresets, setFilterPresets] = useState<FilterPreset[]>([]);
@@ -138,6 +143,8 @@ export function useStudioData() {
   const rerunViewerUrl = process.env.NEXT_PUBLIC_RERUN_IFRAME_URL ?? null;
   const vlmJobId = vlmJob?.jobId ?? null;
   const vlmJobStatus = vlmJob?.status ?? null;
+  const exportJobId = exportJob?.jobId ?? null;
+  const exportJobStatus = exportJob?.status ?? null;
 
   useEffect(() => {
     let isMounted = true;
@@ -382,9 +389,59 @@ export function useStudioData() {
     };
   }, [selectedEpisode.datasetId, selectedEpisode.episodeIndex, vlmJobId, vlmJobStatus]);
 
+  useEffect(() => {
+    if (!exportJobId || !exportJobStatus || TERMINAL_JOB_STATUSES.has(exportJobStatus)) {
+      return;
+    }
+
+    const jobId = exportJobId;
+    let isActive = true;
+    const controller = new AbortController();
+    streamJobEvents(
+      jobId,
+      (event) => {
+        if (!isActive) {
+          return;
+        }
+        setExportJob((current) =>
+          current?.jobId === event.jobId ? mergeJobEvent(current, event) : current
+        );
+        if (TERMINAL_JOB_STATUSES.has(event.status) && event.createdExportId) {
+          fetchExport(event.createdExportId)
+            .then((record) => {
+              if (isActive) {
+                setExportRecord(record);
+              }
+            })
+            .catch(() => undefined);
+        }
+      },
+      controller.signal
+    ).catch((error) => {
+      if (isActive && error instanceof Error && error.name !== "AbortError") {
+        setExportJob((current) =>
+          current?.jobId === jobId
+            ? {
+                ...current,
+                status: "failed",
+                progress: 1,
+                message: error.message
+              }
+            : current
+        );
+      }
+    });
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, [exportJobId, exportJobStatus]);
+
   function resetDerivedState() {
     setRerunSession(null);
     setVlmJob(null);
+    setExportJob(null);
     setExportRecord(null);
     setSearchResults([]);
     setFilterPresets([]);
@@ -759,8 +816,12 @@ export function useStudioData() {
     const split = selectedEpisode.split || null;
     const splits = scope === "split" && split ? [split] : [];
     const episodeIndices = splits.length > 0 ? [] : [selectedEpisode.episodeIndex];
-    const record = await createExport(selectedEpisode.datasetId, episodeIndices, format, splits);
-    setExportRecord(record);
+    const job = await createExportJob(selectedEpisode.datasetId, episodeIndices, format, splits);
+    setExportJob(job);
+    if (TERMINAL_JOB_STATUSES.has(job.status) && job.createdExportId) {
+      const record = await fetchExport(job.createdExportId);
+      setExportRecord(record);
+    }
   }
 
   async function handleUpdateSelectedFrameBadFlag(isBadFrame: boolean) {
@@ -826,6 +887,7 @@ export function useStudioData() {
     annotationRows,
     dataStatus,
     episodeRows,
+    exportJob,
     exportRecord,
     filterPresets,
     frameBrowserLimit,

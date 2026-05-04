@@ -70,7 +70,7 @@ packages/robot_schema
 workers
   Heuristic VLM proposal generator, optional OpenAI-compatible provider, and
   provider interface
-  Optional RQ entry point for queued VLM and visual embedding jobs
+  Optional RQ entry point for queued VLM, visual embedding, and export jobs
 
 data
   Local annotations, embeddings, versions, keyframe cache, Rerun cache, and
@@ -110,9 +110,10 @@ Implemented now:
   trails.
 - Annotation assignment through `assigned_to` and history actors for multi-user
   review coordination.
-- Optional Redis/RQ queue backend for VLM labeling and visual embedding jobs.
+- Optional Redis/RQ queue backend for VLM labeling, visual embedding, and export
+  jobs.
 - Server-sent job progress events at `/api/jobs/{job_id}/events`.
-- Web-side streaming of VLM job progress with API-key-compatible `fetch`
+- Web-side streaming of VLM and export job progress with API-key-compatible `fetch`
   event parsing.
 - Rerun `.rrd` cache generation for state/action scalar timelines, optional
   camera video assets, deterministic cache keys, and web viewer embedding
@@ -124,13 +125,14 @@ Implemented now:
   dependencies are installed.
 - JSONL caption export and VLA-style JSONL trajectory export.
 - Export scope controls for selected episode or current train/val/test split.
+- Queue-backed export jobs using the shared job progress event stream.
 - Deployment notes for split web/API/Redis/RQ services and shared storage.
 - Web UI orchestration via `useStudioData`.
 
 Not implemented yet:
 
 - Durable external database for sessions and app settings.
-- Queue-backed Rerun/export jobs.
+- Queue-backed Rerun session generation.
 - Local VLM/video-model inference.
 - Cross-modal visual search over compatible text/image model embeddings.
 - Full LeRobot Parquet/MP4 materialization.

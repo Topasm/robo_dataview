@@ -1,10 +1,11 @@
 import { Download, PackageCheck } from "lucide-react";
 import { useState } from "react";
 
-import type { ExportRecord } from "@/lib/types";
+import type { ExportRecord, JobRecord } from "@/lib/types";
 
 type ExportStripProps = {
   episodeIndex: number;
+  exportJob: JobRecord | null;
   exportRecord: ExportRecord | null;
   onCreateExport: (
     format?: "lerobot" | "lance" | "jsonl" | "vla",
@@ -13,8 +14,16 @@ type ExportStripProps = {
   split: string | null;
 };
 
-export function ExportStrip({ episodeIndex, exportRecord, onCreateExport, split }: ExportStripProps) {
+export function ExportStrip({
+  episodeIndex,
+  exportJob,
+  exportRecord,
+  onCreateExport,
+  split
+}: ExportStripProps) {
   const [scope, setScope] = useState<"episode" | "split">("episode");
+  const exportJobActive = exportJob ? !["succeeded", "failed"].includes(exportJob.status) : false;
+  const exportProgressPercent = Math.round(Math.max(0, Math.min(1, exportJob?.progress ?? 0)) * 100);
   const lerobotArtifact = exportRecord?.artifacts?.lerobot_v3;
   const lanceArtifact = exportRecord?.artifacts?.lance_subset;
   const jsonlArtifact = exportRecord?.artifacts?.jsonl;
@@ -35,6 +44,12 @@ export function ExportStrip({ episodeIndex, exportRecord, onCreateExport, split 
         {exportRecord ? (
           <div className="muted">
             {exportRecord.status}: {exportRecord.outputUri ?? exportRecord.message}
+          </div>
+        ) : null}
+        {exportJob ? (
+          <div className="muted">
+            Job {exportJob.status} {exportProgressPercent}%:{" "}
+            {exportJob.exportUri ?? exportJob.message ?? exportJob.createdExportId}
           </div>
         ) : null}
         {lerobotArtifact ? (
@@ -90,6 +105,7 @@ export function ExportStrip({ episodeIndex, exportRecord, onCreateExport, split 
         <div className="segmented-control export-scope-control">
           <button
             className={scope === "episode" ? "active" : ""}
+            disabled={exportJobActive}
             onClick={() => setScope("episode")}
             type="button"
           >
@@ -97,26 +113,46 @@ export function ExportStrip({ episodeIndex, exportRecord, onCreateExport, split 
           </button>
           <button
             className={scope === "split" ? "active" : ""}
-            disabled={!split}
+            disabled={!split || exportJobActive}
             onClick={() => setScope("split")}
             type="button"
           >
             Split {split ?? ""}
           </button>
         </div>
-        <button className="text-button" onClick={() => void onCreateExport("lerobot", scope)} type="button">
+        <button
+          className="text-button"
+          disabled={exportJobActive}
+          onClick={() => void onCreateExport("lerobot", scope)}
+          type="button"
+        >
           <Download size={15} />
           LeRobot
         </button>
-        <button className="text-button" onClick={() => void onCreateExport("lance", scope)} type="button">
+        <button
+          className="text-button"
+          disabled={exportJobActive}
+          onClick={() => void onCreateExport("lance", scope)}
+          type="button"
+        >
           <Download size={15} />
           Lance
         </button>
-        <button className="text-button" onClick={() => void onCreateExport("jsonl", scope)} type="button">
+        <button
+          className="text-button"
+          disabled={exportJobActive}
+          onClick={() => void onCreateExport("jsonl", scope)}
+          type="button"
+        >
           <Download size={15} />
           JSONL
         </button>
-        <button className="text-button" onClick={() => void onCreateExport("vla", scope)} type="button">
+        <button
+          className="text-button"
+          disabled={exportJobActive}
+          onClick={() => void onCreateExport("vla", scope)}
+          type="button"
+        >
           <Download size={15} />
           VLA
         </button>

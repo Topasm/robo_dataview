@@ -9,9 +9,11 @@ from fastapi import HTTPException
 
 from apps.api.schemas.common import JobStatus
 from apps.api.schemas.episodes import EpisodeDetail
+from apps.api.schemas.exports import ExportCreateRequest
 from apps.api.schemas.jobs import JobCreateRequest, JobRecord, VisualEmbeddingJobCreateRequest
 from apps.api.services.annotation_service import annotation_store
 from apps.api.services.embedding_service import embedding_index
+from apps.api.services.export_service import exports
 from apps.api.services.job_queue import (
     JobQueueBackend,
     JobQueueUnavailableError,
@@ -30,6 +32,8 @@ from workers.visual_embedding_worker import (
 
 
 APP_METADATA_DB_PATH = Path("data/app/metadata.sqlite3")
+JobPayload = JobCreateRequest | VisualEmbeddingJobCreateRequest | ExportCreateRequest
+QueuedJobPayload = JobPayload | dict[str, object]
 
 
 class SQLiteJobRecordStore:
@@ -100,7 +104,7 @@ class JobStore:
     def create(
         self,
         kind: str,
-        payload: JobCreateRequest | VisualEmbeddingJobCreateRequest,
+        payload: JobPayload,
     ) -> JobRecord:
         job_id = str(uuid4())
         prompt = self._prompt_for(kind, payload)
@@ -112,9 +116,10 @@ class JobStore:
             dataset_id=payload.dataset_id,
             episode_indices=payload.episode_indices,
             progress=0.0,
-            model=payload.model,
+            model=getattr(payload, "model", None),
             prompt_template=getattr(payload, "prompt_template", None),
             prompt_version=prompt.version if prompt is not None else None,
+            export_format=getattr(payload, "format", None),
         )
         self._save(record)
 
@@ -147,7 +152,7 @@ class JobStore:
         self,
         job_id: str,
         kind: str,
-        payload: JobCreateRequest | VisualEmbeddingJobCreateRequest | dict[str, object],
+        payload: QueuedJobPayload,
     ) -> JobRecord:
         payload = self._coerce_payload(kind, payload)
         record = self.get(job_id)
@@ -171,6 +176,8 @@ class JobStore:
             )
         elif kind == "visual_embedding":
             record = self._run_visual_embedding_job(record, payload)
+        elif kind == "export":
+            record = self._run_export_job(record, payload)
         else:
             record = model_copy(
                 record,
@@ -200,7 +207,7 @@ class JobStore:
     @staticmethod
     def _prompt_for(
         kind: str,
-        payload: JobCreateRequest | VisualEmbeddingJobCreateRequest,
+        payload: JobPayload,
     ):
         if kind != "vlm_label":
             return None
@@ -212,12 +219,14 @@ class JobStore:
     @staticmethod
     def _coerce_payload(
         kind: str,
-        payload: JobCreateRequest | VisualEmbeddingJobCreateRequest | dict[str, object],
-    ) -> JobCreateRequest | VisualEmbeddingJobCreateRequest:
-        if isinstance(payload, (JobCreateRequest, VisualEmbeddingJobCreateRequest)):
+        payload: QueuedJobPayload,
+    ) -> JobPayload:
+        if isinstance(payload, (JobCreateRequest, VisualEmbeddingJobCreateRequest, ExportCreateRequest)):
             return payload
         if kind == "visual_embedding":
             return VisualEmbeddingJobCreateRequest(**payload)
+        if kind == "export":
+            return ExportCreateRequest(**payload)
         return JobCreateRequest(**payload)
 
     def _run_vlm_label_job(
@@ -360,6 +369,36 @@ class JobStore:
                 "created_embedding_ids": [item.embedding_id for item in result.records],
                 "artifact_count": result.artifact_count,
             }
+        )
+
+    @staticmethod
+    def _run_export_job(
+        record: JobRecord,
+        payload: JobPayload,
+    ) -> JobRecord:
+        if not isinstance(payload, ExportCreateRequest):
+            payload = ExportCreateRequest(
+                dataset_id=payload.dataset_id,
+                episode_indices=payload.episode_indices,
+            )
+        export_record = exports.create(payload)
+        message = export_record.message
+        if message is None:
+            message = (
+                f"Created {export_record.format.value} export with "
+                f"{len(export_record.episode_indices)} episodes."
+            )
+        return model_copy(
+            record,
+            update={
+                "status": export_record.status,
+                "episode_indices": export_record.episode_indices,
+                "progress": 1.0,
+                "message": message,
+                "created_export_id": export_record.export_id,
+                "export_format": export_record.format,
+                "export_uri": export_record.output_uri,
+            },
         )
 
     @staticmethod

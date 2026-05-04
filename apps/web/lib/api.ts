@@ -124,6 +124,9 @@ type JobRecordResponse = {
   raw_response_uri: string | null;
   created_embedding_ids: string[];
   artifact_count: number;
+  created_export_id: string | null;
+  export_format: string | null;
+  export_uri: string | null;
   queue_job_id: string | null;
 };
 
@@ -134,6 +137,9 @@ type JobProgressEventResponse = {
   progress: number;
   message: string | null;
   queue_job_id: string | null;
+  created_export_id: string | null;
+  export_format: string | null;
+  export_uri: string | null;
 };
 
 type ExportRecordResponse = {
@@ -608,6 +614,25 @@ export async function createVisualEmbeddingJob(
   return toJobRecord(row);
 }
 
+export async function createExportJob(
+  datasetId: string,
+  episodeIndices: number[],
+  format: "lerobot" | "lance" | "jsonl" | "vla" = "lerobot",
+  splits: string[] = [],
+): Promise<JobRecord> {
+  const row = await request<JobRecordResponse>("/jobs/export", {
+    method: "POST",
+    body: JSON.stringify({
+      dataset_id: datasetId,
+      episode_indices: episodeIndices,
+      splits,
+      format,
+      version_description: `web selected episode ${format} export`
+    })
+  });
+  return toJobRecord(row);
+}
+
 export function jobEventsUrl(jobId: string): string {
   return `${API_BASE_URL}/jobs/${jobId}/events`;
 }
@@ -673,6 +698,11 @@ export async function createExport(
       version_description: `web selected episode ${format} export`
     })
   });
+  return toExportRecord(row);
+}
+
+export async function fetchExport(exportId: string): Promise<ExportRecord> {
+  const row = await request<ExportRecordResponse>(`/exports/${exportId}`);
   return toExportRecord(row);
 }
 
@@ -794,7 +824,10 @@ function parseJobSseEvent(rawEvent: string): JobProgressEvent | null {
     status: payload.status,
     progress: payload.progress,
     message: payload.message,
-    queueJobId: payload.queue_job_id
+    queueJobId: payload.queue_job_id,
+    createdExportId: payload.created_export_id,
+    exportFormat: payload.export_format,
+    exportUri: payload.export_uri
   };
 }
 
@@ -966,6 +999,9 @@ function toJobRecord(raw: JobRecordResponse): JobRecord {
     rawResponseUri: raw.raw_response_uri,
     createdEmbeddingIds: raw.created_embedding_ids,
     artifactCount: raw.artifact_count,
+    createdExportId: raw.created_export_id,
+    exportFormat: raw.export_format,
+    exportUri: raw.export_uri,
     queueJobId: raw.queue_job_id
   };
 }

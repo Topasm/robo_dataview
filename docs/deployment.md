@@ -2,8 +2,8 @@
 
 Robot Data Studio can run as a single local workstation app or as separate web,
 API, Redis, and worker services. The default local mode keeps jobs inline in the
-API process. Production-style mode should enable Redis/RQ for expensive VLM and
-visual embedding jobs.
+API process. Production-style mode should enable Redis/RQ for expensive VLM,
+visual embedding, and export jobs.
 
 ## Services
 

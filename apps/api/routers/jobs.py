@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from apps.api.schemas.common import JobStatus
+from apps.api.schemas.exports import ExportCreateRequest
 from apps.api.schemas.jobs import (
     JobCreateRequest,
     JobRecord,
@@ -29,6 +30,11 @@ def create_vlm_label_job(payload: JobCreateRequest) -> JobRecord:
 @router.post("/jobs/visual-embeddings", response_model=JobRecord)
 def create_visual_embedding_job(payload: VisualEmbeddingJobCreateRequest) -> JobRecord:
     return jobs.create(kind="visual_embedding", payload=payload)
+
+
+@router.post("/jobs/export", response_model=JobRecord)
+def create_export_job(payload: ExportCreateRequest) -> JobRecord:
+    return jobs.create(kind="export", payload=payload)
 
 
 @router.get("/jobs/vlm-prompts", response_model=list[PromptTemplateRecord])
@@ -86,6 +92,9 @@ def _job_sse_event(record: JobRecord) -> str:
             "progress": record.progress,
             "message": record.message,
             "queue_job_id": record.queue_job_id,
+            "created_export_id": record.created_export_id,
+            "export_format": record.export_format,
+            "export_uri": record.export_uri,
         },
     )
 

@@ -4,7 +4,8 @@ import unittest
 from unittest.mock import patch
 
 from apps.api.routers import jobs as jobs_router
-from apps.api.schemas.common import JobStatus
+from apps.api.schemas.common import ExportFormat, JobStatus
+from apps.api.schemas.exports import ExportCreateRequest
 from apps.api.schemas.jobs import JobRecord, VisualEmbeddingJobCreateRequest
 
 
@@ -32,16 +33,34 @@ class JobsRouterTest(unittest.TestCase):
         self.assertEqual(fake_jobs.payload, payload)
         self.assertEqual(record.status, JobStatus.succeeded)
 
+    def test_create_export_job_routes_to_job_store(self) -> None:
+        fake_jobs = FakeJobs()
+        payload = ExportCreateRequest(
+            dataset_id="dataset-a",
+            episode_indices=[1],
+            format=ExportFormat.jsonl,
+        )
+
+        with patch.object(jobs_router, "jobs", fake_jobs):
+            record = jobs_router.create_export_job(payload)
+
+        self.assertEqual(fake_jobs.kind, "export")
+        self.assertEqual(fake_jobs.payload, payload)
+        self.assertEqual(record.created_export_id, "export-1")
+
     def test_job_sse_event_includes_progress_payload(self) -> None:
         record = JobRecord(
             job_id="job-1",
-            kind="visual_embedding",
+            kind="export",
             status=JobStatus.queued,
             dataset_id="dataset-a",
             episode_indices=[1],
             progress=0.25,
             message="Queued for background worker.",
             queue_job_id="rq-job-1",
+            created_export_id="export-1",
+            export_format=ExportFormat.jsonl,
+            export_uri="data/exports/export-1/manifest.json",
         )
 
         event = jobs_router._job_sse_event(record)
@@ -51,6 +70,9 @@ class JobsRouterTest(unittest.TestCase):
         self.assertIn('"progress": 0.25', event)
         self.assertIn('"queue_job_id": "rq-job-1"', event)
         self.assertIn('"status": "queued"', event)
+        self.assertIn('"created_export_id": "export-1"', event)
+        self.assertIn('"export_format": "jsonl"', event)
+        self.assertIn('"export_uri": "data/exports/export-1/manifest.json"', event)
 
     def test_stream_job_events_returns_sse_response(self) -> None:
         fake_jobs = FakeJobs()
@@ -65,12 +87,16 @@ class JobsRouterTest(unittest.TestCase):
 class FakeJobs:
     def __init__(self) -> None:
         self.kind: str | None = None
-        self.payload: VisualEmbeddingJobCreateRequest | None = None
+        self.payload: VisualEmbeddingJobCreateRequest | ExportCreateRequest | None = None
 
-    def create(self, kind: str, payload: VisualEmbeddingJobCreateRequest) -> JobRecord:
+    def create(
+        self,
+        kind: str,
+        payload: VisualEmbeddingJobCreateRequest | ExportCreateRequest,
+    ) -> JobRecord:
         self.kind = kind
         self.payload = payload
-        return JobRecord(
+        record = JobRecord(
             job_id="job-1",
             kind=kind,
             status=JobStatus.succeeded,
@@ -78,6 +104,11 @@ class FakeJobs:
             episode_indices=payload.episode_indices,
             created_embedding_ids=["embedding-1"],
         )
+        if kind == "export":
+            record.created_export_id = "export-1"
+            record.export_format = ExportFormat.jsonl
+            record.export_uri = "data/exports/export-1/manifest.json"
+        return record
 
 
 if __name__ == "__main__":

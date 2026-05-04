@@ -256,6 +256,7 @@ Implemented:
 - `hf_dataset` export requests fail explicitly until a native Hugging Face
   Dataset artifact is implemented.
 - Export scope controls for selected episode or current train/val/test split.
+- Queue-backed export jobs through the shared job progress event stream.
 - Accepted annotations only.
 - Version lineage JSONL plus optional Lance mirror.
 

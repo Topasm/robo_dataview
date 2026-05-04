@@ -9,7 +9,8 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException
 
-from apps.api.schemas.common import JobStatus, ReviewStatus
+from apps.api.schemas.common import ExportFormat, JobStatus, ReviewStatus
+from apps.api.schemas.exports import ExportCreateRequest, ExportRecord
 from apps.api.schemas.jobs import JobCreateRequest, JobRecord, VisualEmbeddingJobCreateRequest
 from apps.api.services.embedding_service import EmbeddingRecord
 from apps.api.services.annotation_service import annotation_store
@@ -145,6 +146,36 @@ class VlmJobServiceTest(unittest.TestCase):
         self.assertEqual(fake_index.dataset_id, "sample-xvla-soft-fold")
         self.assertEqual(fake_index.records, [record])
 
+    def test_export_job_creates_export_record(self) -> None:
+        jobs = JobStore()
+        fake_exports = FakeExportStore(
+            ExportRecord(
+                export_id="export-1",
+                dataset_id="sample-xvla-soft-fold",
+                episode_indices=[0],
+                format=ExportFormat.jsonl,
+                status=JobStatus.succeeded,
+                output_uri="data/exports/export-1/manifest.json",
+                message="Export completed.",
+            )
+        )
+        payload = ExportCreateRequest(
+            dataset_id="sample-xvla-soft-fold",
+            episode_indices=[0],
+            format=ExportFormat.jsonl,
+            version_description="job export",
+        )
+
+        with patch("apps.api.services.job_service.exports", fake_exports):
+            result = jobs.create(kind="export", payload=payload)
+
+        self.assertEqual(result.status, JobStatus.succeeded)
+        self.assertEqual(result.created_export_id, "export-1")
+        self.assertEqual(result.export_format, ExportFormat.jsonl)
+        self.assertEqual(result.export_uri, "data/exports/export-1/manifest.json")
+        self.assertEqual(result.message, "Export completed.")
+        self.assertEqual(fake_exports.payload, payload)
+
     def test_job_store_persists_records_to_sqlite(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             sqlite_path = Path(tmpdir) / "metadata.sqlite3"
@@ -182,6 +213,21 @@ class VlmJobServiceTest(unittest.TestCase):
         self.assertEqual(record.queue_job_id, "rq-job-1")
         self.assertEqual(record.message, "Queued for background worker.")
         self.assertEqual(queue.enqueued, [("visual_embedding", payload)])
+
+    def test_job_store_enqueues_export_jobs_when_queue_backend_is_configured(self) -> None:
+        queue = FakeQueueBackend(queue_job_id="rq-export-1")
+        jobs = JobStore(queue_backend=queue)
+        payload = ExportCreateRequest(
+            dataset_id="sample-xvla-soft-fold",
+            episode_indices=[0],
+            format=ExportFormat.jsonl,
+        )
+
+        record = jobs.create(kind="export", payload=payload)
+
+        self.assertEqual(record.status, JobStatus.queued)
+        self.assertEqual(record.queue_job_id, "rq-export-1")
+        self.assertEqual(ExportCreateRequest(**queue.payloads[0]), payload)
 
     def test_queued_job_runner_updates_existing_record(self) -> None:
         queue = FakeQueueBackend(queue_job_id="rq-job-1")
@@ -227,6 +273,34 @@ class VlmJobServiceTest(unittest.TestCase):
         self.assertEqual(result.progress, 1.0)
         self.assertEqual(result.created_embedding_ids, ["embedding-1"])
         self.assertEqual(jobs.get(queued.job_id).status, JobStatus.succeeded)
+
+    def test_queued_export_job_runner_updates_existing_record(self) -> None:
+        queue = FakeQueueBackend(queue_job_id="rq-export-1")
+        jobs = JobStore(queue_backend=queue)
+        payload = ExportCreateRequest(
+            dataset_id="sample-xvla-soft-fold",
+            episode_indices=[0],
+            format=ExportFormat.jsonl,
+        )
+        queued = jobs.create(kind="export", payload=payload)
+        fake_exports = FakeExportStore(
+            ExportRecord(
+                export_id="export-1",
+                dataset_id="sample-xvla-soft-fold",
+                episode_indices=[0],
+                format=ExportFormat.jsonl,
+                status=JobStatus.succeeded,
+                output_uri="data/exports/export-1/manifest.json",
+            )
+        )
+
+        with patch("apps.api.services.job_service.exports", fake_exports):
+            result = jobs.run(queued.job_id, "export", queue.payloads[0])
+
+        self.assertEqual(result.status, JobStatus.succeeded)
+        self.assertEqual(result.progress, 1.0)
+        self.assertEqual(result.created_export_id, "export-1")
+        self.assertEqual(jobs.get(queued.job_id).export_uri, "data/exports/export-1/manifest.json")
 
     def test_job_store_reports_queue_enqueue_failure(self) -> None:
         jobs = JobStore(queue_backend=FakeQueueBackend(error="redis unavailable"))
@@ -307,6 +381,16 @@ class FakeEmbeddingIndex:
         self.dataset_id = dataset_id
         self.records = records
         return records
+
+
+class FakeExportStore:
+    def __init__(self, record: ExportRecord) -> None:
+        self.record = record
+        self.payload: ExportCreateRequest | None = None
+
+    def create(self, payload: ExportCreateRequest) -> ExportRecord:
+        self.payload = payload
+        return self.record
 
 
 class FakeQueueBackend:
