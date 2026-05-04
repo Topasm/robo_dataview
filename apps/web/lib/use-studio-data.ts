@@ -55,6 +55,30 @@ type EpisodeLabelDraft = {
   reviewStatus: ReviewStatus;
 };
 
+function sortAnnotations(rows: SegmentAnnotation[]): SegmentAnnotation[] {
+  return [...rows].sort((a, b) => a.startFrame - b.startFrame);
+}
+
+function optimisticAnnotation(
+  episode: Pick<Episode, "datasetId" | "episodeIndex">,
+  draft: SegmentDraft,
+  patch: Partial<SegmentAnnotation> = {},
+): SegmentAnnotation {
+  return {
+    id: `optimistic-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    datasetId: episode.datasetId,
+    episodeIndex: episode.episodeIndex,
+    startFrame: draft.startFrame,
+    endFrame: draft.endFrame,
+    labelType: draft.labelType,
+    labelValue: draft.labelValue,
+    source: "human",
+    confidence: 1,
+    reviewStatus: "accepted",
+    ...patch
+  };
+}
+
 export function useStudioData() {
   const [summaries, setSummaries] = useState<DatasetSummary[]>([datasetSummary]);
   const [episodeRows, setEpisodeRows] = useState<Episode[]>(episodes);
@@ -318,51 +342,115 @@ export function useStudioData() {
   }, []);
 
   async function handleCreateSegment(draft: SegmentDraft) {
-    const created = await createSegmentAnnotation({
-      datasetId: selectedEpisode.datasetId,
-      episodeIndex: selectedEpisode.episodeIndex,
-      startFrame: draft.startFrame,
-      endFrame: draft.endFrame,
-      labelType: draft.labelType,
-      labelValue: draft.labelValue,
-      source: "human",
-      confidence: 1,
-      reviewStatus: "accepted"
-    });
-    setAnnotationRows((current) => [...current, created].sort((a, b) => a.startFrame - b.startFrame));
+    const previousAnnotations = annotationRows;
+    const optimistic = optimisticAnnotation(selectedEpisode, draft);
+    setAnnotationRows((current) => sortAnnotations([...current, optimistic]));
+    try {
+      const created = await createSegmentAnnotation({
+        datasetId: selectedEpisode.datasetId,
+        episodeIndex: selectedEpisode.episodeIndex,
+        startFrame: draft.startFrame,
+        endFrame: draft.endFrame,
+        labelType: draft.labelType,
+        labelValue: draft.labelValue,
+        source: "human",
+        confidence: 1,
+        reviewStatus: "accepted"
+      });
+      setAnnotationRows((current) =>
+        sortAnnotations(current.map((annotation) => (annotation.id === optimistic.id ? created : annotation)))
+      );
+    } catch (error) {
+      setAnnotationRows(previousAnnotations);
+      throw error;
+    }
   }
 
   async function handleUpdateEpisodeLabels(draft: EpisodeLabelDraft) {
-    const updated = await updateEpisodeLabels(selectedEpisode.datasetId, selectedEpisode.episodeIndex, {
-      caption: draft.caption.trim() || null,
+    const previousEpisode = selectedEpisode;
+    const optimisticEpisode: Episode = {
+      ...selectedEpisode,
+      caption: draft.caption.trim(),
       successLabel: draft.successLabel,
-      failureReason: draft.failureReason.trim() || null,
+      failureReason: draft.failureReason.trim(),
       qualityScore: draft.qualityScore,
-      split: draft.split || null,
-      reviewStatus: draft.reviewStatus
-    });
+      split: draft.split,
+      reviewStatus: draft.reviewStatus,
+      hasHumanLabel: true
+    };
     setEpisodeRows((current) =>
       current.map((episode) =>
-        episode.datasetId === updated.datasetId && episode.episodeIndex === updated.episodeIndex
-          ? updated
+        episode.datasetId === optimisticEpisode.datasetId &&
+        episode.episodeIndex === optimisticEpisode.episodeIndex
+          ? optimisticEpisode
           : episode
       )
     );
+    try {
+      const updated = await updateEpisodeLabels(selectedEpisode.datasetId, selectedEpisode.episodeIndex, {
+        caption: draft.caption.trim() || null,
+        successLabel: draft.successLabel,
+        failureReason: draft.failureReason.trim() || null,
+        qualityScore: draft.qualityScore,
+        split: draft.split || null,
+        reviewStatus: draft.reviewStatus
+      });
+      setEpisodeRows((current) =>
+        current.map((episode) =>
+          episode.datasetId === updated.datasetId && episode.episodeIndex === updated.episodeIndex
+            ? updated
+            : episode
+        )
+      );
+    } catch (error) {
+      setEpisodeRows((current) =>
+        current.map((episode) =>
+          episode.datasetId === previousEpisode.datasetId &&
+          episode.episodeIndex === previousEpisode.episodeIndex
+            ? previousEpisode
+            : episode
+        )
+      );
+      throw error;
+    }
   }
 
   async function handleUpdateSegment(annotationId: string, draft: SegmentDraft) {
-    const updated = await updateSegmentAnnotation(annotationId, {
-      labelType: draft.labelType,
-      labelValue: draft.labelValue,
-      startFrame: draft.startFrame,
-      endFrame: draft.endFrame,
-      reviewStatus: "edited"
-    });
-    setAnnotationRows((current) =>
-      current
-        .map((annotation) => (annotation.id === annotationId ? updated : annotation))
-        .sort((a, b) => a.startFrame - b.startFrame)
-    );
+    const previousAnnotations = annotationRows;
+    const existing = annotationRows.find((annotation) => annotation.id === annotationId);
+    if (existing) {
+      setAnnotationRows((current) =>
+        sortAnnotations(
+          current.map((annotation) =>
+            annotation.id === annotationId
+              ? {
+                  ...annotation,
+                  labelType: draft.labelType,
+                  labelValue: draft.labelValue,
+                  startFrame: draft.startFrame,
+                  endFrame: draft.endFrame,
+                  reviewStatus: "edited"
+                }
+              : annotation
+          )
+        )
+      );
+    }
+    try {
+      const updated = await updateSegmentAnnotation(annotationId, {
+        labelType: draft.labelType,
+        labelValue: draft.labelValue,
+        startFrame: draft.startFrame,
+        endFrame: draft.endFrame,
+        reviewStatus: "edited"
+      });
+      setAnnotationRows((current) =>
+        sortAnnotations(current.map((annotation) => (annotation.id === annotationId ? updated : annotation)))
+      );
+    } catch (error) {
+      setAnnotationRows(previousAnnotations);
+      throw error;
+    }
   }
 
   async function handleSplitSegment(annotation: SegmentAnnotation) {
@@ -370,68 +458,138 @@ export function useStudioData() {
       return;
     }
     const splitFrame = Math.floor((annotation.startFrame + annotation.endFrame) / 2);
-    const left = await createSegmentAnnotation({
-      datasetId: annotation.datasetId,
-      episodeIndex: annotation.episodeIndex,
+    const previousAnnotations = annotationRows;
+    const leftDraft = {
       startFrame: annotation.startFrame,
       endFrame: splitFrame,
       labelType: annotation.labelType,
-      labelValue: `${annotation.labelValue}_a`,
-      source: "human",
-      confidence: 1,
-      reviewStatus: "edited"
-    });
-    const right = await createSegmentAnnotation({
-      datasetId: annotation.datasetId,
-      episodeIndex: annotation.episodeIndex,
+      labelValue: `${annotation.labelValue}_a`
+    };
+    const rightDraft = {
       startFrame: splitFrame + 1,
       endFrame: annotation.endFrame,
       labelType: annotation.labelType,
-      labelValue: `${annotation.labelValue}_b`,
-      source: "human",
-      confidence: 1,
-      reviewStatus: "edited"
-    });
-    await deleteAnnotation(annotation.id);
+      labelValue: `${annotation.labelValue}_b`
+    };
+    const leftOptimistic = optimisticAnnotation(annotation, leftDraft, { reviewStatus: "edited" });
+    const rightOptimistic = optimisticAnnotation(annotation, rightDraft, { reviewStatus: "edited" });
     setAnnotationRows((current) =>
-      [...current.filter((row) => row.id !== annotation.id), left, right].sort(
-        (a, b) => a.startFrame - b.startFrame
-      )
+      sortAnnotations([
+        ...current.filter((row) => row.id !== annotation.id),
+        leftOptimistic,
+        rightOptimistic
+      ])
     );
+    try {
+      const left = await createSegmentAnnotation({
+        datasetId: annotation.datasetId,
+        episodeIndex: annotation.episodeIndex,
+        startFrame: annotation.startFrame,
+        endFrame: splitFrame,
+        labelType: annotation.labelType,
+        labelValue: `${annotation.labelValue}_a`,
+        source: "human",
+        confidence: 1,
+        reviewStatus: "edited"
+      });
+      const right = await createSegmentAnnotation({
+        datasetId: annotation.datasetId,
+        episodeIndex: annotation.episodeIndex,
+        startFrame: splitFrame + 1,
+        endFrame: annotation.endFrame,
+        labelType: annotation.labelType,
+        labelValue: `${annotation.labelValue}_b`,
+        source: "human",
+        confidence: 1,
+        reviewStatus: "edited"
+      });
+      await deleteAnnotation(annotation.id);
+      setAnnotationRows((current) =>
+        sortAnnotations([
+          ...current.filter(
+            (row) => row.id !== leftOptimistic.id && row.id !== rightOptimistic.id
+          ),
+          left,
+          right
+        ])
+      );
+    } catch (error) {
+      setAnnotationRows(previousAnnotations);
+      throw error;
+    }
   }
 
   async function handleMergeSegments(left: SegmentAnnotation, right: SegmentAnnotation) {
-    const merged = await createSegmentAnnotation({
-      datasetId: left.datasetId,
-      episodeIndex: left.episodeIndex,
+    const previousAnnotations = annotationRows;
+    const mergedDraft = {
       startFrame: Math.min(left.startFrame, right.startFrame),
       endFrame: Math.max(left.endFrame, right.endFrame),
       labelType: left.labelType,
-      labelValue: left.labelValue,
-      source: "human",
+      labelValue: left.labelValue
+    };
+    const mergedOptimistic = optimisticAnnotation(left, mergedDraft, {
       confidence: Math.max(left.confidence, right.confidence),
       reviewStatus: "edited"
     });
-    await deleteAnnotation(left.id);
-    await deleteAnnotation(right.id);
     setAnnotationRows((current) =>
-      [
+      sortAnnotations([
         ...current.filter((row) => row.id !== left.id && row.id !== right.id),
-        merged
-      ].sort((a, b) => a.startFrame - b.startFrame)
+        mergedOptimistic
+      ])
     );
+    try {
+      const merged = await createSegmentAnnotation({
+        datasetId: left.datasetId,
+        episodeIndex: left.episodeIndex,
+        startFrame: Math.min(left.startFrame, right.startFrame),
+        endFrame: Math.max(left.endFrame, right.endFrame),
+        labelType: left.labelType,
+        labelValue: left.labelValue,
+        source: "human",
+        confidence: Math.max(left.confidence, right.confidence),
+        reviewStatus: "edited"
+      });
+      await deleteAnnotation(left.id);
+      await deleteAnnotation(right.id);
+      setAnnotationRows((current) =>
+        sortAnnotations([
+          ...current.filter((row) => row.id !== mergedOptimistic.id),
+          merged
+        ])
+      );
+    } catch (error) {
+      setAnnotationRows(previousAnnotations);
+      throw error;
+    }
   }
 
   async function handleUpdateReviewStatus(annotationId: string, status: ReviewStatus) {
-    const updated = await updateAnnotationReviewStatus(annotationId, status);
+    const previousAnnotations = annotationRows;
     setAnnotationRows((current) =>
-      current.map((annotation) => (annotation.id === annotationId ? updated : annotation))
+      current.map((annotation) =>
+        annotation.id === annotationId ? { ...annotation, reviewStatus: status } : annotation
+      )
     );
+    try {
+      const updated = await updateAnnotationReviewStatus(annotationId, status);
+      setAnnotationRows((current) =>
+        current.map((annotation) => (annotation.id === annotationId ? updated : annotation))
+      );
+    } catch (error) {
+      setAnnotationRows(previousAnnotations);
+      throw error;
+    }
   }
 
   async function handleDeleteSegment(annotationId: string) {
-    await deleteAnnotation(annotationId);
+    const previousAnnotations = annotationRows;
     setAnnotationRows((current) => current.filter((annotation) => annotation.id !== annotationId));
+    try {
+      await deleteAnnotation(annotationId);
+    } catch (error) {
+      setAnnotationRows(previousAnnotations);
+      throw error;
+    }
   }
 
   async function handleCreateRerunSession() {

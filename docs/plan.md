@@ -171,7 +171,7 @@ Definition of done:
 - [x] Add frame-aware bad range authoring from the timeline.
 - [x] Add timeline drag/split/merge controls.
 - [x] Add annotation history.
-- [ ] Add optimistic UI rollback on mutation failure.
+- [x] Add optimistic UI rollback on mutation failure.
 
 ### P4: Rerun Integration
 
