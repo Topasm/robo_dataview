@@ -1063,6 +1063,12 @@ button:disabled {
   gap: 10px;
 }
 
+.episode-label-save {
+  justify-content: center;
+  margin-top: 10px;
+  width: 100%;
+}
+
 .segment-form {
   display: grid;
   gap: 10px;

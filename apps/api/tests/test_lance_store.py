@@ -6,8 +6,9 @@ import types
 from pathlib import Path
 import unittest
 
+from apps.api.schemas.common import ReviewStatus
 from apps.api.schemas.datasets import DatasetOpenRequest
-from apps.api.schemas.episodes import EpisodeDetail
+from apps.api.schemas.episodes import EpisodeDetail, EpisodeLabelUpdate
 from apps.api.schemas.search import FilterSearchRequest
 from apps.api.services.lance_store import LanceDatasetStore
 from apps.api.services.lerobot_io import write_lerobot_v3_snapshot
@@ -297,6 +298,50 @@ class LanceDatasetStoreTest(unittest.TestCase):
         self.assertLessEqual(series.sample_count, 601)
         self.assertEqual(series.sample_indices[0], 0)
         self.assertEqual(series.sample_indices[-1], 1999)
+
+    def test_episode_label_updates_persist_as_overlay(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage_root = Path(tmpdir)
+            first_store = LanceDatasetStore(
+                label_storage_root=storage_root,
+                persist_episode_labels=True,
+            )
+
+            updated = first_store.update_episode_labels(
+                "sample-xvla-soft-fold",
+                0,
+                EpisodeLabelUpdate(
+                    caption="Reviewed fold",
+                    success_label=False,
+                    failure_reason="cloth slipped",
+                    quality_score=0.35,
+                    split="val",
+                    review_status=ReviewStatus.edited,
+                ),
+            )
+
+            self.assertIsNotNone(updated)
+            self.assertEqual(updated.caption, "Reviewed fold")
+            self.assertFalse(updated.success_label)
+            self.assertEqual(updated.failure_reason, "cloth slipped")
+            self.assertEqual(updated.quality_score, 0.35)
+            self.assertEqual(updated.split, "val")
+            self.assertEqual(updated.review_status, "edited")
+            self.assertTrue(updated.has_human_label)
+
+            second_store = LanceDatasetStore(
+                label_storage_root=storage_root,
+                persist_episode_labels=True,
+            )
+            reloaded = second_store.get_episode("sample-xvla-soft-fold", 0)
+
+            self.assertIsNotNone(reloaded)
+            self.assertEqual(reloaded.caption, "Reviewed fold")
+            self.assertFalse(reloaded.success_label)
+            self.assertEqual(reloaded.failure_reason, "cloth slipped")
+            self.assertEqual(reloaded.quality_score, 0.35)
+            self.assertEqual(reloaded.split, "val")
+            self.assertEqual(reloaded.review_status, "edited")
 
 
 if __name__ == "__main__":

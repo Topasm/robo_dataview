@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from importlib import import_module
+import json
 import math
 import re
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import Any
 from apps.api.schemas.datasets import DatasetOpenRequest, DatasetRecord, DatasetSummary
 from apps.api.schemas.episodes import (
     EpisodeDetail,
+    EpisodeLabelUpdate,
     EpisodeListItem,
     EpisodeTimeseries,
     StateActionSummary,
@@ -19,6 +21,7 @@ from apps.api.services.lerobot_io import read_lerobot_snapshot_episodes
 from apps.api.services.pydantic_compat import model_dump
 
 NORM_SERIES_MAX_POINTS = 600
+EPISODE_LABEL_STORAGE_ROOT = Path("data/lance/episode_labels")
 TABLE_NAMES = ("frames", "episodes", "videos")
 STATE_COLUMNS = ("observation_state", "observation.state", "state")
 ACTION_COLUMNS = ("actions", "action")
@@ -392,11 +395,21 @@ class LanceDatasetStore:
     root URI. A small sample fixture stays available for local UI development.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        label_storage_root: Path = EPISODE_LABEL_STORAGE_ROOT,
+        *,
+        persist_episode_labels: bool = False,
+    ) -> None:
+        self.label_storage_root = label_storage_root
+        self.persist_episode_labels = persist_episode_labels
         self._datasets: dict[str, DatasetRecord] = {}
         self._summaries: dict[str, DatasetSummary] = {}
         self._episodes: dict[str, list[EpisodeDetail]] = {}
         self._bundles: dict[str, LanceBundle] = {}
+        self._episode_label_overrides: dict[str, dict[int, dict[str, Any]]] = {}
+        if self.persist_episode_labels:
+            self._load_episode_label_overrides()
         self._seed_demo_dataset()
 
     def _seed_demo_dataset(self) -> None:
@@ -522,7 +535,10 @@ class LanceDatasetStore:
         if bundle is not None:
             return self._list_lance_episodes(dataset_id, bundle, limit=limit, offset=offset)
         episodes = self._episodes.get(dataset_id, [])
-        return [EpisodeListItem(**model_dump(episode)) for episode in episodes[offset : offset + limit]]
+        return [
+            EpisodeListItem(**self._apply_episode_overrides(dataset_id, model_dump(episode)))
+            for episode in episodes[offset : offset + limit]
+        ]
 
     def get_episode(self, dataset_id: str, episode_index: int) -> EpisodeDetail | None:
         bundle = self._bundles.get(dataset_id)
@@ -530,8 +546,35 @@ class LanceDatasetStore:
             return self._get_lance_episode(dataset_id, bundle, episode_index)
         for episode in self._episodes.get(dataset_id, []):
             if episode.episode_index == episode_index:
-                return episode
+                return EpisodeDetail(**self._apply_episode_overrides(dataset_id, model_dump(episode)))
         return None
+
+    def update_episode_labels(
+        self,
+        dataset_id: str,
+        episode_index: int,
+        payload: EpisodeLabelUpdate,
+    ) -> EpisodeDetail | None:
+        existing = self.get_episode(dataset_id, episode_index)
+        if existing is None:
+            return None
+
+        updates = model_dump(payload, exclude_unset=True)
+        if "review_status" in updates and updates["review_status"] is not None:
+            updates["review_status"] = getattr(updates["review_status"], "value", updates["review_status"])
+        if not updates:
+            return existing
+
+        dataset_overrides = self._episode_label_overrides.setdefault(dataset_id, {})
+        current = dataset_overrides.get(episode_index, {})
+        dataset_overrides[episode_index] = {
+            **current,
+            **updates,
+            "has_human_label": True,
+        }
+        self._persist_episode_label_overrides(dataset_id)
+        self._refresh_episode_summary(dataset_id)
+        return self.get_episode(dataset_id, episode_index)
 
     def get_state_action_summary(
         self,
@@ -812,7 +855,12 @@ class LanceDatasetStore:
         columns = _metadata_columns(bundle.schemas["episodes"], include_arrays=False)
         rows = _read_rows(dataset, columns=columns, limit=limit, offset=offset)
         return [
-            EpisodeListItem(**self._episode_payload(dataset_id, row, bundle.schemas["episodes"]))
+            EpisodeListItem(
+                **self._apply_episode_overrides(
+                    dataset_id,
+                    self._episode_payload(dataset_id, row, bundle.schemas["episodes"]),
+                )
+            )
             for row in rows
         ]
 
@@ -826,7 +874,10 @@ class LanceDatasetStore:
         row = _read_episode_row_by_index(bundle.tables["episodes"], episode_index, columns=columns)
         if row is None:
             return None
-        payload = self._episode_payload(dataset_id, row, bundle.schemas["episodes"])
+        payload = self._apply_episode_overrides(
+            dataset_id,
+            self._episode_payload(dataset_id, row, bundle.schemas["episodes"]),
+        )
         return EpisodeDetail(**payload)
 
     def _get_lance_state_action_summary(
@@ -901,6 +952,7 @@ class LanceDatasetStore:
             "task_index": row.get("task_index"),
             "length": length,
             "success_label": row.get("success_label", row.get("success")),
+            "failure_reason": row.get("failure_reason"),
             "quality_score": row.get("quality_score"),
             "review_status": row.get("review_status", "pending"),
             "caption": caption,
@@ -913,5 +965,70 @@ class LanceDatasetStore:
             "language_instruction": row.get("language_instruction") or row.get("instruction"),
         }
 
+    def _apply_episode_overrides(self, dataset_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        episode_index = int(payload.get("episode_index", 0))
+        overrides = self._episode_label_overrides.get(dataset_id, {}).get(episode_index)
+        if not overrides:
+            return payload
+        return {**payload, **overrides}
 
-store = LanceDatasetStore()
+    def _refresh_episode_summary(self, dataset_id: str) -> None:
+        record = self._datasets.get(dataset_id)
+        episodes = self._episodes.get(dataset_id)
+        if record is None or episodes is None:
+            return
+        updated = [
+            EpisodeDetail(**self._apply_episode_overrides(dataset_id, model_dump(episode)))
+            for episode in episodes
+        ]
+        self._summaries[dataset_id] = self._summary_from_episodes(record, updated)
+
+    def _load_episode_label_overrides(self) -> None:
+        if not self.label_storage_root.exists():
+            return
+        for dataset_dir in self.label_storage_root.glob("*"):
+            labels_path = dataset_dir / "labels.jsonl"
+            if not labels_path.exists():
+                continue
+            try:
+                dataset_id = json.loads((dataset_dir / "dataset.json").read_text(encoding="utf-8"))[
+                    "dataset_id"
+                ]
+            except (FileNotFoundError, KeyError, json.JSONDecodeError):
+                continue
+            rows = {}
+            for line in labels_path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                episode_index = int(row.pop("episode_index"))
+                rows[episode_index] = row
+            if rows:
+                self._episode_label_overrides[dataset_id] = rows
+
+    def _persist_episode_label_overrides(self, dataset_id: str) -> None:
+        if not self.persist_episode_labels:
+            return
+        dataset_dir = self.label_storage_root / _slug(dataset_id)
+        dataset_dir.mkdir(parents=True, exist_ok=True)
+        (dataset_dir / "dataset.json").write_text(
+            json.dumps({"dataset_id": dataset_id}, sort_keys=True),
+            encoding="utf-8",
+        )
+        rows = [
+            {"episode_index": episode_index, **values}
+            for episode_index, values in sorted(
+                self._episode_label_overrides.get(dataset_id, {}).items(),
+                key=lambda item: item[0],
+            )
+        ]
+        (dataset_dir / "labels.jsonl").write_text(
+            "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+            encoding="utf-8",
+        )
+
+
+store = LanceDatasetStore(persist_episode_labels=True)

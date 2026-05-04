@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bot, Check, GitBranch, Plus, Save, Trash2, X } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
@@ -11,6 +11,15 @@ type AnnotationDraft = {
   endFrame: number;
 };
 
+type EpisodeLabelDraft = {
+  caption: string;
+  successLabel: boolean | null;
+  failureReason: string;
+  qualityScore: number;
+  split: string;
+  reviewStatus: ReviewStatus;
+};
+
 type AnnotationEditorProps = {
   episode: Episode;
   annotations: SegmentAnnotation[];
@@ -19,6 +28,7 @@ type AnnotationEditorProps = {
   onDeleteSegment: (annotationId: string) => Promise<void>;
   onRunVlmLabel: () => Promise<void>;
   onSplitSegment: (annotation: SegmentAnnotation) => Promise<void>;
+  onUpdateEpisodeLabels: (draft: EpisodeLabelDraft) => Promise<void>;
   onUpdateSegment: (annotationId: string, draft: AnnotationDraft) => Promise<void>;
   onUpdateReviewStatus: (annotationId: string, status: ReviewStatus) => Promise<void>;
 };
@@ -31,9 +41,11 @@ export function AnnotationEditor({
   onDeleteSegment,
   onRunVlmLabel,
   onSplitSegment,
+  onUpdateEpisodeLabels,
   onUpdateSegment,
   onUpdateReviewStatus
 }: AnnotationEditorProps) {
+  const [episodeDraft, setEpisodeDraft] = useState<EpisodeLabelDraft>(() => toEpisodeDraft(episode));
   const [draft, setDraft] = useState<AnnotationDraft>({
     labelType: "phase",
     labelValue: "phase_label",
@@ -41,8 +53,26 @@ export function AnnotationEditor({
     endFrame: Math.max(0, Math.min(episode.length - 1, 30))
   });
   const [editingRows, setEditingRows] = useState<Record<string, AnnotationDraft>>({});
+  const [isSavingEpisode, setIsSavingEpisode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isRunningVlm, setIsRunningVlm] = useState(false);
+
+  useEffect(() => {
+    setEpisodeDraft(toEpisodeDraft(episode));
+    setDraft((current) => ({
+      ...current,
+      endFrame: Math.max(0, Math.min(episode.length - 1, current.endFrame))
+    }));
+  }, [episode]);
+
+  async function handleUpdateEpisodeLabels() {
+    setIsSavingEpisode(true);
+    try {
+      await onUpdateEpisodeLabels(episodeDraft);
+    } finally {
+      setIsSavingEpisode(false);
+    }
+  }
 
   async function handleCreateSegment() {
     if (!draft.labelValue.trim()) {
@@ -115,31 +145,98 @@ export function AnnotationEditor({
         <div className="form-grid">
           <label>
             Caption
-            <textarea defaultValue={episode.caption} rows={3} />
+            <textarea
+              onChange={(event) =>
+                setEpisodeDraft((current) => ({ ...current, caption: event.target.value }))
+              }
+              rows={3}
+              value={episodeDraft.caption}
+            />
           </label>
           <label>
             Quality
-            <input defaultValue={episode.qualityScore.toFixed(2)} type="number" />
+            <input
+              max={1}
+              min={0}
+              onChange={(event) =>
+                setEpisodeDraft((current) => ({
+                  ...current,
+                  qualityScore: Number(event.target.value)
+                }))
+              }
+              step={0.01}
+              type="number"
+              value={episodeDraft.qualityScore}
+            />
           </label>
           <label>
             Split
-            <select defaultValue={episode.split}>
-              <option>train</option>
-              <option>val</option>
-              <option>test</option>
+            <select
+              onChange={(event) =>
+                setEpisodeDraft((current) => ({ ...current, split: event.target.value }))
+              }
+              value={episodeDraft.split}
+            >
+              <option value="train">train</option>
+              <option value="val">val</option>
+              <option value="test">test</option>
             </select>
+          </label>
+          <label>
+            Review
+            <select
+              onChange={(event) =>
+                setEpisodeDraft((current) => ({
+                  ...current,
+                  reviewStatus: event.target.value as ReviewStatus
+                }))
+              }
+              value={episodeDraft.reviewStatus}
+            >
+              <option value="pending">pending</option>
+              <option value="accepted">accepted</option>
+              <option value="rejected">rejected</option>
+              <option value="edited">edited</option>
+            </select>
+          </label>
+          <label>
+            Failure reason
+            <textarea
+              onChange={(event) =>
+                setEpisodeDraft((current) => ({ ...current, failureReason: event.target.value }))
+              }
+              rows={2}
+              value={episodeDraft.failureReason}
+            />
           </label>
         </div>
         <div className="segmented-control">
-          <button className={episode.successLabel ? "active" : ""} type="button">
+          <button
+            className={episodeDraft.successLabel === true ? "active" : ""}
+            onClick={() => setEpisodeDraft((current) => ({ ...current, successLabel: true }))}
+            type="button"
+          >
             <Check size={14} />
             Success
           </button>
-          <button className={!episode.successLabel ? "active" : ""} type="button">
+          <button
+            className={episodeDraft.successLabel === false ? "active" : ""}
+            onClick={() => setEpisodeDraft((current) => ({ ...current, successLabel: false }))}
+            type="button"
+          >
             <X size={14} />
             Failure
           </button>
         </div>
+        <button
+          className="text-button episode-label-save"
+          disabled={isSavingEpisode}
+          onClick={handleUpdateEpisodeLabels}
+          type="button"
+        >
+          <Save size={15} />
+          Save labels
+        </button>
       </section>
 
       <section className="panel-section">
@@ -310,6 +407,17 @@ export function AnnotationEditor({
       </section>
     </aside>
   );
+}
+
+function toEpisodeDraft(episode: Episode): EpisodeLabelDraft {
+  return {
+    caption: episode.caption,
+    successLabel: episode.successLabel,
+    failureReason: episode.failureReason,
+    qualityScore: episode.qualityScore,
+    split: episode.split || "train",
+    reviewStatus: episode.reviewStatus
+  };
 }
 
 function toDraft(annotation: SegmentAnnotation): AnnotationDraft {

@@ -6,6 +6,7 @@ from fastapi.responses import Response, StreamingResponse
 
 from apps.api.schemas.episodes import (
     EpisodeDetail,
+    EpisodeLabelUpdate,
     EpisodeListItem,
     EpisodeTimeseries,
     StateActionSummary,
@@ -28,6 +29,18 @@ def list_episodes(
 @router.get("/episodes/{episode_index}", response_model=EpisodeDetail)
 def episode_detail(episode_index: int, dataset_id: str = Query(...)) -> EpisodeDetail:
     episode = store.get_episode(dataset_id, episode_index)
+    if episode is None:
+        raise HTTPException(status_code=404, detail="Episode not found")
+    return episode
+
+
+@router.patch("/episodes/{episode_index}/labels", response_model=EpisodeDetail)
+def update_episode_labels(
+    episode_index: int,
+    payload: EpisodeLabelUpdate,
+    dataset_id: str = Query(...),
+) -> EpisodeDetail:
+    episode = store.update_episode_labels(dataset_id, episode_index, payload)
     if episode is None:
         raise HTTPException(status_code=404, detail="Episode not found")
     return episode

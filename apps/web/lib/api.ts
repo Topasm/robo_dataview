@@ -40,6 +40,7 @@ type EpisodeResponse = {
   task_index: number | null;
   length: number | null;
   success_label: boolean | null;
+  failure_reason: string | null;
   quality_score: number | null;
   review_status: Episode["reviewStatus"];
   caption: string | null;
@@ -151,6 +152,15 @@ export type SegmentAnnotationUpdate = {
   reviewStatus?: ReviewStatus;
 };
 
+export type EpisodeLabelUpdate = {
+  caption?: string | null;
+  successLabel?: boolean | null;
+  failureReason?: string | null;
+  qualityScore?: number | null;
+  split?: string | null;
+  reviewStatus?: ReviewStatus | null;
+};
+
 export async function fetchDatasetSummaries(): Promise<DatasetSummary[]> {
   const datasets = await request<DatasetRecordResponse[]>("/datasets");
   return Promise.all(datasets.map((dataset) => fetchDatasetSummary(dataset.dataset_id)));
@@ -200,6 +210,41 @@ export async function fetchEpisodeTimeseries(
     `/episodes/${episodeIndex}/timeseries?${query}`
   );
   return toEpisodeTimeseries(row);
+}
+
+export async function updateEpisodeLabels(
+  datasetId: string,
+  episodeIndex: number,
+  payload: EpisodeLabelUpdate,
+): Promise<Episode> {
+  const query = new URLSearchParams({ dataset_id: datasetId });
+  const body: Record<string, boolean | number | string | null> = {};
+  if (payload.caption !== undefined) {
+    body.caption = payload.caption;
+  }
+  if (payload.successLabel !== undefined) {
+    body.success_label = payload.successLabel;
+  }
+  if (payload.failureReason !== undefined) {
+    body.failure_reason = payload.failureReason;
+  }
+  if (payload.qualityScore !== undefined) {
+    body.quality_score = payload.qualityScore;
+  }
+  if (payload.split !== undefined) {
+    body.split = payload.split;
+  }
+  if (payload.reviewStatus !== undefined) {
+    body.review_status = payload.reviewStatus;
+  }
+  const row = await request<EpisodeResponse>(
+    `/episodes/${episodeIndex}/labels?${query}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(body)
+    }
+  );
+  return toEpisode(row);
 }
 
 export async function fetchAnnotations(
@@ -391,6 +436,7 @@ function toEpisode(raw: EpisodeResponse): Episode {
     qualityScore: raw.quality_score ?? 0,
     reviewStatus: raw.review_status,
     caption: raw.caption ?? "",
+    failureReason: raw.failure_reason ?? "",
     hasVlmLabel: raw.has_vlm_label,
     hasHumanLabel: raw.has_human_label,
     split: raw.split ?? "",

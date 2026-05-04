@@ -39,11 +39,27 @@ Response:
 ```text
 GET /episodes?dataset_id=...
 GET /episodes/{episode_index}?dataset_id=...
+PATCH /episodes/{episode_index}/labels?dataset_id=...
 GET /episodes/{episode_index}/video/{camera}?dataset_id=...
 GET /episodes/{episode_index}/state-action?dataset_id=...
+GET /episodes/{episode_index}/timeseries?dataset_id=...
 ```
 
 `GET /episodes` supports `limit` and `offset` query params.
+
+`PATCH /episodes/{episode_index}/labels` stores curation labels as a local
+overlay without mutating the raw Lance dataset. Supported fields:
+
+```json
+{
+  "caption": "Reviewed folding attempt",
+  "success_label": true,
+  "failure_reason": null,
+  "quality_score": 0.9,
+  "split": "train",
+  "review_status": "accepted"
+}
+```
 
 `GET /episodes/{episode_index}/video/{camera}` streams an MP4 blob when the
 episode table has a matching video blob column. It supports `GET` and `HEAD`,

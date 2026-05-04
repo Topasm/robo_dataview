@@ -35,6 +35,7 @@ export default function Home() {
     handleSelectEpisode,
     handleSemanticSearch,
     handleSplitSegment,
+    handleUpdateEpisodeLabels,
     handleUpdateSegment,
     handleUpdateReviewStatus
   } = useStudioData();
@@ -104,6 +105,7 @@ export default function Home() {
               onDeleteSegment={handleDeleteSegment}
               onRunVlmLabel={handleRunVlmLabel}
               onSplitSegment={handleSplitSegment}
+              onUpdateEpisodeLabels={handleUpdateEpisodeLabels}
               onUpdateSegment={handleUpdateSegment}
               onUpdateReviewStatus={handleUpdateReviewStatus}
               vlmJob={vlmJob}

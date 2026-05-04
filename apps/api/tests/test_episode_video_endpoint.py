@@ -9,6 +9,7 @@ from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
 from apps.api.routers import episodes
+from apps.api.schemas.episodes import EpisodeDetail, EpisodeLabelUpdate
 
 
 class FakeVideoStore:
@@ -19,6 +20,33 @@ class FakeVideoStore:
         if dataset_id != "dataset-a" or episode_index != 3 or camera != "cam_high":
             return None
         return self.blob
+
+
+class FakeEpisodeLabelStore:
+    def __init__(self) -> None:
+        self.payload: EpisodeLabelUpdate | None = None
+
+    def update_episode_labels(
+        self,
+        dataset_id: str,
+        episode_index: int,
+        payload: EpisodeLabelUpdate,
+    ) -> EpisodeDetail | None:
+        if dataset_id != "dataset-a" or episode_index != 3:
+            return None
+        self.payload = payload
+        return EpisodeDetail(
+            dataset_id=dataset_id,
+            episode_index=episode_index,
+            caption=payload.caption,
+            failure_reason=payload.failure_reason,
+            quality_score=payload.quality_score,
+            review_status=payload.review_status.value if payload.review_status else "pending",
+            split=payload.split,
+            success_label=payload.success_label,
+            has_human_label=True,
+            camera_names=[],
+        )
 
 
 class EpisodeVideoEndpointTest(unittest.TestCase):
@@ -128,6 +156,37 @@ class EpisodeVideoEndpointTest(unittest.TestCase):
                     _request("GET"),
                     dataset_id="dataset-a",
                     range_header=None,
+                )
+
+        self.assertEqual(context.exception.status_code, 404)
+
+    def test_update_episode_labels_returns_updated_episode(self) -> None:
+        fake_store = FakeEpisodeLabelStore()
+        payload = EpisodeLabelUpdate(
+            caption="Reviewed episode",
+            success_label=False,
+            failure_reason="slipped",
+            quality_score=0.4,
+            split="val",
+        )
+
+        with patch.object(episodes, "store", fake_store):
+            updated = episodes.update_episode_labels(3, payload, dataset_id="dataset-a")
+
+        self.assertEqual(updated.caption, "Reviewed episode")
+        self.assertFalse(updated.success_label)
+        self.assertEqual(updated.failure_reason, "slipped")
+        self.assertEqual(updated.quality_score, 0.4)
+        self.assertEqual(updated.split, "val")
+        self.assertIs(fake_store.payload, payload)
+
+    def test_update_episode_labels_returns_404_for_missing_episode(self) -> None:
+        with patch.object(episodes, "store", FakeEpisodeLabelStore()):
+            with self.assertRaises(HTTPException) as context:
+                episodes.update_episode_labels(
+                    99,
+                    EpisodeLabelUpdate(caption="missing"),
+                    dataset_id="dataset-a",
                 )
 
         self.assertEqual(context.exception.status_code, 404)

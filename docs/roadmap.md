@@ -91,7 +91,6 @@ Next:
 - Add simultaneous synchronized multi-camera layout.
 - Add frame scrubber with timestamp/frame synchronization.
 - Add state/action chart visualization instead of summary-only display.
-- Add episode-level metadata edit endpoints and UI.
 - Wire play/previous/next controls to the active video/timeline.
 
 ## Phase 3: Rerun Web Viewer
@@ -145,10 +144,11 @@ Implemented:
 - Optional Lance mirror.
 - Review status updates.
 - Segment edit form and midpoint split action in the web UI.
+- Episode-level label editing for caption, success/failure, failure reason,
+  quality, split, and review status.
 
 Next:
 
-- Add episode-level label editing.
 - Add drag/split/merge timeline editing beyond the current midpoint split
   button.
 - Add bad frame/range labels.

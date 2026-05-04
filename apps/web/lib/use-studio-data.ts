@@ -14,6 +14,7 @@ import {
   filterSearch,
   openDataset,
   semanticSearch,
+  updateEpisodeLabels,
   updateSegmentAnnotation,
   updateAnnotationReviewStatus
 } from "@/lib/api";
@@ -34,6 +35,15 @@ type SegmentDraft = {
   labelValue: string;
   startFrame: number;
   endFrame: number;
+};
+
+type EpisodeLabelDraft = {
+  caption: string;
+  successLabel: boolean | null;
+  failureReason: string;
+  qualityScore: number;
+  split: string;
+  reviewStatus: ReviewStatus;
 };
 
 export function useStudioData() {
@@ -176,6 +186,24 @@ export function useStudioData() {
     setAnnotationRows((current) => [...current, created].sort((a, b) => a.startFrame - b.startFrame));
   }
 
+  async function handleUpdateEpisodeLabels(draft: EpisodeLabelDraft) {
+    const updated = await updateEpisodeLabels(selectedEpisode.datasetId, selectedEpisode.episodeIndex, {
+      caption: draft.caption.trim() || null,
+      successLabel: draft.successLabel,
+      failureReason: draft.failureReason.trim() || null,
+      qualityScore: draft.qualityScore,
+      split: draft.split || null,
+      reviewStatus: draft.reviewStatus
+    });
+    setEpisodeRows((current) =>
+      current.map((episode) =>
+        episode.datasetId === updated.datasetId && episode.episodeIndex === updated.episodeIndex
+          ? updated
+          : episode
+      )
+    );
+  }
+
   async function handleUpdateSegment(annotationId: string, draft: SegmentDraft) {
     const updated = await updateSegmentAnnotation(annotationId, {
       labelType: draft.labelType,
@@ -287,6 +315,7 @@ export function useStudioData() {
     handleSelectEpisode,
     handleSemanticSearch,
     handleSplitSegment,
+    handleUpdateEpisodeLabels,
     handleUpdateReviewStatus,
     handleUpdateSegment
   };

@@ -1,4 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from apps.api.schemas.common import ReviewStatus
 
 
 class EpisodeListItem(BaseModel):
@@ -10,6 +12,7 @@ class EpisodeListItem(BaseModel):
     quality_score: float | None = None
     review_status: str = "pending"
     caption: str | None = None
+    failure_reason: str | None = None
     has_vlm_label: bool = False
     has_human_label: bool = False
     split: str | None = None
@@ -46,3 +49,12 @@ class EpisodeTimeseries(BaseModel):
     action_norms: list[float | None]
     state_dim: int | None = None
     action_dim: int | None = None
+
+
+class EpisodeLabelUpdate(BaseModel):
+    caption: str | None = None
+    success_label: bool | None = None
+    failure_reason: str | None = None
+    quality_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    split: str | None = None
+    review_status: ReviewStatus | None = None

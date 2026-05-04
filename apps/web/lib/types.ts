@@ -24,6 +24,7 @@ export type Episode = {
   qualityScore: number;
   reviewStatus: ReviewStatus;
   caption: string;
+  failureReason: string;
   hasVlmLabel: boolean;
   hasHumanLabel: boolean;
   split: string;

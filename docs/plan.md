@@ -149,8 +149,8 @@ Definition of done:
 - [x] Optional Lance mirroring.
 - [x] Segment edit form.
 - [x] Midpoint split action.
-- [ ] Add episode-level label update endpoint.
-- [ ] Add quality score, success/failure, failure reason editing.
+- [x] Add episode-level label update endpoint.
+- [x] Add quality score, success/failure, failure reason editing.
 - [x] Add label type choices for bad range, important frame, and failure event.
 - [ ] Add frame-aware bad range authoring from the timeline.
 - [ ] Add timeline drag/split/merge controls.
