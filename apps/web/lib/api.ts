@@ -87,6 +87,9 @@ type JobRecordResponse = {
   progress: number;
   message: string | null;
   created_annotation_ids: string[];
+  model: string | null;
+  prompt_template: string | null;
+  prompt_version: string | null;
 };
 
 type ExportRecordResponse = {
@@ -518,7 +521,10 @@ function toJobRecord(raw: JobRecordResponse): JobRecord {
     episodeIndices: raw.episode_indices,
     progress: raw.progress,
     message: raw.message,
-    createdAnnotationIds: raw.created_annotation_ids
+    createdAnnotationIds: raw.created_annotation_ids,
+    model: raw.model,
+    promptTemplate: raw.prompt_template,
+    promptVersion: raw.prompt_version
   };
 }
 

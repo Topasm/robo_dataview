@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import unittest
 
+from fastapi import HTTPException
+
 from apps.api.schemas.common import JobStatus, ReviewStatus
 from apps.api.schemas.jobs import JobCreateRequest
 from apps.api.services.annotation_service import annotation_store
@@ -28,6 +30,8 @@ class VlmJobServiceTest(unittest.TestCase):
         ]
 
         self.assertEqual(record.status, JobStatus.succeeded)
+        self.assertEqual(record.prompt_template, "episode_autolabel_v1")
+        self.assertEqual(record.prompt_version, "v1")
         self.assertGreaterEqual(len(record.created_annotation_ids), 20)
         self.assertEqual(len(created_by_job), len(record.created_annotation_ids))
         self.assertTrue(all(annotation.review_status == ReviewStatus.pending for annotation in created_by_job))
@@ -53,6 +57,22 @@ class VlmJobServiceTest(unittest.TestCase):
         self.assertEqual(record.status, JobStatus.failed)
         self.assertEqual(record.created_annotation_ids, [])
         self.assertIn("Missing episodes", record.message or "")
+
+    def test_vlm_label_job_rejects_unknown_prompt_template(self) -> None:
+        jobs = JobStore()
+
+        with self.assertRaises(HTTPException) as context:
+            jobs.create(
+                kind="vlm_label",
+                payload=JobCreateRequest(
+                    dataset_id="sample-xvla-soft-fold",
+                    episode_indices=[0],
+                    prompt_template="missing_prompt",
+                ),
+            )
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn("Unknown prompt template", str(context.exception.detail))
 
 
 if __name__ == "__main__":

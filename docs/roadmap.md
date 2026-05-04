@@ -178,6 +178,7 @@ Implemented:
 - Heuristic proposal generator.
 - Pending annotations are created for review.
 - Deterministic 8 to 16 frame index sampling for prompt inputs.
+- Versioned prompt registry and prompt validation.
 
 Next:
 

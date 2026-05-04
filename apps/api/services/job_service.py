@@ -9,6 +9,7 @@ from apps.api.schemas.jobs import JobCreateRequest, JobRecord
 from apps.api.services.annotation_service import annotation_store
 from apps.api.services.lance_store import store
 from apps.api.services.pydantic_compat import model_copy
+from packages.prompts import UnknownPromptTemplateError, get_prompt_template
 from workers.vlm_autolabel import AutoLabelConfig, build_vlm_annotation_proposals
 
 
@@ -18,6 +19,12 @@ class JobStore:
 
     def create(self, kind: str, payload: JobCreateRequest) -> JobRecord:
         job_id = str(uuid4())
+        prompt = None
+        if kind == "vlm_label":
+            try:
+                prompt = get_prompt_template(payload.prompt_template)
+            except UnknownPromptTemplateError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
         record = JobRecord(
             job_id=job_id,
             kind=kind,
@@ -27,9 +34,10 @@ class JobStore:
             progress=0.0,
             model=payload.model,
             prompt_template=payload.prompt_template,
+            prompt_version=prompt.version if prompt is not None else None,
         )
         if kind == "vlm_label":
-            record = self._run_vlm_label_job(record, payload)
+            record = self._run_vlm_label_job(record, payload, prompt_version=prompt.version)
         else:
             record = model_copy(
                 record,
@@ -47,7 +55,13 @@ class JobStore:
             raise HTTPException(status_code=404, detail="Job not found")
         return record
 
-    def _run_vlm_label_job(self, record: JobRecord, payload: JobCreateRequest) -> JobRecord:
+    def _run_vlm_label_job(
+        self,
+        record: JobRecord,
+        payload: JobCreateRequest,
+        *,
+        prompt_version: str,
+    ) -> JobRecord:
         episode_indices = payload.episode_indices
         if not episode_indices:
             episode_indices = [
@@ -64,7 +78,11 @@ class JobStore:
                 }
             )
 
-        config = AutoLabelConfig(model=payload.model, prompt_template=payload.prompt_template)
+        config = AutoLabelConfig(
+            model=payload.model,
+            prompt_template=payload.prompt_template,
+            prompt_version=prompt_version,
+        )
         created_annotation_ids: list[str] = []
         missing_episodes: list[int] = []
         for episode_index in episode_indices:

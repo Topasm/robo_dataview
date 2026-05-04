@@ -34,6 +34,9 @@ pythonpath = ["."]
 include = ["apps*", "packages*", "workers*"]
 exclude = ["data*", "node_modules*"]
 
+[tool.setuptools.package-data]
+"packages.prompts" = ["*.md"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

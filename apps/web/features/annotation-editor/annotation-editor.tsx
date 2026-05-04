@@ -254,6 +254,10 @@ export function AnnotationEditor({
           <div className="vlm-job-status">
             <StatusPill status={vlmJob.status} />
             <span className="muted">{vlmJob.message}</span>
+            <span className="mono">
+              {vlmJob.promptTemplate}
+              {vlmJob.promptVersion ? `@${vlmJob.promptVersion}` : ""}
+            </span>
           </div>
         ) : null}
       </section>

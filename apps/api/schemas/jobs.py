@@ -10,6 +10,14 @@ class JobCreateRequest(BaseModel):
     prompt_template: str = "episode_autolabel_v1"
 
 
+class PromptTemplateRecord(BaseModel):
+    prompt_id: str
+    version: str
+    title: str
+    description: str
+    expected_outputs: list[str]
+
+
 class JobRecord(BaseModel):
     job_id: str
     kind: str
@@ -21,3 +29,4 @@ class JobRecord(BaseModel):
     created_annotation_ids: list[str] = Field(default_factory=list)
     model: str | None = None
     prompt_template: str | None = None
+    prompt_version: str | None = None

@@ -94,6 +94,9 @@ export type JobRecord = {
   progress: number;
   message: string | null;
   createdAnnotationIds: string[];
+  model: string | null;
+  promptTemplate: string | null;
+  promptVersion: string | null;
 };
 
 export type ExportRecord = {

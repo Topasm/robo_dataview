@@ -18,6 +18,7 @@ from apps.api.schemas.episodes import EpisodeDetail
 class AutoLabelConfig:
     model: str
     prompt_template: str
+    prompt_version: str = "v1"
     min_keyframes: int = 8
     max_keyframes: int = 16
 
@@ -59,7 +60,7 @@ def build_vlm_annotation_proposals(
             start_frame=0,
             end_frame=last_frame,
             label_type="episode_caption",
-            label_value=f"{caption} [proposal:{config.prompt_template}]",
+            label_value=f"{caption} [proposal:{config.prompt_template}@{config.prompt_version}]",
             confidence=0.55,
         ),
         AnnotationCreate(

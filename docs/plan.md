@@ -195,8 +195,8 @@ Definition of done:
 - [x] Heuristic annotation proposal generator.
 - [x] Pending review annotations.
 - [x] Add deterministic keyframe index sampling.
+- [x] Add prompt registry/versioning.
 - [ ] Add decoded keyframe image extraction from video blobs.
-- [ ] Add prompt registry/versioning.
 - [ ] Add VLM provider abstraction.
 - [ ] Add real model/API integration.
 - [ ] Store raw response and model metadata.
