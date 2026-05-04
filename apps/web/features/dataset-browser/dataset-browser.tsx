@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Database, FolderOpen, SlidersHorizontal } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
@@ -5,11 +6,26 @@ import type { DatasetSummary } from "@/lib/types";
 
 type DatasetBrowserProps = {
   summary: DatasetSummary;
+  onOpenDataset: (uri: string) => Promise<void>;
 };
 
-export function DatasetBrowser({ summary }: DatasetBrowserProps) {
+export function DatasetBrowser({ summary, onOpenDataset }: DatasetBrowserProps) {
+  const [uri, setUri] = useState("hf://datasets/lance-format/lerobot-xvla-soft-fold/data");
+  const [isOpening, setIsOpening] = useState(false);
   const reviewedPercent =
     summary.episodeCount === 0 ? 0 : Math.round((summary.reviewedCount / summary.episodeCount) * 100);
+
+  async function handleOpenDataset() {
+    if (!uri.trim()) {
+      return;
+    }
+    setIsOpening(true);
+    try {
+      await onOpenDataset(uri.trim());
+    } finally {
+      setIsOpening(false);
+    }
+  }
 
   return (
     <aside className="left-panel">
@@ -20,10 +36,27 @@ export function DatasetBrowser({ summary }: DatasetBrowserProps) {
         </div>
         <div className="dataset-name">{summary.name}</div>
         <div className="muted mono">{summary.uri}</div>
-        <div className="section-actions">
-          <button className="icon-button" title="Open dataset" type="button">
+        <div className="dataset-status-row">
+          <StatusPill status={summary.status} />
+          {summary.message ? <span className="muted">{summary.message}</span> : null}
+        </div>
+        <div className="dataset-open-form">
+          <input
+            aria-label="Dataset URI"
+            onChange={(event) => setUri(event.target.value)}
+            value={uri}
+          />
+          <button
+            className="icon-button"
+            disabled={isOpening}
+            onClick={handleOpenDataset}
+            title="Open dataset"
+            type="button"
+          >
             <FolderOpen size={16} />
           </button>
+        </div>
+        <div className="section-actions">
           <button className="icon-button" title="Filter datasets" type="button">
             <SlidersHorizontal size={16} />
           </button>

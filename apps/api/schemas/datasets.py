@@ -11,6 +11,7 @@ class DatasetRecord(BaseModel):
     name: str
     uri: str
     status: str
+    message: str | None = None
 
 
 class DatasetSummary(BaseModel):
@@ -25,3 +26,4 @@ class DatasetSummary(BaseModel):
     reviewed_count: int = 0
     accepted_count: int = 0
     rejected_count: int = 0
+    message: str | None = None

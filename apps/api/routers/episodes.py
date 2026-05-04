@@ -1,4 +1,7 @@
+from io import BytesIO
+
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import StreamingResponse
 
 from apps.api.schemas.episodes import EpisodeDetail, EpisodeListItem, StateActionSummary
 from apps.api.services.lance_store import store
@@ -33,13 +36,12 @@ def state_action_summary(episode_index: int, dataset_id: str = Query(...)) -> St
 
 
 @router.get("/episodes/{episode_index}/video/{camera}")
-def episode_video(episode_index: int, camera: str, dataset_id: str = Query(...)) -> dict[str, str | int]:
-    if store.get_episode(dataset_id, episode_index) is None:
-        raise HTTPException(status_code=404, detail="Episode not found")
-    return {
-        "dataset_id": dataset_id,
-        "episode_index": episode_index,
-        "camera": camera,
-        "status": "not_implemented",
-        "message": "Video blob streaming will be implemented in Phase 1.",
-    }
+def episode_video(episode_index: int, camera: str, dataset_id: str = Query(...)) -> StreamingResponse:
+    blob = store.get_video_blob(dataset_id, episode_index, camera)
+    if blob is None:
+        raise HTTPException(status_code=404, detail="Video blob not found")
+    return StreamingResponse(
+        BytesIO(blob),
+        media_type="video/mp4",
+        headers={"Content-Length": str(len(blob))},
+    )

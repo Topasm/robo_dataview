@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Camera, Maximize2, Play, RotateCcw, SkipBack, SkipForward } from "lucide-react";
 
+import { episodeVideoUrl } from "@/lib/api";
 import type { Episode } from "@/lib/types";
 
 type EpisodeViewerProps = {
@@ -7,6 +9,20 @@ type EpisodeViewerProps = {
 };
 
 export function EpisodeViewer({ episode }: EpisodeViewerProps) {
+  const [failedVideoKeys, setFailedVideoKeys] = useState<Set<string>>(new Set());
+
+  function videoKey(camera: string) {
+    return `${episode.datasetId}:${episode.episodeIndex}:${camera}`;
+  }
+
+  function markVideoFailed(camera: string) {
+    setFailedVideoKeys((current) => {
+      const next = new Set(current);
+      next.add(videoKey(camera));
+      return next;
+    });
+  }
+
   return (
     <main className="main-viewer">
       <div className="viewer-toolbar">
@@ -34,12 +50,18 @@ export function EpisodeViewer({ episode }: EpisodeViewerProps) {
               <Camera size={15} />
             </div>
             <div className="video-placeholder">
-              <div className="video-bars">
-                <span />
-                <span />
-                <span />
-                <span />
-              </div>
+              {failedVideoKeys.has(videoKey(camera)) ? (
+                <VideoBars />
+              ) : (
+                <video
+                  className="video-element"
+                  controls
+                  muted
+                  onError={() => markVideoFailed(camera)}
+                  preload="metadata"
+                  src={episodeVideoUrl(episode.datasetId, episode.episodeIndex, camera)}
+                />
+              )}
             </div>
           </div>
         ))}
@@ -73,5 +95,16 @@ export function EpisodeViewer({ episode }: EpisodeViewerProps) {
         </div>
       </section>
     </main>
+  );
+}
+
+function VideoBars() {
+  return (
+    <div className="video-bars">
+      <span />
+      <span />
+      <span />
+      <span />
+    </div>
   );
 }

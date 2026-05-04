@@ -107,6 +107,11 @@ created_at: timestamp
 updated_at: timestamp
 ```
 
+The source-of-truth code definition lives in
+`packages/robot_schema/lance_tables.py` as `ANNOTATIONS_COLUMNS`. In an
+environment with PyArrow installed, `build_annotations_pyarrow_schema()` returns
+the schema used to create `annotations.lance`.
+
 Allowed `source` values:
 
 ```text

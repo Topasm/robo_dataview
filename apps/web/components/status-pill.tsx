@@ -1,7 +1,5 @@
-import type { ReviewStatus } from "@/lib/types";
-
 type StatusPillProps = {
-  status: ReviewStatus | "sample" | "registered" | "queued" | "ready";
+  status: string;
 };
 
 export function StatusPill({ status }: StatusPillProps) {

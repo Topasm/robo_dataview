@@ -43,9 +43,14 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .studio-shell {
   display: grid;
-  grid-template-rows: 52px minmax(0, 1fr);
+  grid-template-rows: 52px 30px minmax(0, 1fr);
   height: 100vh;
   min-width: 1180px;
 }
@@ -107,6 +112,30 @@ button {
   min-height: 0;
 }
 
+.data-source-banner {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 14px;
+}
+
+.data-source-loading {
+  background: #fff4df;
+  color: var(--warning);
+}
+
+.data-source-api {
+  background: #e4f5ed;
+  color: var(--accent-2);
+}
+
+.data-source-sample {
+  background: #e7effb;
+  color: var(--blue);
+}
+
 .left-panel,
 .right-panel,
 .episode-table-wrap {
@@ -157,6 +186,25 @@ button {
 .dataset-name {
   font-weight: 700;
   margin-bottom: 4px;
+}
+
+.dataset-status-row {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr);
+  margin-top: 9px;
+}
+
+.dataset-open-form {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  margin-top: 12px;
+}
+
+.dataset-open-form input {
+  height: 32px;
 }
 
 .muted {
@@ -320,12 +368,20 @@ button {
 }
 
 .status-edited,
+.status-indexed,
 .status-sample,
 .status-ready,
 .status-registered {
   background: #e7effb;
   border-color: #b7c9ea;
   color: var(--blue);
+}
+
+.status-dependency_missing,
+.status-open_failed {
+  background: #fde8ea;
+  border-color: #edb5ba;
+  color: var(--danger);
 }
 
 .search-filter-bar {
@@ -409,6 +465,13 @@ button {
   display: flex;
   justify-content: center;
   min-height: 180px;
+}
+
+.video-element {
+  background: #182428;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
 }
 
 .video-bars {
@@ -584,6 +647,15 @@ button {
   margin-top: 10px;
   overflow: hidden;
   position: relative;
+}
+
+.rerun-frame {
+  background: #182428;
+  border: 1px solid #2e4a51;
+  border-radius: 8px;
+  height: 88px;
+  margin-top: 10px;
+  width: 100%;
 }
 
 .axis {

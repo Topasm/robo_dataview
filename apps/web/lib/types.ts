@@ -12,6 +12,7 @@ export type DatasetSummary = {
   reviewedCount: number;
   acceptedCount: number;
   rejectedCount: number;
+  message?: string | null;
 };
 
 export type Episode = {
