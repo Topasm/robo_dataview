@@ -73,7 +73,9 @@ Set `REAL_DATASET_EXPORT_VIDEOS=1` only when the runner has enough bandwidth,
 disk, and time to fetch and validate the selected episodes' MP4 payloads. For
 `hf://` datasets, provide an `HF_TOKEN` secret or local environment variable;
 unauthenticated video materialization can hit Hugging Face API rate limits and
-will be skipped by the smoke test.
+will be skipped by the smoke test. Set `REAL_DATASET_REQUIRE_VIDEOS=1` or the
+workflow's `require_videos` input when video materialization must be a hard
+requirement instead of an environment-dependent skip.
 
 ## Environment
 

@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from apps.api.schemas.datasets import DatasetOpenRequest
 from apps.api.schemas.episodes import EpisodeDetail
@@ -25,11 +26,15 @@ class RealDatasetExportSmokeTest(unittest.TestCase):
         dataset_name = os.environ.get("REAL_DATASET_NAME", "real-export-smoke")
         episode_limit = _env_int("REAL_DATASET_EPISODE_LIMIT", default=1, minimum=1, maximum=8)
         export_videos = _env_bool("REAL_DATASET_EXPORT_VIDEOS", default=False)
-        if export_videos and dataset_uri.startswith("hf://") and not _has_hf_token():
-            self.skipTest(
+        require_videos = _env_bool("REAL_DATASET_REQUIRE_VIDEOS", default=False)
+        if _missing_hf_video_token(dataset_uri, export_videos):
+            message = (
                 "HF_TOKEN is required for video materialization from hf:// Lance datasets "
                 "to avoid Hugging Face API rate limits."
             )
+            if require_videos:
+                self.fail(message)
+            self.skipTest(message)
 
         dataset_store = LanceDatasetStore()
         record = dataset_store.open_dataset(DatasetOpenRequest(uri=dataset_uri, name=dataset_name))
@@ -143,6 +148,10 @@ def _has_hf_token() -> bool:
     )
 
 
+def _missing_hf_video_token(dataset_uri: str, export_videos: bool) -> bool:
+    return export_videos and dataset_uri.startswith("hf://") and not _has_hf_token()
+
+
 def _get_video_blob_or_skip(
     test_case: unittest.TestCase,
     dataset_store: LanceDatasetStore,
@@ -160,6 +169,41 @@ def _get_video_blob_or_skip(
                 "Hugging Face rate-limited video materialization; set HF_TOKEN and rerun."
             )
         raise
+
+
+class RealDatasetSmokeConfigTest(unittest.TestCase):
+    def test_hf_video_materialization_detects_missing_token(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "HF_TOKEN": "",
+                "HUGGINGFACE_HUB_TOKEN": "",
+                "HUGGING_FACE_HUB_TOKEN": "",
+            },
+            clear=False,
+        ):
+            self.assertTrue(
+                _missing_hf_video_token(
+                    "hf://datasets/lance-format/lerobot-xvla-soft-fold/data",
+                    export_videos=True,
+                )
+            )
+
+    def test_hf_video_materialization_allows_token_or_no_video_export(self) -> None:
+        with patch.dict(os.environ, {"HF_TOKEN": "token"}, clear=False):
+            self.assertFalse(
+                _missing_hf_video_token(
+                    "hf://datasets/lance-format/lerobot-xvla-soft-fold/data",
+                    export_videos=True,
+                )
+            )
+        with patch.dict(os.environ, {"HF_TOKEN": ""}, clear=False):
+            self.assertFalse(
+                _missing_hf_video_token(
+                    "hf://datasets/lance-format/lerobot-xvla-soft-fold/data",
+                    export_videos=False,
+                )
+            )
 
 
 if __name__ == "__main__":

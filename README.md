@@ -146,7 +146,9 @@ Known MVP gaps:
   the tiny no-video and video-backed loader fixtures.
 - Native Hugging Face Dataset export is frame-level and optional-dependency
   gated; large real-dataset training compatibility still needs dedicated
-  end-to-end smoke runs with video materialization and larger subsets.
+  end-to-end smoke runs with video materialization and larger subsets. The
+  real-dataset smoke workflow can run in strict video mode with
+  `require_videos=true` once the repository has an `HF_TOKEN` secret.
 - Lance subset export requires optional `pyarrow` and `lance` dependencies and
   fails clearly when they are missing.
 
