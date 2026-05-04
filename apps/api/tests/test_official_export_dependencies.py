@@ -86,8 +86,8 @@ class OfficialExportDependencyTest(unittest.TestCase):
 
             self.assertTrue(validation["metadata_ok"])
             self.assertTrue(validation["official_loader"]["available"])
-            self.assertTrue(validation["official_loader"]["ok"])
-            self.assertTrue(validation["lerobot_loadable"])
+            self.assertTrue(validation["official_loader"]["ok"], validation["official_loader"])
+            self.assertTrue(validation["lerobot_loadable"], validation)
             self.assertEqual(validation["official_loader"]["length"], 2)
 
     @unittest.skipIf(importlib.util.find_spec("cv2") is None, "opencv is not installed")
@@ -131,8 +131,8 @@ class OfficialExportDependencyTest(unittest.TestCase):
             self.assertTrue(video_status["readable"])
             self.assertEqual(video_status["frame_count"], 2)
             self.assertTrue(validation["official_loader"]["available"])
-            self.assertTrue(validation["official_loader"]["ok"])
-            self.assertTrue(validation["lerobot_loadable"])
+            self.assertTrue(validation["official_loader"]["ok"], validation["official_loader"])
+            self.assertTrue(validation["lerobot_loadable"], validation)
             self.assertEqual(validation["official_loader"]["length"], 2)
 
 def _make_tiny_mp4(*, width: int, height: int, fps: float, frame_count: int) -> bytes:
