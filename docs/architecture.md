@@ -109,8 +109,9 @@ Implemented now:
 - Rerun `.rrd` cache generation for state/action scalar timelines, optional
   camera video assets, deterministic cache keys, and web viewer embedding
   through `@rerun-io/web-viewer-react`.
-- Metadata-oriented LeRobot v3 export manifest, validation report, and version
-  lineage, including optional official LeRobotDataset loader validation.
+- LeRobot v3 export manifest, validation report, frame JSONL, available MP4
+  artifacts, per-frame video references, and version lineage, including
+  optional official LeRobotDataset loader validation.
 - Lance subset export for selected episodes when optional `pyarrow` and `lance`
   dependencies are installed.
 - JSONL caption export and VLA-style JSONL trajectory export.

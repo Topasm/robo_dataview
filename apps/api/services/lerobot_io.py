@@ -70,17 +70,18 @@ def write_lerobot_v3_snapshot(
         episode.episode_index: local_index
         for local_index, episode in enumerate(episodes)
     }
-    frame_rows = _frame_rows(
-        episodes,
-        timeseries_by_episode or {},
-        episode_index_by_source=episode_index_by_source,
-        task_index_by_episode=task_index_by_episode,
-    )
     video_rows = _write_video_blobs(
         root,
         episodes,
         video_blobs_by_episode or {},
         episode_index_by_source=episode_index_by_source,
+    )
+    frame_rows = _frame_rows(
+        episodes,
+        timeseries_by_episode or {},
+        video_rows=video_rows,
+        episode_index_by_source=episode_index_by_source,
+        task_index_by_episode=task_index_by_episode,
     )
     episode_rows = _episode_rows(
         episodes,
@@ -323,6 +324,8 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         missing_videos = [row["video_file"] for row in video_rows if not (root / row["video_file"]).exists()]
         if missing_videos:
             errors.append(f"video index references missing files: {missing_videos[:3]}")
+    if data_rows and video_rows and not _frame_rows_have_video_references(data_rows, video_rows, root):
+        errors.append("frame rows must include valid video feature references")
 
     frame_indices_ok = _frame_rows_have_official_indices(data_rows) if data_rows else True
     local_loadable = bool(
@@ -336,6 +339,7 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         and _episode_rows_have_tasks(episode_rows)
         and _episode_rows_have_video_shard_indices(episode_rows, video_rows)
         and _episode_rows_have_video_timestamps(episode_rows, video_rows)
+        and _frame_rows_have_video_references(data_rows, video_rows, root)
     )
     official_loader = _validate_with_official_lerobot_loader(root, info)
     if official_loader["available"]:
@@ -388,6 +392,39 @@ def _episode_rows_have_tasks(episode_rows: list[dict[str, Any]]) -> bool:
 
 def _frame_rows_have_official_indices(data_rows: list[dict[str, Any]]) -> bool:
     return all(int(row.get("index", -1)) == index for index, row in enumerate(data_rows))
+
+
+def _frame_rows_have_video_references(
+    data_rows: list[dict[str, Any]],
+    video_rows: list[dict[str, Any]],
+    root: Path,
+) -> bool:
+    video_rows_by_episode: dict[int, list[dict[str, Any]]] = {}
+    for row in video_rows:
+        if row.get("episode_index") is None or not row.get("video_key"):
+            continue
+        video_rows_by_episode.setdefault(int(row["episode_index"]), []).append(row)
+    if not video_rows_by_episode:
+        return True
+
+    for frame in data_rows:
+        episode_index = frame.get("episode_index")
+        if episode_index is None:
+            return False
+        for video in video_rows_by_episode.get(int(episode_index), []):
+            video_key = str(video["video_key"])
+            reference = frame.get(video_key)
+            if not isinstance(reference, dict):
+                return False
+            path = reference.get("path")
+            timestamp = reference.get("timestamp")
+            if not isinstance(path, str) or not path:
+                return False
+            if not (root / path).exists():
+                return False
+            if not isinstance(timestamp, (int, float)):
+                return False
+    return True
 
 
 def _episode_rows_have_video_shard_indices(
@@ -515,6 +552,8 @@ def _episode_rows(
         row = {
             "episode_index": local_episode_index,
             "source_episode_index": episode.episode_index,
+            "meta/episodes/chunk_index": 0,
+            "meta/episodes/file_index": 0,
             "tasks": [task],
             "task_index": local_task_index,
             "source_task_index": episode.task_index,
@@ -574,12 +613,16 @@ def _data_index_rows(episode_rows: list[dict[str, Any]]) -> list[dict[str, Any]]
 def _frame_rows(
     episodes: list[EpisodeDetail],
     timeseries_by_episode: dict[int, dict[str, Any]],
+    video_rows: list[dict[str, Any]],
     *,
     episode_index_by_source: dict[int, int],
     task_index_by_episode: dict[int, int],
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     dataset_index = 0
+    video_rows_by_episode: dict[int, list[dict[str, Any]]] = {}
+    for row in video_rows:
+        video_rows_by_episode.setdefault(int(row["episode_index"]), []).append(row)
     for episode in episodes:
         local_episode_index = episode_index_by_source[episode.episode_index]
         local_task_index = task_index_by_episode[episode.episode_index]
@@ -592,21 +635,36 @@ def _frame_rows(
         frame_count = max(len(timestamps), len(states), len(actions), episode.length or 0)
         fps = episode.fps or 20.0
         for frame_index in range(frame_count):
-            rows.append(
-                {
-                    "index": dataset_index,
-                    "episode_index": local_episode_index,
-                    "source_episode_index": episode.episode_index,
-                    "frame_index": frame_index,
-                    "timestamp": _timestamp_at(timestamps, frame_index, fps),
-                    "task_index": local_task_index,
-                    "source_task_index": episode.task_index,
-                    "observation.state": _numeric_list_at(states, frame_index),
-                    "action": _numeric_list_at(actions, frame_index),
-                }
-            )
+            timestamp = _timestamp_at(timestamps, frame_index, fps)
+            row = {
+                "index": dataset_index,
+                "episode_index": local_episode_index,
+                "source_episode_index": episode.episode_index,
+                "frame_index": frame_index,
+                "timestamp": timestamp,
+                "task_index": local_task_index,
+                "source_task_index": episode.task_index,
+                "observation.state": _numeric_list_at(states, frame_index),
+                "action": _numeric_list_at(actions, frame_index),
+            }
+            row.update(_video_frame_references(video_rows_by_episode.get(local_episode_index, []), timestamp))
+            rows.append(row)
             dataset_index += 1
     return rows
+
+
+def _video_frame_references(
+    video_rows: list[dict[str, Any]],
+    timestamp: float,
+) -> dict[str, dict[str, Any]]:
+    return {
+        str(row["video_key"]): {
+            "path": str(row["video_file"]),
+            "timestamp": timestamp,
+        }
+        for row in video_rows
+        if row.get("video_key") and row.get("video_file")
+    }
 
 
 def _write_video_blobs(

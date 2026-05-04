@@ -317,7 +317,20 @@ mean/std/min/max statistics for exported numeric frame features. Frame rows
 include LeRobot's global `index` column in addition to compact local
 `episode_index`, `frame_index`, `timestamp`, compact local `task_index`,
 `source_episode_index`, `source_task_index`, `observation.state`, and `action`.
-Episode metadata includes `tasks`, `dataset_from_index`, `dataset_to_index`,
+When camera MP4 artifacts are present, each frame row also includes a LeRobot
+video-frame reference under the exported video feature key:
+
+```json
+{
+  "cam_high": {
+    "path": "videos/cam_high/chunk-000/file-000.mp4",
+    "timestamp": 0.05
+  }
+}
+```
+
+Episode metadata includes `meta/episodes/chunk_index`,
+`meta/episodes/file_index`, `tasks`, `dataset_from_index`, `dataset_to_index`,
 `data/chunk_index`, `data/file_index`, and per-camera
 `videos/<video_key>/chunk_index`, `videos/<video_key>/file_index`,
 `videos/<video_key>/from_timestamp`, and `videos/<video_key>/to_timestamp`
@@ -325,7 +338,8 @@ entries so the official `data_path` and `video_path` templates can resolve
 copied artifacts.
 `validation.json` contains both the local loadability heuristic and an
 `official_loader` result. The local heuristic requires Parquet task, episode,
-and frame data plus LeRobot offset and video timestamp metadata. When the
+and frame data plus LeRobot offset metadata, video timestamp metadata, and
+valid per-frame video references when video artifacts are present. When the
 optional `lerobot` package is installed, validation attempts
 `LeRobotDataset(repo_id, root=<export_root>)` and records success, dataset
 length, or the exact exception.

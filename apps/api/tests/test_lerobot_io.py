@@ -132,6 +132,14 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertEqual({row["source_episode_index"] for row in data_rows}, {0})
             self.assertEqual({row["task_index"] for row in data_rows}, {0})
             self.assertEqual({row["source_task_index"] for row in data_rows}, {3})
+            self.assertEqual(
+                data_rows[0]["cam_high"],
+                {
+                    "path": "videos/cam_high/chunk-000/file-000.mp4",
+                    "timestamp": 0.0,
+                },
+            )
+            self.assertEqual(data_rows[2]["cam_high"]["timestamp"], 0.1)
             episode_rows = [
                 json.loads(line)
                 for line in (root / "meta/episodes/chunk-000/file-000.jsonl")
@@ -141,6 +149,8 @@ class LeRobotIoTest(unittest.TestCase):
             ]
             self.assertEqual(episode_rows[0]["episode_index"], 0)
             self.assertEqual(episode_rows[0]["source_episode_index"], 0)
+            self.assertEqual(episode_rows[0]["meta/episodes/chunk_index"], 0)
+            self.assertEqual(episode_rows[0]["meta/episodes/file_index"], 0)
             self.assertEqual(episode_rows[0]["tasks"], ["Fold the cloth."])
             self.assertEqual(episode_rows[0]["task_index"], 0)
             self.assertEqual(episode_rows[0]["source_task_index"], 3)
@@ -305,6 +315,65 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertTrue(validation["present"]["data_parquet"])
             self.assertTrue(validation["metadata_ok"])
             self.assertFalse(validation["local_lerobot_loadable_heuristic"])
+
+    def test_validate_lerobot_snapshot_requires_frame_video_references_for_local_loadable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir)
+            artifact = write_lerobot_v3_snapshot(
+                export_dir,
+                dataset_id="sample-xvla-soft-fold",
+                episodes=[
+                    EpisodeDetail(
+                        dataset_id="sample-xvla-soft-fold",
+                        episode_index=0,
+                        task_index=3,
+                        length=1,
+                        fps=20.0,
+                        camera_names=["cam_high"],
+                    )
+                ],
+                annotations_by_episode={},
+                version_description="unit test",
+                timeseries_by_episode={
+                    0: {
+                        "timestamps": [0.0],
+                        "states": [[0.0, 0.0]],
+                        "actions": [[1.0, 1.0]],
+                    }
+                },
+                video_blobs_by_episode={0: {"cam_high": b"fake mp4"}},
+            )
+            root = Path(artifact["root"])
+            rows = [
+                json.loads(line)
+                for line in (root / "data/chunk-000/file-000.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+                if line.strip()
+            ]
+            rows[0].pop("cam_high")
+            (root / "data/chunk-000/file-000.jsonl").write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+            (root / "meta/tasks.parquet").write_text("placeholder", encoding="utf-8")
+            (root / "meta/episodes/chunk-000/file-000.parquet").write_text(
+                "placeholder",
+                encoding="utf-8",
+            )
+            (root / "data/chunk-000/file-000.parquet").write_text(
+                "placeholder",
+                encoding="utf-8",
+            )
+
+            validation = validate_lerobot_v3_snapshot(root)
+
+            self.assertFalse(validation["metadata_ok"])
+            self.assertFalse(validation["local_lerobot_loadable_heuristic"])
+            self.assertIn(
+                "frame rows must include valid video feature references",
+                validation["errors"],
+            )
 
 
 class _FakeLeRobotDataset:

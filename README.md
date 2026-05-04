@@ -59,6 +59,7 @@ python3 -m pip install -e ".[lance]"      # Lance/LanceDB + PyArrow mirrors
 python3 -m pip install -e ".[rerun]"      # Rerun .rrd generation
 python3 -m pip install -e ".[video]"      # OpenCV keyframe/preview extraction
 python3 -m pip install -e ".[lerobot]"    # official LeRobotDataset validation
+python3 -m pip install -e ".[export]"     # training-ready LeRobot Parquet/MP4 export
 ```
 
 Run API and web together:
@@ -115,9 +116,10 @@ Known MVP gaps:
   inference is available only when configured with environment variables.
 - Text semantic search and visual image embedding generation are separate paths.
   Cross-modal text-to-image search requires a compatible CLIP/SigLIP route.
-- LeRobot export writes frame JSONL and available MP4 artifacts; training-ready
-  Parquet shards still require optional `pyarrow`/LeRobot dependencies. When
-  `lerobot` is installed, validation records the official loader result.
+- LeRobot export writes frame JSONL, available MP4 artifacts, and per-frame
+  video references; training-ready Parquet shards require the optional
+  `export` dependencies. When `lerobot` is installed, validation records the
+  official loader result.
 - Lance subset export requires optional `pyarrow` and `lance` dependencies and
   fails clearly when they are missing.
 

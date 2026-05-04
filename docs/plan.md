@@ -64,7 +64,8 @@ Working:
 - Frame browser panel backed by `GET /frames` for the selected episode window.
 - Annotation-backed selected-frame exact-label mutation.
 - Export endpoint that writes a manifest and LeRobot v3-oriented snapshot with
-  metadata, frame JSONL, optional Parquet, and available MP4 artifacts.
+  metadata, frame JSONL, optional Parquet, available MP4 artifacts, and
+  per-frame video references.
 - LeRobot v3 export metadata includes official-style compact episode/task
   indices, global frame `index`, episode `dataset_from_index` /
   `dataset_to_index`, `tasks`, source-index provenance, and per-camera video
@@ -91,8 +92,9 @@ Known limits:
 - Text semantic search and visual image embedding generation are separate paths;
   cross-modal text-to-image search still requires a compatible visual/text model
   route.
-- Export writes frame JSONL and available MP4 artifacts; training-ready Parquet
-  shards require optional `pyarrow`/LeRobot dependencies.
+- Export writes frame JSONL, available MP4 artifacts, and per-frame video
+  references; training-ready Parquet shards require optional `export`
+  dependencies.
 - Video ranges are sliced after loading the full episode blob; direct Lance blob
   range streaming is not implemented.
 - Remote object-store/HF video path streaming and SHA256 video validation are not
