@@ -51,6 +51,7 @@ export function ExportStrip({ episodeIndex, exportRecord, onCreateExport, split 
               <span>
                 loader {loaderStatus(validation.official_loader)} / loadable{" "}
                 {validation.lerobot_loadable ? "yes" : "no"}
+                {validation.loadability_basis ? ` (${validation.loadability_basis})` : ""}
               </span>
             ) : null}
             {lerobotArtifact.materialized ? (

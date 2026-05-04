@@ -226,6 +226,8 @@ class LeRobotIoTest(unittest.TestCase):
 
             self.assertTrue(validation["official_loader"]["available"])
             self.assertTrue(validation["official_loader"]["ok"])
+            self.assertTrue(validation["lerobot_loadable"])
+            self.assertEqual(validation["loadability_basis"], "official_loader")
             self.assertEqual(validation["official_loader"]["length"], 7)
             self.assertEqual(validation["official_loader"]["repo_id"], "local/sample-xvla-soft-fold")
 
@@ -253,6 +255,8 @@ class LeRobotIoTest(unittest.TestCase):
 
             self.assertTrue(validation["official_loader"]["available"])
             self.assertFalse(validation["official_loader"]["ok"])
+            self.assertFalse(validation["lerobot_loadable"])
+            self.assertEqual(validation["loadability_basis"], "official_loader")
             self.assertIn("RuntimeError: cannot load", validation["official_loader"]["error"])
 
     def test_validate_lerobot_snapshot_accepts_complete_local_shard_metadata(self) -> None:
@@ -296,7 +300,15 @@ class LeRobotIoTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with patch.dict(sys.modules, _fake_pyarrow_modules()):
+            with patch.dict(
+                sys.modules,
+                {
+                    **_fake_pyarrow_modules(),
+                    "lerobot": None,
+                    "lerobot.datasets": None,
+                    "lerobot.datasets.lerobot_dataset": None,
+                },
+            ):
                 validation = validate_lerobot_v3_snapshot(root)
 
             self.assertTrue(validation["present"]["data_parquet"])
@@ -305,6 +317,8 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertTrue(validation["parquet_readability"]["data_parquet"]["readable"])
             self.assertTrue(validation["metadata_ok"])
             self.assertTrue(validation["local_lerobot_loadable_heuristic"])
+            self.assertFalse(validation["lerobot_loadable"])
+            self.assertEqual(validation["loadability_basis"], "local_heuristic_unverified")
 
     def test_validate_lerobot_snapshot_rejects_unreadable_parquet(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

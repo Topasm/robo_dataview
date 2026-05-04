@@ -344,7 +344,10 @@ video timestamp metadata, probable MP4 video artifacts, and valid per-frame
 video references when video artifacts are present. When the optional `lerobot`
 package is installed, validation attempts
 `LeRobotDataset(repo_id, root=<export_root>)` and records success, dataset
-length, or the exact exception.
+length, or the exact exception. `lerobot_loadable` is true only for a successful
+official loader check; a complete local heuristic without the official loader is
+reported through `local_lerobot_loadable_heuristic` and
+`loadability_basis=local_heuristic_unverified`.
 
 ## Lance subset export
 

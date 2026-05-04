@@ -185,6 +185,7 @@ export type ExportArtifacts = {
     validation?: {
       metadata_ok?: boolean;
       lerobot_loadable?: boolean;
+      loadability_basis?: string;
       local_lerobot_loadable_heuristic?: boolean;
       official_loader?: {
         checked?: boolean;

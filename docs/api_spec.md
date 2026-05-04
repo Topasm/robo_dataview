@@ -379,6 +379,10 @@ indices; original dataset indices are preserved as `source_episode_index` and
 `dataset_to_index`, data shard indices, and per-camera video shard/timestamp
 fields. When the optional `lerobot` package is installed, the official loader
 result records success, dataset length, or the exact exception.
+`lerobot_loadable=true` means the official loader was available and succeeded.
+When the official loader is unavailable, `local_lerobot_loadable_heuristic` can
+still describe whether the local artifact shape appears complete, and
+`loadability_basis` records that this is not an official load result.
 
 For `format=lance`, the response contains `artifacts.lance_subset` when optional
 `pyarrow` and `lance` dependencies are installed. The subset contains

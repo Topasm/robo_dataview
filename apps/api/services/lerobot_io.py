@@ -256,6 +256,7 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         return {
             "metadata_ok": False,
             "lerobot_loadable": False,
+            "loadability_basis": "missing_info",
             "local_lerobot_loadable_heuristic": False,
             "official_loader": _unavailable_official_loader("missing meta/info.json"),
             "materialization_status": "missing_info",
@@ -362,12 +363,15 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
     official_loader = _validate_with_official_lerobot_loader(root, info)
     if official_loader["available"]:
         lerobot_loadable = bool(not errors and official_loader["ok"])
+        loadability_basis = "official_loader"
     else:
-        lerobot_loadable = local_loadable
+        lerobot_loadable = False
+        loadability_basis = "local_heuristic_unverified" if local_loadable else "not_loadable"
 
     return {
         "metadata_ok": not errors,
         "lerobot_loadable": lerobot_loadable,
+        "loadability_basis": loadability_basis,
         "local_lerobot_loadable_heuristic": local_loadable,
         "official_loader": official_loader,
         "materialization_status": materialization_status,
