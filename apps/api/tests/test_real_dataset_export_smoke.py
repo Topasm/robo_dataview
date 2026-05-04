@@ -25,6 +25,11 @@ class RealDatasetExportSmokeTest(unittest.TestCase):
         dataset_name = os.environ.get("REAL_DATASET_NAME", "real-export-smoke")
         episode_limit = _env_int("REAL_DATASET_EPISODE_LIMIT", default=1, minimum=1, maximum=8)
         export_videos = _env_bool("REAL_DATASET_EXPORT_VIDEOS", default=False)
+        if export_videos and dataset_uri.startswith("hf://") and not _has_hf_token():
+            self.skipTest(
+                "HF_TOKEN is required for video materialization from hf:// Lance datasets "
+                "to avoid Hugging Face API rate limits."
+            )
 
         dataset_store = LanceDatasetStore()
         record = dataset_store.open_dataset(DatasetOpenRequest(uri=dataset_uri, name=dataset_name))
@@ -56,10 +61,12 @@ class RealDatasetExportSmokeTest(unittest.TestCase):
                 video_blobs = {
                     camera: blob
                     for camera in episode.camera_names
-                    if (blob := dataset_store.get_video_blob(
-                        record.dataset_id,
-                        episode.episode_index,
-                        camera,
+                    if (blob := _get_video_blob_or_skip(
+                        self,
+                        dataset_store,
+                        dataset_id=record.dataset_id,
+                        episode_index=episode.episode_index,
+                        camera=camera,
                     ))
                     is not None
                 }
@@ -127,6 +134,32 @@ def _env_bool(name: str, *, default: bool) -> bool:
     if raw is None:
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _has_hf_token() -> bool:
+    return any(
+        os.environ.get(name)
+        for name in ("HF_TOKEN", "HUGGINGFACE_HUB_TOKEN", "HUGGING_FACE_HUB_TOKEN")
+    )
+
+
+def _get_video_blob_or_skip(
+    test_case: unittest.TestCase,
+    dataset_store: LanceDatasetStore,
+    *,
+    dataset_id: str,
+    episode_index: int,
+    camera: str,
+) -> bytes | None:
+    try:
+        return dataset_store.get_video_blob(dataset_id, episode_index, camera)
+    except OSError as exc:
+        message = str(exc)
+        if "rate limit" in message.lower() or "status: 429" in message:
+            test_case.skipTest(
+                "Hugging Face rate-limited video materialization; set HF_TOKEN and rerun."
+            )
+        raise
 
 
 if __name__ == "__main__":

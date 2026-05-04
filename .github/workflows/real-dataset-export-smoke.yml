@@ -34,4 +34,7 @@ jobs:
           REAL_DATASET_URI: ${{ inputs.dataset_uri }}
           REAL_DATASET_EPISODE_LIMIT: ${{ inputs.episode_limit }}
           REAL_DATASET_EXPORT_VIDEOS: ${{ inputs.export_videos }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HUGGINGFACE_HUB_TOKEN: ${{ secrets.HF_TOKEN }}
+          HUGGING_FACE_HUB_TOKEN: ${{ secrets.HF_TOKEN }}
         run: python3 -m pytest apps/api/tests/test_real_dataset_export_smoke.py -q

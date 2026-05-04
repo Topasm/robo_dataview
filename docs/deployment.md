@@ -70,7 +70,10 @@ python3 -m pytest apps/api/tests/test_real_dataset_export_smoke.py -q
 ```
 
 Set `REAL_DATASET_EXPORT_VIDEOS=1` only when the runner has enough bandwidth,
-disk, and time to fetch and validate the selected episodes' MP4 payloads.
+disk, and time to fetch and validate the selected episodes' MP4 payloads. For
+`hf://` datasets, provide an `HF_TOKEN` secret or local environment variable;
+unauthenticated video materialization can hit Hugging Face API rate limits and
+will be skipped by the smoke test.
 
 ## Environment
 
