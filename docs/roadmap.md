@@ -254,6 +254,8 @@ Implemented:
 - Data Parquet writing uses Hugging Face Dataset feature conversion when
   optional `datasets` is installed, excluding video feature columns from the
   tabular shard.
+- Video feature metadata records `[height, width, channel]` shape and
+  `video_info`, with MP4 `tkhd` dimensions captured when available.
 - Export validation report.
 - Optional official LeRobotDataset loader validation.
 - Lance subset export for selected episodes when optional Lance dependencies are

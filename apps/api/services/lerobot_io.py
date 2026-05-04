@@ -445,6 +445,51 @@ def _is_probable_mp4(path: Path) -> bool:
     return len(header) >= 12 and header[4:8] == b"ftyp"
 
 
+def _mp4_dimensions(blob: bytes) -> tuple[int | None, int | None]:
+    def walk(start: int, end: int) -> tuple[int | None, int | None]:
+        position = start
+        while position + 8 <= end:
+            size = int.from_bytes(blob[position : position + 4], "big")
+            atom_type = blob[position + 4 : position + 8]
+            header_size = 8
+            if size == 1 and position + 16 <= end:
+                size = int.from_bytes(blob[position + 8 : position + 16], "big")
+                header_size = 16
+            elif size == 0:
+                size = end - position
+            if size < header_size or position + size > end:
+                break
+            payload_start = position + header_size
+            payload_end = position + size
+            if atom_type == b"tkhd":
+                dimensions = _tkhd_dimensions(blob[payload_start:payload_end])
+                if dimensions != (None, None):
+                    return dimensions
+            if atom_type in {b"moov", b"trak", b"mdia", b"minf", b"stbl"}:
+                dimensions = walk(payload_start, payload_end)
+                if dimensions != (None, None):
+                    return dimensions
+            position += size
+        return None, None
+
+    return walk(0, len(blob))
+
+
+def _tkhd_dimensions(payload: bytes) -> tuple[int | None, int | None]:
+    if len(payload) < 4:
+        return None, None
+    version = payload[0]
+    width_offset = 76 if version == 0 else 88
+    height_offset = width_offset + 4
+    if len(payload) < height_offset + 4:
+        return None, None
+    width = int.from_bytes(payload[width_offset : width_offset + 4], "big") >> 16
+    height = int.from_bytes(payload[height_offset : height_offset + 4], "big") >> 16
+    if width <= 0 or height <= 0:
+        return None, None
+    return width, height
+
+
 def _parquet_readability(
     paths: dict[str, Path],
     present: dict[str, bool],
@@ -844,6 +889,7 @@ def _write_video_blobs(
         for camera, blob in sorted(camera_blobs.items()):
             if not blob:
                 continue
+            width, height = _mp4_dimensions(blob)
             camera_dir = root / "videos" / _safe_path_name(camera) / "chunk-000"
             camera_dir.mkdir(parents=True, exist_ok=True)
             relative_path = (
@@ -864,6 +910,9 @@ def _write_video_blobs(
                     "file_index": local_episode_index,
                     "from_timestamp": 0.0,
                     "to_timestamp": _episode_duration_seconds(episode),
+                    "fps": episode.fps,
+                    "width_pixels": width,
+                    "height_pixels": height,
                     "video_file": relative_path.as_posix(),
                     "file_size_bytes": len(blob),
                 }
@@ -1005,10 +1054,21 @@ def _feature_schema(
             "names": None,
         }
     for video_key in sorted({str(row["video_key"]) for row in video_rows if row.get("video_key")}):
+        video_row = next((row for row in video_rows if str(row.get("video_key")) == video_key), {})
+        height = int(video_row.get("height_pixels") or 0)
+        width = int(video_row.get("width_pixels") or 0)
+        fps = video_row.get("fps")
         features[video_key] = {
             "dtype": "video",
-            "shape": [3, 0, 0],
-            "names": ["channel", "height", "width"],
+            "shape": [height, width, 3],
+            "names": ["height", "width", "channel"],
+            "video_info": {
+                "video.fps": fps,
+                "video.height": height or None,
+                "video.width": width or None,
+                "video.channels": 3,
+                "has_audio": False,
+            },
         }
     return features
 

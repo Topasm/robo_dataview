@@ -19,6 +19,21 @@ from apps.api.services.lerobot_io import (
 FAKE_MP4_BYTES = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom"
 
 
+def _atom(atom_type: bytes, payload: bytes) -> bytes:
+    return (len(payload) + 8).to_bytes(4, "big") + atom_type + payload
+
+
+def _fake_mp4_with_tkhd(width: int, height: int) -> bytes:
+    ftyp = _atom(b"ftyp", b"mp42\x00\x00\x00\x00mp42isom")
+    tkhd_payload = (
+        b"\x00\x00\x00\x07"
+        + b"\x00" * 72
+        + (width << 16).to_bytes(4, "big")
+        + (height << 16).to_bytes(4, "big")
+    )
+    return ftyp + _atom(b"moov", _atom(b"trak", _atom(b"tkhd", tkhd_payload)))
+
+
 class LeRobotIoTest(unittest.TestCase):
     def test_write_and_read_lerobot_v3_metadata_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -119,6 +134,9 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertEqual(info["features"]["timestamp"]["shape"], [1])
             self.assertEqual(info["features"]["index"]["shape"], [1])
             self.assertEqual(info["features"]["cam_high"]["dtype"], "video")
+            self.assertEqual(info["features"]["cam_high"]["shape"], [0, 0, 3])
+            self.assertEqual(info["features"]["cam_high"]["names"], ["height", "width", "channel"])
+            self.assertEqual(info["features"]["cam_high"]["video_info"]["video.fps"], 20.0)
             self.assertEqual(info["total_frames"], 3)
             stats = json.loads((root / "meta/stats.json").read_text(encoding="utf-8"))
             self.assertEqual(stats["observation.state"]["min"], [0.0, 0.0])
@@ -167,6 +185,47 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertEqual(episode_rows[0]["videos/cam_high/file_index"], 0)
             self.assertEqual(episode_rows[0]["videos/cam_high/from_timestamp"], 0.0)
             self.assertEqual(episode_rows[0]["videos/cam_high/to_timestamp"], 0.15)
+
+    def test_lerobot_video_feature_schema_uses_mp4_dimensions_when_available(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir)
+            artifact = write_lerobot_v3_snapshot(
+                export_dir,
+                dataset_id="sample-xvla-soft-fold",
+                episodes=[
+                    EpisodeDetail(
+                        dataset_id="sample-xvla-soft-fold",
+                        episode_index=0,
+                        task_index=3,
+                        length=1,
+                        fps=20.0,
+                        camera_names=["cam_high"],
+                    )
+                ],
+                annotations_by_episode={},
+                version_description="unit test",
+                timeseries_by_episode={
+                    0: {
+                        "timestamps": [0.0],
+                        "states": [[0.0]],
+                        "actions": [[1.0]],
+                    }
+                },
+                video_blobs_by_episode={0: {"cam_high": _fake_mp4_with_tkhd(640, 480)}},
+            )
+            root = Path(artifact["root"])
+            info = json.loads((root / "meta/info.json").read_text(encoding="utf-8"))
+            video_rows = [
+                json.loads(line)
+                for line in (root / "videos/video_index.jsonl").read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+
+            self.assertEqual(info["features"]["cam_high"]["shape"], [480, 640, 3])
+            self.assertEqual(info["features"]["cam_high"]["video_info"]["video.height"], 480)
+            self.assertEqual(info["features"]["cam_high"]["video_info"]["video.width"], 640)
+            self.assertEqual(video_rows[0]["height_pixels"], 480)
+            self.assertEqual(video_rows[0]["width_pixels"], 640)
 
     def test_lerobot_snapshot_offsets_follow_materialized_frame_rows(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

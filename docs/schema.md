@@ -337,6 +337,10 @@ features are resolved from episode metadata and skipped in the tabular data
 features. When the optional `datasets` package is installed, the exporter uses
 that Hugging Face Dataset feature schema path before writing the data Parquet
 shard; otherwise it falls back to direct PyArrow rows.
+Video features use `[height, width, channel]` shape and `video_info` metadata.
+When MP4 `tkhd` dimensions can be read from the blob, the exporter writes those
+dimensions to both `meta/info.json` and `videos/video_index.jsonl`; otherwise
+height/width are left unknown.
 
 Episode metadata includes `meta/episodes/chunk_index`,
 `meta/episodes/file_index`, `tasks`, `dataset_from_index`, `dataset_to_index`,
