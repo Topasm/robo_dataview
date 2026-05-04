@@ -334,6 +334,13 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         missing_videos = [row["video_file"] for row in video_rows if not (root / row["video_file"]).exists()]
         if missing_videos:
             errors.append(f"video index references missing files: {missing_videos[:3]}")
+        invalid_videos = [
+            row["video_file"]
+            for row in video_rows
+            if (root / row["video_file"]).exists() and not _is_probable_mp4(root / row["video_file"])
+        ]
+        if invalid_videos:
+            errors.append(f"video index references invalid MP4 files: {invalid_videos[:3]}")
     if data_rows and video_rows and not _frame_rows_have_video_references(data_rows, video_rows, root):
         errors.append("frame rows must include valid video feature references")
 
@@ -381,6 +388,14 @@ def _required_parquet_files_are_readable(parquet_readability: dict[str, dict[str
         parquet_readability.get(name, {}).get("readable") is True
         for name in ("tasks_parquet", "episodes_parquet", "data_parquet")
     )
+
+
+def _is_probable_mp4(path: Path) -> bool:
+    try:
+        header = path.read_bytes()[:16]
+    except OSError:
+        return False
+    return len(header) >= 12 and header[4:8] == b"ftyp"
 
 
 def _parquet_readability(

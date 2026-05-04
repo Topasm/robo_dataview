@@ -16,6 +16,9 @@ from apps.api.services.lerobot_io import (
 )
 
 
+FAKE_MP4_BYTES = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom"
+
+
 class LeRobotIoTest(unittest.TestCase):
     def test_write_and_read_lerobot_v3_metadata_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -97,7 +100,7 @@ class LeRobotIoTest(unittest.TestCase):
                         "actions": [[0.0, 1.0], [0.0, 2.0], [3.0, 4.0]],
                     }
                 },
-                video_blobs_by_episode={0: {"cam high": b"fake mp4"}},
+                video_blobs_by_episode={0: {"cam high": FAKE_MP4_BYTES}},
             )
             root = Path(artifact["root"])
             validation = validate_lerobot_v3_snapshot(root)
@@ -162,6 +165,42 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertEqual(episode_rows[0]["videos/cam_high/file_index"], 0)
             self.assertEqual(episode_rows[0]["videos/cam_high/from_timestamp"], 0.0)
             self.assertEqual(episode_rows[0]["videos/cam_high/to_timestamp"], 0.15)
+
+    def test_validate_lerobot_snapshot_rejects_invalid_mp4_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir)
+            artifact = write_lerobot_v3_snapshot(
+                export_dir,
+                dataset_id="sample-xvla-soft-fold",
+                episodes=[
+                    EpisodeDetail(
+                        dataset_id="sample-xvla-soft-fold",
+                        episode_index=0,
+                        task_index=3,
+                        length=1,
+                        fps=20.0,
+                        camera_names=["cam_high"],
+                    )
+                ],
+                annotations_by_episode={},
+                version_description="unit test",
+                timeseries_by_episode={
+                    0: {
+                        "timestamps": [0.0],
+                        "states": [[0.0, 0.0]],
+                        "actions": [[1.0, 1.0]],
+                    }
+                },
+                video_blobs_by_episode={0: {"cam_high": b"not an mp4"}},
+            )
+
+            validation = validate_lerobot_v3_snapshot(Path(artifact["root"]))
+
+            self.assertFalse(validation["metadata_ok"])
+            self.assertFalse(validation["local_lerobot_loadable_heuristic"])
+            self.assertTrue(
+                any("invalid MP4 files" in error for error in validation["errors"])
+            )
 
     def test_validate_lerobot_snapshot_records_official_loader_success(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -241,7 +280,7 @@ class LeRobotIoTest(unittest.TestCase):
                         "actions": [[1.0, 1.0]],
                     }
                 },
-                video_blobs_by_episode={0: {"cam_high": b"fake mp4"}},
+                video_blobs_by_episode={0: {"cam_high": FAKE_MP4_BYTES}},
             )
             root = Path(artifact["root"])
             (root / "meta/tasks.parquet").write_text(
@@ -292,7 +331,7 @@ class LeRobotIoTest(unittest.TestCase):
                         "actions": [[1.0, 1.0]],
                     }
                 },
-                video_blobs_by_episode={0: {"cam_high": b"fake mp4"}},
+                video_blobs_by_episode={0: {"cam_high": FAKE_MP4_BYTES}},
             )
             root = Path(artifact["root"])
             (root / "meta/tasks.parquet").write_text("placeholder", encoding="utf-8")
@@ -340,7 +379,7 @@ class LeRobotIoTest(unittest.TestCase):
                         "actions": [[1.0, 1.0]],
                     }
                 },
-                video_blobs_by_episode={0: {"cam_high": b"fake mp4"}},
+                video_blobs_by_episode={0: {"cam_high": FAKE_MP4_BYTES}},
             )
             root = Path(artifact["root"])
             episodes_parquet_path = root / "meta/episodes/chunk-000/file-000.parquet"
@@ -393,7 +432,7 @@ class LeRobotIoTest(unittest.TestCase):
                         "actions": [[1.0, 1.0]],
                     }
                 },
-                video_blobs_by_episode={0: {"cam_high": b"fake mp4"}},
+                video_blobs_by_episode={0: {"cam_high": FAKE_MP4_BYTES}},
             )
             root = Path(artifact["root"])
             rows = [
