@@ -50,7 +50,8 @@ The repository has moved past a pure skeleton. The current MVP path can:
    optional Lance dependencies are installed.
 5. Generate Rerun `.rrd` cache files for state/action timeline inspection and
    load them through the Rerun React web viewer.
-6. Run basic filter search and deterministic text-embedding semantic search.
+6. Run basic filter search through a typed builder and deterministic
+   text-embedding semantic search.
 7. Create heuristic VLM-style annotation proposals for review.
 8. Export selected episodes as a metadata-oriented LeRobot v3 snapshot with
    validation and version lineage.

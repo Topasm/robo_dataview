@@ -41,6 +41,7 @@ Working:
 - Annotation CRUD with JSONL persistence and optional Lance mirroring.
 - Segment edit and midpoint split actions in the web UI.
 - Search filter endpoint.
+- Typed filter builder UI for common episode fields.
 - Deterministic text-embedding semantic search endpoint.
 - VLM-label job endpoint with heuristic pending annotation proposals.
 - Rerun session endpoint that generates `.rrd` cache files.
@@ -180,7 +181,7 @@ Definition of done:
 
 - [x] Basic `AND` filter parser.
 - [x] Text-hash semantic search scaffold.
-- [ ] Add filter builder UI with typed fields.
+- [x] Add filter builder UI with typed fields.
 - [ ] Add saved filter presets.
 - [ ] Add full-text search.
 - [ ] Add LanceDB vector index service.

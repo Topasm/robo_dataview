@@ -204,6 +204,7 @@ Current status: partial.
 Implemented:
 
 - Basic `AND` filter syntax.
+- Typed web filter builder for common episode fields.
 - Deterministic text-embedding semantic search over episode text and
   annotations.
 
