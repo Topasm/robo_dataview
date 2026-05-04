@@ -105,8 +105,9 @@ Known limits:
 - File-backed video ranges stream directly from disk. Embedded Lance video blobs
   stream byte ranges directly when Lance exposes a seekable `take_blobs` reader;
   non-seekable blob fallbacks still materialize the MP4 before serving it.
-- Remote object-store/HF video path streaming and SHA256 video validation are not
-  wired yet.
+- Exported LeRobot video indexes include SHA256 digests, and validation rejects
+  materialized MP4 artifacts whose digest does not match the index.
+- Remote object-store/HF video path streaming is not wired yet.
 - Full frame-table browser UX exists for local frame review, but raw
   `frames.lance` table mutation remains annotation-backed rather than rewriting
   source rows.

@@ -142,7 +142,6 @@ Not implemented yet:
   materialization.
 - Remote object-store/HF path byte-range reads. Local file sources and seekable
   Lance `take_blobs` readers stream ranges without loading the full MP4 first.
-- SHA256 video validation.
 
 ## Design Principles
 

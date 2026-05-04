@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 import tempfile
@@ -153,6 +154,18 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertEqual([row["index"] for row in data_rows], [0, 1, 2])
             self.assertEqual({row["episode_index"] for row in data_rows}, {0})
             self.assertEqual({row["source_episode_index"] for row in data_rows}, {0})
+            video_rows = [
+                json.loads(line)
+                for line in (root / "videos/video_index.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+                if line.strip()
+            ]
+            self.assertEqual(video_rows[0]["sha256"], hashlib.sha256(FAKE_MP4_BYTES).hexdigest())
+            video_status = validation["video_readability"]["videos/cam_high/chunk-000/file-000.mp4"]
+            self.assertEqual(video_status["expected_sha256"], video_rows[0]["sha256"])
+            self.assertEqual(video_status["actual_sha256"], video_rows[0]["sha256"])
+            self.assertTrue(video_status["sha256_ok"])
             self.assertEqual({row["task_index"] for row in data_rows}, {0})
             self.assertEqual({row["source_task_index"] for row in data_rows}, {3})
             self.assertEqual(
@@ -266,6 +279,44 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertEqual(readability["width_pixels"], 640)
             self.assertEqual(readability["height_pixels"], 480)
             self.assertEqual(readability["fps"], 20.0)
+
+    def test_validate_lerobot_snapshot_rejects_video_sha256_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact = write_lerobot_v3_snapshot(
+                Path(tmpdir),
+                dataset_id="sample-xvla-soft-fold",
+                episodes=[
+                    EpisodeDetail(
+                        dataset_id="sample-xvla-soft-fold",
+                        episode_index=0,
+                        task_index=3,
+                        length=1,
+                        fps=20.0,
+                        camera_names=["cam_high"],
+                    )
+                ],
+                annotations_by_episode={},
+                version_description="unit test",
+                timeseries_by_episode={
+                    0: {
+                        "timestamps": [0.0],
+                        "states": [[0.0]],
+                        "actions": [[1.0]],
+                    }
+                },
+                video_blobs_by_episode={0: {"cam_high": FAKE_MP4_BYTES}},
+            )
+            root = Path(artifact["root"])
+            video_path = root / "videos/cam_high/chunk-000/file-000.mp4"
+            video_path.write_bytes(FAKE_MP4_BYTES + b"corrupt")
+
+            validation = validate_lerobot_v3_snapshot(root)
+            status = validation["video_readability"]["videos/cam_high/chunk-000/file-000.mp4"]
+
+            self.assertFalse(validation["metadata_ok"])
+            self.assertFalse(status["sha256_ok"])
+            self.assertNotEqual(status["actual_sha256"], status["expected_sha256"])
+            self.assertTrue(any("sha256 does not match" in error for error in validation["errors"]))
 
     def test_lerobot_snapshot_offsets_follow_materialized_frame_rows(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

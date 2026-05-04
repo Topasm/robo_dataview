@@ -137,7 +137,9 @@ LeRobot-style `videos/<video_key>/chunk_index` and
 `videos/<video_key>/file_index` shard references. The fallback reads
 materialized `video_blob` values first, then local path provenance such as
 `relative_path` or `video_file` when the referenced MP4 exists under the local
-dataset root. SHA256 validation is not wired yet.
+dataset root. Exported LeRobot video indexes include SHA256 digests, and
+validation rejects materialized MP4 files whose digest no longer matches the
+video index.
 
 ## annotations.lance
 
@@ -363,8 +365,9 @@ reported through `local_lerobot_loadable_heuristic` and
 that readable Parquet row counts match the exported task metadata, episode
 metadata, and frame index expectations. When OpenCV is installed, validation
 also records `video_readability` decode metadata with frame count, fps,
-width, and height for each exported MP4; decode failures are surfaced as
-warnings unless the MP4 payload itself is structurally invalid.
+width, height, expected SHA256, actual SHA256, and digest match status for each
+exported MP4; decode failures are surfaced as warnings unless the MP4 payload
+itself is structurally invalid, while SHA256 mismatches are validation errors.
 
 ## Lance subset export
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -370,6 +371,8 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
             errors.append(f"video index references invalid MP4 files: {invalid_videos[:3]}")
     video_readability = _video_readability(root, video_rows)
     for status in video_readability.values():
+        if status.get("sha256_ok") is False:
+            errors.append(f"{status.get('video_file')} sha256 does not match video index")
         if not status.get("present"):
             continue
         if status.get("readable") is False:
@@ -456,6 +459,21 @@ def _is_probable_mp4(path: Path) -> bool:
     return len(header) >= 12 and header[4:8] == b"ftyp"
 
 
+def _sha256_bytes(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _file_sha256(path: Path) -> str | None:
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError:
+        return None
+    return digest.hexdigest()
+
+
 def _mp4_dimensions(blob: bytes) -> tuple[int | None, int | None]:
     def walk(start: int, end: int) -> tuple[int | None, int | None]:
         position = start
@@ -512,6 +530,8 @@ def _video_readability(root: Path, video_rows: list[dict[str, Any]]) -> dict[str
 
 
 def _video_file_status(path: Path, video_row: dict[str, Any]) -> dict[str, Any]:
+    expected_sha256 = str(video_row.get("sha256") or "") or None
+    actual_sha256 = _file_sha256(path) if path.exists() else None
     base = {
         "video_file": str(video_row.get("video_file") or path),
         "present": path.exists(),
@@ -521,6 +541,13 @@ def _video_file_status(path: Path, video_row: dict[str, Any]) -> dict[str, Any]:
         "width_pixels": None,
         "height_pixels": None,
         "fps": None,
+        "expected_sha256": expected_sha256,
+        "actual_sha256": actual_sha256,
+        "sha256_ok": (
+            actual_sha256 == expected_sha256
+            if expected_sha256 is not None and actual_sha256 is not None
+            else None
+        ),
         "error": None,
     }
     if not path.exists():
@@ -994,6 +1021,7 @@ def _write_video_blobs(
                     "height_pixels": height,
                     "video_file": relative_path.as_posix(),
                     "file_size_bytes": len(blob),
+                    "sha256": _sha256_bytes(blob),
                 }
             )
     return rows
