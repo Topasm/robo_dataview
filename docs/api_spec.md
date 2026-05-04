@@ -177,7 +177,11 @@ MVP filter syntax supports `AND` clauses with `=`, `==`, `!=`, `>`, `>=`, `<`,
 `split`.
 
 `POST /search/semantic` currently uses text embeddings over episode text and
-annotations. The default provider is deterministic text hashing. Set
+annotations. It also accepts an optional `filter_query` using the same structured
+episode-filter syntax as `POST /search/filter`; when present, semantic ranking is
+limited to matching episodes and their annotations. Filtered semantic searches
+use a transient in-memory index so they do not overwrite the persisted full
+dataset embedding mirror. The default provider is deterministic text hashing. Set
 `ROBOT_DATA_STUDIO_EMBEDDING_PROVIDER=openai-compatible` to use an
 OpenAI-compatible `/embeddings` endpoint, with
 `ROBOT_DATA_STUDIO_EMBEDDING_BASE_URL`,

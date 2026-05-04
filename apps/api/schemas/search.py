@@ -12,6 +12,7 @@ class FilterSearchRequest(BaseModel):
 class SemanticSearchRequest(BaseModel):
     dataset_id: str
     text: str
+    filter_query: str | None = None
     limit: int = Field(default=20, ge=1, le=100)
 
 

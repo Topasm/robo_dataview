@@ -108,6 +108,36 @@ class EmbeddingServiceTest(unittest.TestCase):
             self.assertTrue(paths["lance"].endswith("/embeddings.lance"))
             self.assertTrue(paths["lancedb"].endswith("/lancedb"))
 
+    def test_embedding_index_can_search_without_persisting_filtered_records(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage_root = Path(tmpdir)
+            index = EmbeddingIndex(
+                storage_root=storage_root,
+                embedding_provider=DeterministicTextEmbeddingProvider(),
+                mirror_lance=False,
+                mirror_lancedb=False,
+            )
+            episodes = [
+                EpisodeListItem(
+                    dataset_id="sample",
+                    episode_index=1,
+                    task_index=3,
+                    length=100,
+                    caption="successful cloth edge grasp",
+                )
+            ]
+
+            results = index.search(
+                SemanticSearchRequest(dataset_id="sample", text="cloth", limit=1),
+                episodes=episodes,
+                annotations=[],
+                persist_records=False,
+            )
+
+            self.assertEqual(results[0].episode_index, 1)
+            self.assertEqual(index.records("sample"), [])
+            self.assertEqual(list(storage_root.rglob("embeddings.jsonl")), [])
+
     def test_embedding_index_uses_lancedb_when_available(self) -> None:
         fake_db = FakeLanceDb()
         sys.modules["lancedb"] = types.SimpleNamespace(connect=lambda path: fake_db)

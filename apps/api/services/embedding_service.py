@@ -178,6 +178,8 @@ class EmbeddingIndex:
         dataset_id: str,
         episodes: list[EpisodeListItem],
         annotations: list[AnnotationRecord],
+        *,
+        persist_records: bool = True,
     ) -> list[EmbeddingRecord]:
         now = datetime.now(timezone.utc)
         sources: list[EmbeddingSource] = []
@@ -243,8 +245,9 @@ class EmbeddingIndex:
             )
             for source, embedded in zip(sources, embeddings)
         ]
-        self._records[dataset_id] = records
-        self._persist_dataset(dataset_id)
+        if persist_records:
+            self._records[dataset_id] = records
+            self._persist_dataset(dataset_id)
         return records
 
     def search(
@@ -252,16 +255,24 @@ class EmbeddingIndex:
         payload: SemanticSearchRequest,
         episodes: list[EpisodeListItem],
         annotations: list[AnnotationRecord],
+        *,
+        persist_records: bool = True,
     ) -> list[SearchResult]:
-        records = self.index_dataset(payload.dataset_id, episodes, annotations)
-        query_embedding = self._embed_text(payload.text).embedding
-        lancedb_results = self._search_lancedb(
+        records = self.index_dataset(
             payload.dataset_id,
-            query_embedding=query_embedding,
-            limit=payload.limit,
+            episodes,
+            annotations,
+            persist_records=persist_records,
         )
-        if lancedb_results is not None:
-            return lancedb_results
+        query_embedding = self._embed_text(payload.text).embedding
+        if persist_records:
+            lancedb_results = self._search_lancedb(
+                payload.dataset_id,
+                query_embedding=query_embedding,
+                limit=payload.limit,
+            )
+            if lancedb_results is not None:
+                return lancedb_results
 
         scored = [
             (cosine_similarity(query_embedding, record.embedding), record)

@@ -483,14 +483,22 @@ export async function createExport(
   return toExportRecord(row);
 }
 
-export async function semanticSearch(datasetId: string, text: string): Promise<SearchResult[]> {
+export async function semanticSearch(
+  datasetId: string,
+  text: string,
+  filterQuery?: string,
+): Promise<SearchResult[]> {
+  const body: Record<string, number | string> = {
+    dataset_id: datasetId,
+    text,
+    limit: 10
+  };
+  if (filterQuery?.trim()) {
+    body.filter_query = filterQuery.trim();
+  }
   const rows = await request<SearchResultResponse[]>("/search/semantic", {
     method: "POST",
-    body: JSON.stringify({
-      dataset_id: datasetId,
-      text,
-      limit: 10
-    })
+    body: JSON.stringify(body)
   });
   return rows.map(toSearchResult);
 }

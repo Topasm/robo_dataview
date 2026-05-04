@@ -203,8 +203,8 @@ Definition of done:
 - [x] Add optional LanceDB vector table mirror/query path.
 - [x] Add optional OpenAI-compatible text embedding provider.
 - [x] Add full-text search.
+- [x] Combine structured filters with semantic ranking.
 - [ ] Add CLIP, SigLIP, DINOv2, or video-VLM embeddings.
-- [ ] Combine structured filters with semantic ranking.
 
 ### P6: VLM Auto-Labeling
 

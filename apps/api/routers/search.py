@@ -27,7 +27,35 @@ def filter_search(payload: FilterSearchRequest) -> list[SearchResult]:
 def semantic_search(payload: SemanticSearchRequest) -> list[SearchResult]:
     episodes = store.list_episodes(payload.dataset_id, limit=1000, offset=0)
     annotations = annotation_store.list(payload.dataset_id, episode_index=None)
-    return embedding_index.search(payload, episodes=episodes, annotations=annotations)
+    persist_records = True
+    if payload.filter_query and payload.filter_query.strip():
+        filter_results = store.filter_search(
+            FilterSearchRequest(
+                dataset_id=payload.dataset_id,
+                query=payload.filter_query,
+                limit=1000,
+            )
+        )
+        episode_indices = {result.episode_index for result in filter_results}
+        if not episode_indices:
+            return []
+        episodes = [
+            episode
+            for episode in episodes
+            if episode.episode_index in episode_indices
+        ]
+        annotations = [
+            annotation
+            for annotation in annotations
+            if annotation.episode_index in episode_indices
+        ]
+        persist_records = False
+    return embedding_index.search(
+        payload,
+        episodes=episodes,
+        annotations=annotations,
+        persist_records=persist_records,
+    )
 
 
 @router.post("/search/full-text", response_model=list[SearchResult])

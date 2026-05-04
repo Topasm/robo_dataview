@@ -388,8 +388,8 @@ export function useStudioData() {
     setAnnotationRows(apiAnnotations);
   }
 
-  async function handleSemanticSearch(text: string) {
-    const results = await semanticSearch(selectedDatasetId, text);
+  async function handleSemanticSearch(text: string, filterQuery?: string) {
+    const results = await semanticSearch(selectedDatasetId, text, filterQuery);
     setSearchResults(results);
   }
 

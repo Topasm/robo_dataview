@@ -11,7 +11,7 @@ type SearchFilterBarProps = {
   onFilterSearch: (query: string) => Promise<void>;
   onFullTextSearch: (text: string) => Promise<void>;
   onSelectResult: (episodeIndex: number) => void;
-  onSemanticSearch: (text: string) => Promise<void>;
+  onSemanticSearch: (text: string, filterQuery?: string) => Promise<void>;
 };
 
 type FilterValueType = "boolean" | "number" | "status" | "text";
@@ -70,13 +70,13 @@ export function SearchFilterBar({
   const [isSearching, setIsSearching] = useState(false);
   const filterQuery = buildFilterQuery(filterRows);
 
-  async function handleSearch() {
+  async function handleSearch(filterSemantic = false) {
     if (!semanticText.trim()) {
       return;
     }
     setIsSearching(true);
     try {
-      await onSemanticSearch(semanticText.trim());
+      await onSemanticSearch(semanticText.trim(), filterSemantic ? filterQuery : undefined);
     } finally {
       setIsSearching(false);
     }
@@ -191,11 +191,20 @@ export function SearchFilterBar({
         <button
           className="icon-button"
           disabled={isSearching || !semanticText.trim()}
-          onClick={handleSearch}
+          onClick={() => handleSearch(false)}
           title="Semantic search"
           type="button"
         >
           <Search size={16} />
+        </button>
+        <button
+          className="icon-button"
+          disabled={isSearching || !semanticText.trim() || !filterQuery}
+          onClick={() => handleSearch(true)}
+          title="Semantic search within filter"
+          type="button"
+        >
+          <SlidersHorizontal size={16} />
         </button>
         <button
           className="icon-button"
