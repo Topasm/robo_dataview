@@ -71,7 +71,8 @@ workers
   Future async worker entry points are added when queue-backed jobs are real
 
 data
-  Local annotations, embeddings, versions, cache, and export artifacts
+  Local annotations, embeddings, versions, keyframe cache, Rerun cache, and
+  export artifacts
 ```
 
 Implemented now:

@@ -198,7 +198,7 @@ Definition of done:
 - [x] Add prompt registry/versioning.
 - [x] Add VLM provider abstraction with heuristic fallback provider.
 - [x] Store raw VLM provider responses as JSONL.
-- [ ] Add decoded keyframe image extraction from video blobs.
+- [x] Add decoded keyframe image extraction from video blobs.
 - [ ] Add real model/API integration.
 - [ ] Store raw response and model metadata.
 - [ ] Add review queue for generated labels.

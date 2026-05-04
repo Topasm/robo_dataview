@@ -181,11 +181,11 @@ Implemented:
 - Versioned prompt registry and prompt validation.
 - VLM provider interface with heuristic fallback provider.
 - Raw provider responses persisted to job-scoped JSONL.
+- Optional OpenCV keyframe image extraction from available episode video blobs.
 
 Next:
 
 - Move job execution to RQ/Celery.
-- Decode sampled keyframe images from video blobs.
 - Add real local/API VLM provider implementations.
 - Add confidence rationale fields to real provider responses.
 

@@ -5,6 +5,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 
 from apps.api.schemas.common import JobStatus
+from apps.api.schemas.episodes import EpisodeDetail
 from apps.api.schemas.jobs import JobCreateRequest, JobRecord
 from apps.api.services.annotation_service import annotation_store
 from apps.api.services.lance_store import store
@@ -98,6 +99,7 @@ class JobStore:
                 dataset_id=payload.dataset_id,
                 episode=episode,
                 config=config,
+                video_blobs=self._video_blobs(payload.dataset_id, episode),
             )
             raw_response_ids.append(
                 vlm_response_store.append(
@@ -138,6 +140,15 @@ class JobStore:
                 else None,
             }
         )
+
+    @staticmethod
+    def _video_blobs(dataset_id: str, episode: EpisodeDetail) -> dict[str, bytes]:
+        blobs: dict[str, bytes] = {}
+        for camera in episode.camera_names:
+            blob = store.get_video_blob(dataset_id, episode.episode_index, camera)
+            if blob is not None:
+                blobs[camera] = blob
+        return blobs
 
 
 jobs = JobStore()

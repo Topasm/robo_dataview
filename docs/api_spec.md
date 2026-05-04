@@ -204,7 +204,9 @@ GET  /jobs/{job_id}
 Job records include `model`, `provider`, `prompt_template`, and
 `prompt_version` so generated annotation batches can be traced to the model
 route and prompt contract used. VLM jobs also write raw provider responses to
-JSONL and return `raw_response_ids` plus `raw_response_uri`.
+JSONL and return `raw_response_ids` plus `raw_response_uri`. When camera MP4
+blobs are available and optional video dependencies are installed, raw responses
+include decoded keyframe JPEG artifact metadata.
 
 ## Exports
 
