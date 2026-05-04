@@ -91,7 +91,8 @@ Implemented now:
   reason, quality, split, and review status.
 - Optional `annotations.lance`, `embeddings.lance`, and `versions.lance`
   mirroring.
-- Deterministic text-embedding semantic search for local development.
+- Deterministic text-embedding semantic search for local development, with
+  optional LanceDB table mirror/query when `lancedb` is installed.
 - Rerun `.rrd` cache generation for state/action scalar timelines, optional
   camera video assets, deterministic cache keys, and web viewer embedding
   through `@rerun-io/web-viewer-react`.
@@ -104,7 +105,7 @@ Not implemented yet:
 - Durable external database for jobs, sessions, users, and app settings.
 - Real worker queue such as RQ/Celery plus Redis.
 - Real VLM/video-model inference.
-- LanceDB vector index search.
+- Real visual/video model embeddings.
 - Full frame table browser UI and frame-level mutation workflow.
 - Full LeRobot Parquet/MP4 materialization.
 - Direct byte-range reads from Lance blobs. The API currently loads the full

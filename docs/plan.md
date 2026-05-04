@@ -42,7 +42,8 @@ Working:
 - Segment edit and midpoint split actions in the web UI.
 - Search filter endpoint.
 - Typed filter builder UI for common episode fields.
-- Deterministic text-embedding semantic search endpoint.
+- Deterministic text-embedding semantic search endpoint with optional LanceDB
+  vector table persistence/query.
 - VLM-label job endpoint with heuristic pending annotation proposals.
 - Deterministic keyframe index sampling for VLM prompt inputs.
 - Rerun session endpoint that generates `.rrd` cache files.
@@ -69,7 +70,8 @@ Known limits:
 - Jobs run synchronously in-process.
 - Open datasets and sessions are in-memory.
 - VLM labeling is heuristic scaffolding.
-- Semantic search is text-hash based, not LanceDB vector search.
+- Semantic search is still text-hash based; LanceDB is an optional persistence
+  and query path, not a real visual/video embedding pipeline yet.
 - Export writes frame JSONL and available MP4 artifacts; training-ready Parquet
   shards require optional `pyarrow`/LeRobot dependencies.
 - Video ranges are sliced after loading the full episode blob; direct Lance blob
@@ -185,9 +187,9 @@ Definition of done:
 - [x] Text-hash semantic search scaffold.
 - [x] Add filter builder UI with typed fields.
 - [x] Add saved filter presets.
+- [x] Add optional LanceDB vector table mirror/query path.
 - [ ] Add full-text search.
-- [ ] Add LanceDB vector index service.
-- [ ] Add visual/video embeddings from CLIP, SigLIP, DINOv2, or video VLMs.
+- [ ] Add CLIP, SigLIP, DINOv2, or video-VLM embeddings.
 - [ ] Combine structured filters with semantic ranking.
 
 ### P6: VLM Auto-Labeling
@@ -232,7 +234,7 @@ Definition of done:
 
 1. Add selected-frame metadata UI backed by `GET /frames`.
 2. Add keyframe extraction and replace heuristic VLM with a real provider path.
-3. Replace deterministic semantic search with LanceDB vector search.
+3. Replace deterministic text embeddings with real model-backed vectors.
 4. Materialize fully LeRobot-loadable Parquet/MP4 export.
 5. Move Rerun/export/VLM work into queue-backed workers.
 

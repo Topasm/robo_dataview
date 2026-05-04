@@ -214,11 +214,13 @@ the schema used to create `embeddings.lance`.
 The API writes deterministic text embeddings under
 `data/lance/embeddings/<dataset>/embeddings.jsonl` for local search. When
 `pyarrow` and `lance` are installed, these rows are mirrored to
-`embeddings.lance`.
+`embeddings.lance`. When `lancedb` is installed, rows are also mirrored to
+`data/lance/embeddings/<dataset>/lancedb` and semantic search tries that vector
+table before falling back to the in-memory cosine scorer.
 
-Current status: embeddings are deterministic 64-dimensional text-hash vectors.
-They are intended as a no-model local development path, not the final visual or
-video embedding system.
+Current status: embeddings are deterministic 64-dimensional text-hash vectors
+with optional LanceDB persistence/query. They are intended as a no-model local
+development path, not the final visual or video embedding system.
 
 ## versions.lance
 

@@ -51,7 +51,8 @@ The repository has moved past a pure skeleton. The current MVP path can:
 5. Generate Rerun `.rrd` cache files for state/action timeline inspection and
    load them through the Rerun React web viewer.
 6. Run basic filter search through a typed builder with saved presets, plus
-   deterministic text-embedding semantic search.
+   deterministic text-embedding semantic search and optional LanceDB vector
+   table persistence/query when `lancedb` is installed.
 7. Create heuristic VLM-style annotation proposals for review, including
    deterministic keyframe index sampling, versioned prompt tracking, and a
    provider interface plus raw-response/keyframe artifact persistence for
@@ -68,7 +69,9 @@ Known MVP gaps:
 - Rerun is embedded and records scalar timelines plus camera video assets when
   MP4 blobs are available; generation is still synchronous and workerless.
 - VLM labeling is heuristic/local scaffolding, not real model inference.
-- Semantic search uses deterministic text hashing, not LanceDB vector indexes.
+- Semantic search still uses deterministic text embeddings. LanceDB
+  persistence/query is optional, and real visual/video model embeddings are not
+  implemented yet.
 - LeRobot export writes frame JSONL and available MP4 artifacts; training-ready
   Parquet shards still require optional `pyarrow`/LeRobot dependencies.
 

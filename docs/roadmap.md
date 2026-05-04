@@ -212,11 +212,12 @@ Implemented:
 - Saved filter presets.
 - Deterministic text-embedding semantic search over episode text and
   annotations.
+- Optional LanceDB vector table mirror/query path for deterministic embeddings.
 
 Next:
 
-- Add LanceDB vector index.
 - Add full-text search.
+- Add real visual/video embedding models.
 - Add combined filter + semantic ranking.
 
 ## Phase 7: Export and Versioning

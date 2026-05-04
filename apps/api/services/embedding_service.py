@@ -37,8 +37,9 @@ class EmbeddingRecord:
 class EmbeddingIndex:
     """Small deterministic embedding index for local semantic search.
 
-    LanceDB can replace this service later. Keeping the interface explicit lets
-    the rest of the app use semantic search now without requiring model weights.
+    LanceDB is used opportunistically when installed. Keeping the deterministic
+    path explicit lets the app use semantic search without requiring model
+    weights or optional vector-search dependencies.
     """
 
     def __init__(
@@ -47,10 +48,12 @@ class EmbeddingIndex:
         *,
         persist: bool = True,
         mirror_lance: bool = True,
+        mirror_lancedb: bool = True,
     ) -> None:
         self.storage_root = storage_root
         self.persist = persist
         self.mirror_lance = mirror_lance
+        self.mirror_lancedb = mirror_lancedb
         self._records: dict[str, list[EmbeddingRecord]] = {}
         if self.persist:
             self._load_records()
@@ -127,6 +130,14 @@ class EmbeddingIndex:
     ) -> list[SearchResult]:
         records = self.index_dataset(payload.dataset_id, episodes, annotations)
         query_embedding = embed_text(payload.text)
+        lancedb_results = self._search_lancedb(
+            payload.dataset_id,
+            query_embedding=query_embedding,
+            limit=payload.limit,
+        )
+        if lancedb_results is not None:
+            return lancedb_results
+
         scored = [
             (cosine_similarity(query_embedding, record.embedding), record)
             for record in records
@@ -153,6 +164,7 @@ class EmbeddingIndex:
         return {
             "jsonl": str(dataset_dir / "embeddings.jsonl"),
             "lance": str(dataset_dir / "embeddings.lance"),
+            "lancedb": str(dataset_dir / "lancedb"),
         }
 
     def _load_records(self) -> None:
@@ -188,6 +200,7 @@ class EmbeddingIndex:
             encoding="utf-8",
         )
         self._mirror_lance(dataset_dir / "embeddings.lance", records)
+        self._mirror_lancedb(dataset_dir / "lancedb", records)
 
     def _mirror_lance(self, lance_path: Path, records: list[EmbeddingRecord]) -> None:
         if not self.mirror_lance:
@@ -209,6 +222,58 @@ class EmbeddingIndex:
             )
         lance.write_dataset(table, str(lance_path), mode="overwrite")
 
+    def _mirror_lancedb(self, database_path: Path, records: list[EmbeddingRecord]) -> None:
+        if not self.mirror_lancedb or not records:
+            return
+        try:
+            import lancedb
+        except ImportError:
+            return
+
+        rows = [self._lancedb_row(record) for record in records]
+        database_path.mkdir(parents=True, exist_ok=True)
+        try:
+            db = lancedb.connect(str(database_path))
+            db.create_table("embeddings", data=rows, mode="overwrite")
+        except Exception:
+            return
+
+    def _search_lancedb(
+        self,
+        dataset_id: str,
+        *,
+        query_embedding: list[float],
+        limit: int,
+    ) -> list[SearchResult] | None:
+        database_path = self._dataset_dir(dataset_id) / "lancedb"
+        if not database_path.exists():
+            return None
+        try:
+            import lancedb
+        except ImportError:
+            return None
+        try:
+            db = lancedb.connect(str(database_path))
+            table = db.open_table("embeddings")
+            try:
+                query = table.search(query_embedding, vector_column_name="embedding")
+            except TypeError:
+                query = table.search(query_embedding)
+            rows = query.limit(limit).to_list()
+        except Exception:
+            return None
+        return [
+            SearchResult(
+                dataset_id=dataset_id,
+                episode_index=int(row["episode_index"]),
+                frame_index=row.get("frame_index"),
+                score=_score_from_distance(row.get("_distance")),
+                match_type="lancedb_vector",
+                label=row.get("text"),
+            )
+            for row in rows
+        ]
+
     def _dataset_dir(self, dataset_id: str) -> Path:
         slug = re.sub(r"[^A-Za-z0-9_.-]+", "_", dataset_id).strip("._-")
         digest = hashlib.sha1(dataset_id.encode("utf-8")).hexdigest()[:12]
@@ -224,6 +289,13 @@ class EmbeddingIndex:
     @staticmethod
     def _lance_row(record: EmbeddingRecord) -> dict[str, object]:
         return asdict(record)
+
+    @staticmethod
+    def _lancedb_row(record: EmbeddingRecord) -> dict[str, object]:
+        return {
+            **asdict(record),
+            "created_at": record.created_at.isoformat(),
+        }
 
 
 def embed_text(text: str) -> list[float]:
@@ -249,6 +321,16 @@ def tokenize(text: str) -> list[str]:
 
 def cosine_similarity(left: list[float], right: list[float]) -> float:
     return sum(l_value * r_value for l_value, r_value in zip(left, right))
+
+
+def _score_from_distance(distance: object) -> float | None:
+    if distance is None:
+        return None
+    try:
+        value = float(distance)
+    except (TypeError, ValueError):
+        return None
+    return 1.0 / (1.0 + max(0.0, value))
 
 
 def _embedding_id(payload_dataset_id: str, scope: str, text: str) -> str:

@@ -166,8 +166,9 @@ MVP filter syntax supports `AND` clauses with `=`, `==`, `!=`, `>`, `>=`, `<`,
 `split`.
 
 `POST /search/semantic` currently uses deterministic text-hash embeddings over
-episode text and annotations. It is a local development substitute for future
-LanceDB vector search.
+episode text and annotations. When `lancedb` is installed, those rows are
+mirrored to a local LanceDB table and queried there first; otherwise the API
+falls back to an in-memory cosine scorer.
 
 Filter presets persist reusable structured filter queries to
 `data/lance/filter_presets/filter_presets.jsonl`.
