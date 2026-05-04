@@ -390,7 +390,7 @@ button:disabled {
   border-bottom: 1px solid var(--border);
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(0, 1fr) 32px;
+  grid-template-columns: minmax(0, 1fr) 32px 32px;
   min-height: 52px;
   padding: 9px 12px;
   position: relative;
@@ -842,7 +842,7 @@ button:disabled {
   background: #182428;
   border: 1px solid #2e4a51;
   border-radius: 8px;
-  height: 88px;
+  height: clamp(220px, 32vh, 420px);
   margin-top: 10px;
   overflow: hidden;
   position: relative;
@@ -852,18 +852,18 @@ button:disabled {
   background: #182428;
   border: 1px solid #2e4a51;
   border-radius: 8px;
-  height: 88px;
+  height: clamp(220px, 32vh, 420px);
   margin-top: 10px;
   width: 100%;
 }
 
-.rerun-web-viewer,
+.rerun-viewer-shell,
 .rerun-viewer-loading {
   background: #182428;
   border: 1px solid #2e4a51;
   border-radius: 8px;
   color: #ffffff;
-  height: 88px;
+  height: clamp(260px, 38vh, 480px);
   margin-top: 10px;
   overflow: hidden;
   width: 100%;
@@ -913,7 +913,7 @@ button:disabled {
 .segment-form {
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(0, 1fr) 72px 72px;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) 72px 72px;
 }
 
 .vlm-run-button {
@@ -1006,6 +1006,25 @@ textarea {
   gap: 8px;
   grid-template-columns: minmax(0, 1fr) auto;
   padding: 9px;
+}
+
+.segment-edit-grid {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(96px, 1.2fr) minmax(86px, 1fr) 64px 64px;
+  min-width: 0;
+}
+
+.segment-edit-grid input,
+.segment-edit-grid select {
+  font-size: 12px;
+  height: 31px;
+  padding: 5px 7px;
+}
+
+.segment-edit-grid .muted {
+  grid-column: 1 / -1;
 }
 
 .segment-label {
