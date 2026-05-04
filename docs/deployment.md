@@ -51,16 +51,23 @@ NEXT_PUBLIC_API_BASE_URL=https://api.example.com/api
 NEXT_PUBLIC_RERUN_IFRAME_URL=
 NEXT_PUBLIC_VLM_MODEL=heuristic-vlm-fallback
 NEXT_PUBLIC_VLM_PROMPT_TEMPLATE=episode_autolabel_v1
+NEXT_PUBLIC_ROBOT_DATA_STUDIO_API_KEY=
+NEXT_PUBLIC_ROBOT_DATA_STUDIO_USER=local
 ```
 
 Minimum API environment:
 
 ```bash
+ROBOT_DATA_STUDIO_API_KEY=
 ROBOT_DATA_STUDIO_JOB_QUEUE=rq
 ROBOT_DATA_STUDIO_REDIS_URL=redis://redis:6379/0
 ROBOT_DATA_STUDIO_RQ_QUEUE=robot-data-studio
 ROBOT_DATA_STUDIO_JOB_TIMEOUT_SECONDS=3600
 ```
+
+If `ROBOT_DATA_STUDIO_API_KEY` is non-empty, clients must send
+`X-Robot-Data-Studio-API-Key`. Review actions may also send
+`X-Robot-Data-Studio-User`; otherwise audit history uses `local`.
 
 Optional providers:
 

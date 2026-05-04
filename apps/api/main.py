@@ -10,8 +10,10 @@ from apps.api.routers import (
     jobs,
     rerun,
     search,
+    users,
     versions,
 )
+from apps.api.services.auth import enforce_api_key
 
 
 app = FastAPI(
@@ -29,6 +31,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.middleware("http")(enforce_api_key)
+
 app.include_router(datasets.router, prefix="/api")
 app.include_router(episodes.router, prefix="/api")
 app.include_router(frames.router, prefix="/api")
@@ -38,6 +42,7 @@ app.include_router(rerun.router, prefix="/api")
 app.include_router(jobs.router, prefix="/api")
 app.include_router(exports.router, prefix="/api")
 app.include_router(versions.router, prefix="/api")
+app.include_router(users.router, prefix="/api")
 
 
 @app.get("/health")

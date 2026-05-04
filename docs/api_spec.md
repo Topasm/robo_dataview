@@ -5,6 +5,27 @@ Base path: `/api`
 This spec reflects the current local MVP. Some endpoints are scaffolds and are
 called out explicitly.
 
+## Auth And User Identity
+
+```text
+GET /users/me
+```
+
+By default the API runs in local open mode. If `ROBOT_DATA_STUDIO_API_KEY` is
+set, `/api/*` requests must include:
+
+```text
+X-Robot-Data-Studio-API-Key: <configured key>
+```
+
+Review/audit identity is supplied by:
+
+```text
+X-Robot-Data-Studio-User: alice
+```
+
+When the user header is omitted, the API records `local`.
+
 ## Datasets
 
 ```text
@@ -168,6 +189,7 @@ GET    /annotations?dataset_id=...&episode_index=...
 GET    /annotations/history?dataset_id=...&episode_index=...&annotation_id=...
 POST   /annotations
 PATCH  /annotations/{annotation_id}
+PATCH  /annotations/{annotation_id}/assignment
 DELETE /annotations/{annotation_id}
 ```
 
@@ -183,7 +205,16 @@ DELETE /annotations/{annotation_id}
   "label_value": "cloth_edge_grasp",
   "source": "human",
   "confidence": 1.0,
-  "review_status": "accepted"
+  "review_status": "accepted",
+  "assigned_to": "reviewer-a"
+}
+```
+
+`PATCH /annotations/{annotation_id}/assignment`
+
+```json
+{
+  "assigned_to": "reviewer-b"
 }
 ```
 

@@ -80,6 +80,10 @@ rq worker robot-data-studio --url "$ROBOT_DATA_STUDIO_REDIS_URL"
 With `ROBOT_DATA_STUDIO_JOB_QUEUE` unset, jobs run inline in the API process for
 local development.
 
+Set `ROBOT_DATA_STUDIO_API_KEY` to require `X-Robot-Data-Studio-API-Key` on
+`/api/*` requests. Review actions can pass `X-Robot-Data-Studio-User` to record
+the actor in annotation history.
+
 Deployment notes are in [docs/deployment.md](docs/deployment.md).
 
 The script starts FastAPI on `http://127.0.0.1:8000` and Next.js on

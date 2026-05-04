@@ -91,7 +91,7 @@ class AnnotationStore:
         self._persist_dataset(record.dataset_id)
         return record
 
-    def delete(self, annotation_id: str) -> bool:
+    def delete(self, annotation_id: str, *, actor: str = "local") -> bool:
         existing = self._records.pop(annotation_id, None)
         if existing is None:
             return False
@@ -100,7 +100,7 @@ class AnnotationStore:
             annotation_id=existing.annotation_id,
             episode_index=existing.episode_index,
             action="delete",
-            actor="local",
+            actor=actor,
             before=self._json_row(existing),
             after=None,
         )

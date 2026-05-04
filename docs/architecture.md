@@ -106,6 +106,10 @@ Implemented now:
   HTTP inference.
 - Generated-label review queue for pending VLM/heuristic proposals.
 - SQLite job metadata store under `data/app/metadata.sqlite3`.
+- Optional API-key auth and request-header user identities for review audit
+  trails.
+- Annotation assignment through `assigned_to` and history actors for multi-user
+  review coordination.
 - Optional Redis/RQ queue backend for VLM labeling and visual embedding jobs.
 - Server-sent job progress events at `/api/jobs/{job_id}/events`.
 - Rerun `.rrd` cache generation for state/action scalar timelines, optional
@@ -123,7 +127,7 @@ Implemented now:
 
 Not implemented yet:
 
-- Durable external database for sessions, users, and app settings.
+- Durable external database for sessions and app settings.
 - Queue-backed Rerun/export jobs.
 - UI-side EventSource wiring for live job progress updates.
 - Local VLM/video-model inference.

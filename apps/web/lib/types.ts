@@ -116,6 +116,12 @@ export type SegmentAnnotation = {
   source: "human" | "vlm" | "heuristic" | "import";
   confidence: number;
   reviewStatus: ReviewStatus;
+  createdBy: string;
+  assignedTo: string | null;
+};
+
+export type UserIdentity = {
+  userId: string;
 };
 
 export type RerunSession = {

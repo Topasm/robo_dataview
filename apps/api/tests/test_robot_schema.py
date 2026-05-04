@@ -26,6 +26,7 @@ class RobotSchemaTest(unittest.TestCase):
                 "confidence",
                 "review_status",
                 "created_by",
+                "assigned_to",
                 "created_at",
                 "updated_at",
             ],

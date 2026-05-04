@@ -161,6 +161,7 @@ source: string
 confidence: float32
 review_status: string
 created_by: string
+assigned_to: string | null
 created_at: timestamp
 updated_at: timestamp
 ```

@@ -25,6 +25,7 @@ class AnnotationCreate(BaseModel):
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     review_status: ReviewStatus = ReviewStatus.pending
     created_by: str = "local"
+    assigned_to: str | None = None
 
     if model_validator is not None:
 
@@ -51,6 +52,12 @@ class AnnotationUpdate(BaseModel):
     source: AnnotationSource | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     review_status: ReviewStatus | None = None
+    assigned_to: str | None = None
+    updated_by: str | None = None
+
+
+class AnnotationAssignmentUpdate(BaseModel):
+    assigned_to: str | None = None
     updated_by: str | None = None
 
 
@@ -66,6 +73,7 @@ class AnnotationRecord(BaseModel):
     confidence: float
     review_status: ReviewStatus
     created_by: str
+    assigned_to: str | None = None
     created_at: datetime
     updated_at: datetime
 

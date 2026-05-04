@@ -12,7 +12,8 @@ import type {
   ReviewStatus,
   SearchResult,
   SegmentAnnotation,
-  StateActionSummary
+  StateActionSummary,
+  UserIdentity
 } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000/api";
@@ -21,6 +22,8 @@ const API_ROOT_URL = API_BASE_URL.endsWith("/api")
   : API_BASE_URL;
 const VLM_MODEL = process.env.NEXT_PUBLIC_VLM_MODEL ?? "heuristic-vlm-fallback";
 const VLM_PROMPT_TEMPLATE = process.env.NEXT_PUBLIC_VLM_PROMPT_TEMPLATE ?? "episode_autolabel_v1";
+const API_KEY = process.env.NEXT_PUBLIC_ROBOT_DATA_STUDIO_API_KEY ?? "";
+const REVIEW_USER = process.env.NEXT_PUBLIC_ROBOT_DATA_STUDIO_USER ?? "";
 
 type DatasetRecordResponse = {
   dataset_id: string;
@@ -81,6 +84,12 @@ type AnnotationResponse = {
   source: SegmentAnnotation["source"];
   confidence: number;
   review_status: ReviewStatus;
+  created_by: string;
+  assigned_to: string | null;
+};
+
+type UserIdentityResponse = {
+  user_id: string;
 };
 
 type RerunSessionResponse = {
@@ -224,6 +233,7 @@ export type SegmentAnnotationUpdate = {
   labelType?: string;
   labelValue?: string;
   reviewStatus?: ReviewStatus;
+  assignedTo?: string | null;
 };
 
 export type EpisodeLabelUpdate = {
@@ -494,11 +504,22 @@ export async function updateAnnotationReviewStatus(
   return toSegmentAnnotation(row);
 }
 
+export async function assignAnnotation(
+  annotationId: string,
+  assignedTo: string | null,
+): Promise<SegmentAnnotation> {
+  const row = await request<AnnotationResponse>(`/annotations/${annotationId}/assignment`, {
+    method: "PATCH",
+    body: JSON.stringify({ assigned_to: assignedTo })
+  });
+  return toSegmentAnnotation(row);
+}
+
 export async function updateSegmentAnnotation(
   annotationId: string,
   payload: SegmentAnnotationUpdate,
 ): Promise<SegmentAnnotation> {
-  const body: Record<string, number | string> = {};
+  const body: Record<string, number | string | null> = {};
   if (payload.startFrame !== undefined) {
     body.start_frame = payload.startFrame;
   }
@@ -513,6 +534,9 @@ export async function updateSegmentAnnotation(
   }
   if (payload.reviewStatus !== undefined) {
     body.review_status = payload.reviewStatus;
+  }
+  if (payload.assignedTo !== undefined) {
+    body.assigned_to = payload.assignedTo;
   }
   const row = await request<AnnotationResponse>(`/annotations/${annotationId}`, {
     method: "PATCH",
@@ -576,6 +600,11 @@ export async function createVisualEmbeddingJob(
 
 export function jobEventsUrl(jobId: string): string {
   return `${API_BASE_URL}/jobs/${jobId}/events`;
+}
+
+export async function fetchCurrentUser(): Promise<UserIdentity> {
+  const row = await request<UserIdentityResponse>("/users/me");
+  return { userId: row.user_id };
 }
 
 export async function createExport(
@@ -675,6 +704,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
+      ...(API_KEY ? { "X-Robot-Data-Studio-API-Key": API_KEY } : {}),
+      ...(REVIEW_USER ? { "X-Robot-Data-Studio-User": REVIEW_USER } : {}),
       ...init?.headers
     }
   });
@@ -812,7 +843,9 @@ function toSegmentAnnotation(raw: AnnotationResponse): SegmentAnnotation {
     labelValue: raw.label_value,
     source: raw.source,
     confidence: raw.confidence,
-    reviewStatus: raw.review_status
+    reviewStatus: raw.review_status,
+    createdBy: raw.created_by,
+    assignedTo: raw.assigned_to
   };
 }
 

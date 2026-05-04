@@ -76,7 +76,9 @@ export const annotations: SegmentAnnotation[] = [
     labelValue: "approach",
     source: "human",
     confidence: 1,
-    reviewStatus: "accepted"
+    reviewStatus: "accepted",
+    createdBy: "local",
+    assignedTo: null
   },
   {
     id: "seg-grasp",
@@ -88,7 +90,9 @@ export const annotations: SegmentAnnotation[] = [
     labelValue: "cloth_edge_grasp",
     source: "vlm",
     confidence: 0.82,
-    reviewStatus: "pending"
+    reviewStatus: "pending",
+    createdBy: "vlm",
+    assignedTo: "local"
   },
   {
     id: "seg-fold",
@@ -100,7 +104,9 @@ export const annotations: SegmentAnnotation[] = [
     labelValue: "fold",
     source: "human",
     confidence: 1,
-    reviewStatus: "accepted"
+    reviewStatus: "accepted",
+    createdBy: "local",
+    assignedTo: null
   },
   {
     id: "seg-release",
@@ -112,6 +118,8 @@ export const annotations: SegmentAnnotation[] = [
     labelValue: "release",
     source: "heuristic",
     confidence: 0.64,
-    reviewStatus: "pending"
+    reviewStatus: "pending",
+    createdBy: "heuristic",
+    assignedTo: "local"
   }
 ];

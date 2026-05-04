@@ -34,6 +34,7 @@ ANNOTATIONS_COLUMNS: tuple[ColumnSpec, ...] = (
         description="pending | accepted | rejected | edited",
     ),
     ColumnSpec("created_by", "string", nullable=False),
+    ColumnSpec("assigned_to", "string"),
     ColumnSpec("created_at", "timestamp_us_utc", nullable=False),
     ColumnSpec("updated_at", "timestamp_us_utc", nullable=False),
 )

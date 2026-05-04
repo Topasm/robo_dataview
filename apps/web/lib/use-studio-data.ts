@@ -76,6 +76,8 @@ function optimisticAnnotation(
     source: "human",
     confidence: 1,
     reviewStatus: "accepted",
+    createdBy: "local",
+    assignedTo: null,
     ...patch
   };
 }
