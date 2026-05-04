@@ -254,6 +254,28 @@ export function useStudioData() {
     );
   }
 
+  async function handleMergeSegments(left: SegmentAnnotation, right: SegmentAnnotation) {
+    const merged = await createSegmentAnnotation({
+      datasetId: left.datasetId,
+      episodeIndex: left.episodeIndex,
+      startFrame: Math.min(left.startFrame, right.startFrame),
+      endFrame: Math.max(left.endFrame, right.endFrame),
+      labelType: left.labelType,
+      labelValue: left.labelValue,
+      source: "human",
+      confidence: Math.max(left.confidence, right.confidence),
+      reviewStatus: "edited"
+    });
+    await deleteAnnotation(left.id);
+    await deleteAnnotation(right.id);
+    setAnnotationRows((current) =>
+      [
+        ...current.filter((row) => row.id !== left.id && row.id !== right.id),
+        merged
+      ].sort((a, b) => a.startFrame - b.startFrame)
+    );
+  }
+
   async function handleUpdateReviewStatus(annotationId: string, status: ReviewStatus) {
     const updated = await updateAnnotationReviewStatus(annotationId, status);
     setAnnotationRows((current) =>
@@ -310,6 +332,7 @@ export function useStudioData() {
     handleCreateSegment,
     handleDeleteSegment,
     handleFilterSearch,
+    handleMergeSegments,
     handleOpenDataset,
     handleRunVlmLabel,
     handleSelectEpisode,

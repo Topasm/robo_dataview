@@ -146,12 +146,11 @@ Implemented:
 - Segment edit form and midpoint split action in the web UI.
 - Episode-level label editing for caption, success/failure, failure reason,
   quality, split, and review status.
+- Timeline click-to-marker, bad-range authoring, boundary drag, split, merge,
+  and delete controls.
 
 Next:
 
-- Add drag/split/merge timeline editing beyond the current midpoint split
-  button.
-- Add bad frame/range labels.
 - Add annotation history and audit fields beyond `created_at`/`updated_at`.
 
 ## Phase 5: VLM Auto-Labeling

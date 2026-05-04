@@ -152,8 +152,8 @@ Definition of done:
 - [x] Add episode-level label update endpoint.
 - [x] Add quality score, success/failure, failure reason editing.
 - [x] Add label type choices for bad range, important frame, and failure event.
-- [ ] Add frame-aware bad range authoring from the timeline.
-- [ ] Add timeline drag/split/merge controls.
+- [x] Add frame-aware bad range authoring from the timeline.
+- [x] Add timeline drag/split/merge controls.
 - [ ] Add annotation history.
 - [ ] Add optimistic UI rollback on mutation failure.
 

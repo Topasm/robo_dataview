@@ -30,6 +30,7 @@ export default function Home() {
     handleCreateSegment,
     handleDeleteSegment,
     handleFilterSearch,
+    handleMergeSegments,
     handleOpenDataset,
     handleRunVlmLabel,
     handleSelectEpisode,
@@ -91,7 +92,15 @@ export default function Home() {
           <div className="content-split">
             <div className="viewer-column">
               <EpisodeViewer episode={selectedEpisode} />
-              <TimelinePanel annotations={annotationRows} frameCount={selectedEpisode.length} />
+              <TimelinePanel
+                annotations={annotationRows}
+                frameCount={selectedEpisode.length}
+                onCreateSegment={handleCreateSegment}
+                onDeleteSegment={handleDeleteSegment}
+                onMergeSegments={handleMergeSegments}
+                onSplitSegment={handleSplitSegment}
+                onUpdateSegment={handleUpdateSegment}
+              />
               <RerunPanel
                 onCreateSession={handleCreateRerunSession}
                 session={rerunSession}
