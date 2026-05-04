@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 from importlib import import_module
 from pathlib import Path
+import re
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -12,6 +14,7 @@ from apps.api.services.pydantic_compat import model_copy
 
 
 RERUN_CACHE_DIR = Path("data/cache/rerun")
+RERUN_RECORDING_CONFIG_VERSION = "state_action_video_assets_v1"
 
 
 def _vector_norm(value: object) -> float | None:
@@ -34,19 +37,37 @@ def _rerun_scalar(rr: object, value: float) -> object:
     return rr.Scalars(value)
 
 
+def _cache_key(dataset_id: str, episode_index: int, mode: str) -> str:
+    key = f"{dataset_id}|{episode_index}|{mode}|{RERUN_RECORDING_CONFIG_VERSION}"
+    return hashlib.sha1(key.encode("utf-8")).hexdigest()[:16]
+
+
+def _safe_entity_name(value: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", value.strip())
+    return safe.strip("_") or "camera"
+
+
+def _video_frame_seconds(timestamps: list[object], frame_index: int, fps: float | None) -> float:
+    if frame_index < len(timestamps) and isinstance(timestamps[frame_index], (int, float)):
+        return float(timestamps[frame_index])
+    return frame_index / (fps or 20.0)
+
+
 class RerunSessionStore:
     def __init__(self) -> None:
         self._records: dict[str, RerunSessionRecord] = {}
 
     def create(self, payload: RerunSessionCreate) -> RerunSessionRecord:
         session_id = str(uuid4())
-        rrd_path = RERUN_CACHE_DIR / f"{payload.dataset_id}_episode_{payload.episode_index:06d}_{session_id}.rrd"
+        cache_key = _cache_key(payload.dataset_id, payload.episode_index, payload.mode)
+        rrd_path = RERUN_CACHE_DIR / f"{payload.dataset_id}_episode_{payload.episode_index:06d}_{cache_key}.rrd"
         record = RerunSessionRecord(
             session_id=session_id,
             dataset_id=payload.dataset_id,
             episode_index=payload.episode_index,
             mode=payload.mode,
             status="pending",
+            cache_key=cache_key,
             viewer_url=None,
             rrd_url=f"/api/rerun/recordings/{session_id}.rrd",
             rrd_path=str(rrd_path),
@@ -93,13 +114,26 @@ class RerunSessionStore:
             )
 
         RERUN_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        if rrd_path.exists():
+            return model_copy(
+                record,
+                update={
+                    "status": "ready",
+                    "cache_hit": True,
+                    "message": "Loaded cached Rerun recording.",
+                }
+            )
+
         states = _sequence(timeseries.get("states"))
         actions = _sequence(timeseries.get("actions"))
         timestamps = _sequence(timeseries.get("timestamps"))
         frame_count = max(len(states), len(actions), len(timestamps), 1)
+        episode = store.get_episode(record.dataset_id, record.episode_index)
+        fps = episode.fps if episode is not None else None
 
         rr.init("robot_data_studio", recording_id=record.session_id, spawn=False)
         rr.save(rrd_path)
+        camera_count = self._log_camera_videos(rr, record, timestamps, frame_count, fps)
         for frame_index in range(frame_count):
             _set_rerun_sequence_time(rr, "frame", frame_index)
             if frame_index < len(timestamps):
@@ -119,9 +153,50 @@ class RerunSessionStore:
             record,
             update={
                 "status": "ready",
-                "message": f"Generated Rerun recording with {frame_count} frames.",
+                "camera_count": camera_count,
+                "message": f"Generated Rerun recording with {frame_count} frames and {camera_count} camera videos.",
             }
         )
+
+    def _log_camera_videos(
+        self,
+        rr: object,
+        record: RerunSessionRecord,
+        timestamps: list[object],
+        frame_count: int,
+        fps: float | None,
+    ) -> int:
+        if not hasattr(rr, "AssetVideo") or not hasattr(rr, "VideoFrameReference"):
+            return 0
+
+        episode = store.get_episode(record.dataset_id, record.episode_index)
+        if episode is None:
+            return 0
+
+        camera_count = 0
+        for camera in episode.camera_names:
+            blob = store.get_video_blob(record.dataset_id, record.episode_index, camera)
+            if blob is None:
+                continue
+            camera_name = _safe_entity_name(camera)
+            asset_path = f"cameras/{camera_name}/video_asset"
+            frame_path = f"cameras/{camera_name}/frame"
+            rr.log(
+                asset_path,
+                rr.AssetVideo(contents=blob, media_type="video/mp4"),
+                static=True,
+            )
+            for frame_index in range(frame_count):
+                _set_rerun_sequence_time(rr, "frame", frame_index)
+                rr.log(
+                    frame_path,
+                    rr.VideoFrameReference(
+                        seconds=_video_frame_seconds(timestamps, frame_index, fps),
+                        video_reference=asset_path,
+                    ),
+                )
+            camera_count += 1
+        return camera_count
 
 
 rerun_sessions = RerunSessionStore()

@@ -59,8 +59,8 @@ Known MVP gaps:
 - The frame API is still a placeholder.
 - Multi-camera video playback exists, but the scrubber, segment skip buttons,
   and state/action charts are still shallow.
-- Rerun is embedded, but recordings currently contain scalar state/action
-  timelines rather than synchronized camera video.
+- Rerun is embedded and records scalar timelines plus camera video assets when
+  MP4 blobs are available; generation is still synchronous and workerless.
 - VLM labeling is heuristic/local scaffolding, not real model inference.
 - Semantic search uses deterministic text hashing, not LanceDB vector indexes.
 - LeRobot export is metadata-oriented and does not yet materialize full

@@ -163,8 +163,8 @@ Definition of done:
 - [x] Serve `.rrd` files through API.
 - [x] Embed Rerun Web Viewer in the web panel.
 - [x] Add external-open fallback link for generated recordings.
-- [ ] Log camera video or synchronized image frames to Rerun.
-- [ ] Add cache key by dataset version, episode index, and visualization config.
+- [x] Log camera video or synchronized image frames to Rerun.
+- [x] Add cache key by dataset version, episode index, and visualization config.
 - [ ] Move `.rrd` generation into a worker.
 
 ### P5: Search and Filtering

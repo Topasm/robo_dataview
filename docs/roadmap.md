@@ -113,11 +113,13 @@ Implemented:
 - Backend creates `.rrd` cache files for state/action scalar timelines.
 - API serves generated recordings.
 - Web embeds ready `.rrd` recordings through `@rerun-io/web-viewer-react`.
+- Camera MP4 blobs are logged as Rerun `AssetVideo` entities when available,
+  with per-frame `VideoFrameReference` entries on the frame timeline.
+- Deterministic cache keys reuse `.rrd` files for the same dataset, episode,
+  mode, and visualization config.
 
 Next:
 
-- Add camera/video logging to Rerun recordings.
-- Cache by dataset version, episode index, and visualization config.
 - Add async Rerun cache worker.
 
 ## Phase 4: Annotation System

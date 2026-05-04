@@ -36,6 +36,10 @@ export function RerunPanel({ session, viewerUrl, onCreateSession }: RerunPanelPr
             </a>
           ) : null}
           {session.message ? <span className="muted">{session.message}</span> : null}
+          <span className="muted">
+            {session.cacheHit ? "cache hit" : "cache miss"} / cameras {session.cameraCount}
+          </span>
+          {session.cacheKey ? <span className="muted mono">{session.cacheKey}</span> : null}
         </div>
       ) : null}
       {session?.rrdUrl && session.status === "ready" ? (

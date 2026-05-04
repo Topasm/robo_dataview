@@ -77,6 +77,9 @@ export type RerunSession = {
   episodeIndex: number;
   mode: string;
   status: string;
+  cacheKey: string | null;
+  cacheHit: boolean;
+  cameraCount: number;
   viewerUrl: string | null;
   rrdUrl: string | null;
   message: string | null;

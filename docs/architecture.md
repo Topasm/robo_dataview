@@ -89,8 +89,9 @@ Implemented now:
 - Optional `annotations.lance`, `embeddings.lance`, and `versions.lance`
   mirroring.
 - Deterministic text-embedding semantic search for local development.
-- Rerun `.rrd` cache generation for state/action scalar timelines and web
-  viewer embedding through `@rerun-io/web-viewer-react`.
+- Rerun `.rrd` cache generation for state/action scalar timelines, optional
+  camera video assets, deterministic cache keys, and web viewer embedding
+  through `@rerun-io/web-viewer-react`.
 - Metadata-oriented LeRobot v3 export manifest, validation report, and version
   lineage.
 - Web UI orchestration via `useStudioData`.

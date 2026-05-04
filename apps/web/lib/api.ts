@@ -70,6 +70,9 @@ type RerunSessionResponse = {
   episode_index: number;
   mode: string;
   status: string;
+  cache_key: string | null;
+  cache_hit: boolean;
+  camera_count: number;
   viewer_url: string | null;
   rrd_url: string | null;
   message: string | null;
@@ -497,6 +500,9 @@ function toRerunSession(raw: RerunSessionResponse): RerunSession {
     episodeIndex: raw.episode_index,
     mode: raw.mode,
     status: raw.status,
+    cacheKey: raw.cache_key,
+    cacheHit: raw.cache_hit,
+    cameraCount: raw.camera_count,
     viewerUrl: raw.viewer_url,
     rrdUrl: raw.rrd_url ? `${API_ROOT_URL}${raw.rrd_url}` : null,
     message: raw.message
