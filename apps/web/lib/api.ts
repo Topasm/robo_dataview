@@ -4,6 +4,7 @@ import type {
   EpisodeTimeseries,
   ExportRecord,
   FilterPreset,
+  FrameRecord,
   JobRecord,
   RerunSession,
   ReviewStatus,
@@ -151,6 +152,40 @@ type EpisodeTimeseriesResponse = {
   action_dim: number | null;
 };
 
+type FrameLabelResponse = {
+  annotation_id: string;
+  label_type: string;
+  label_value: string;
+  source: SegmentAnnotation["source"];
+  confidence: number;
+  review_status: ReviewStatus;
+};
+
+type FrameRecordResponse = {
+  dataset_id: string;
+  episode_index: number;
+  frame_index: number;
+  timestamp: number | null;
+  task_index: number | null;
+  observation_state: number[] | null;
+  action: number[] | null;
+  state_norm: number | null;
+  action_norm: number | null;
+  is_bad_frame: boolean;
+  labels: FrameLabelResponse[];
+};
+
+type FrameListResponse = {
+  dataset_id: string;
+  episode_index: number;
+  frame_count: number;
+  start_frame: number;
+  end_frame: number | null;
+  limit: number;
+  returned_count: number;
+  items: FrameRecordResponse[];
+};
+
 export type SegmentAnnotationCreate = {
   datasetId: string;
   episodeIndex: number;
@@ -229,6 +264,23 @@ export async function fetchEpisodeTimeseries(
     `/episodes/${episodeIndex}/timeseries?${query}`
   );
   return toEpisodeTimeseries(row);
+}
+
+export async function fetchFrameRecord(
+  datasetId: string,
+  episodeIndex: number,
+  frameIndex: number,
+): Promise<FrameRecord | null> {
+  const query = new URLSearchParams({
+    dataset_id: datasetId,
+    episode_index: String(episodeIndex),
+    start_frame: String(frameIndex),
+    end_frame: String(frameIndex),
+    limit: "1"
+  });
+  const row = await request<FrameListResponse>(`/frames?${query}`);
+  const frame = row.items[0] ?? null;
+  return frame ? toFrameRecord(frame) : null;
 }
 
 export async function updateEpisodeLabels(
@@ -519,6 +571,29 @@ function toEpisodeTimeseries(raw: EpisodeTimeseriesResponse): EpisodeTimeseries 
     actionNorms: raw.action_norms,
     stateDim: raw.state_dim,
     actionDim: raw.action_dim
+  };
+}
+
+function toFrameRecord(raw: FrameRecordResponse): FrameRecord {
+  return {
+    datasetId: raw.dataset_id,
+    episodeIndex: raw.episode_index,
+    frameIndex: raw.frame_index,
+    timestamp: raw.timestamp,
+    taskIndex: raw.task_index,
+    observationState: raw.observation_state,
+    action: raw.action,
+    stateNorm: raw.state_norm,
+    actionNorm: raw.action_norm,
+    isBadFrame: raw.is_bad_frame,
+    labels: raw.labels.map((label) => ({
+      annotationId: label.annotation_id,
+      labelType: label.label_type,
+      labelValue: label.label_value,
+      source: label.source,
+      confidence: label.confidence,
+      reviewStatus: label.review_status
+    }))
   };
 }
 

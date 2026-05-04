@@ -16,8 +16,10 @@ type TimelinePanelProps = {
   onCreateSegment: (draft: SegmentDraft) => Promise<void>;
   onDeleteSegment: (annotationId: string) => Promise<void>;
   onMergeSegments: (left: SegmentAnnotation, right: SegmentAnnotation) => Promise<void>;
+  onSelectFrame: (frameIndex: number) => void;
   onSplitSegment: (annotation: SegmentAnnotation) => Promise<void>;
   onUpdateSegment: (annotationId: string, draft: SegmentDraft) => Promise<void>;
+  selectedFrame: number;
 };
 
 type DragState = {
@@ -31,15 +33,17 @@ export function TimelinePanel({
   onCreateSegment,
   onDeleteSegment,
   onMergeSegments,
+  onSelectFrame,
   onSplitSegment,
-  onUpdateSegment
+  onUpdateSegment,
+  selectedFrame
 }: TimelinePanelProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
-  const [selectedFrame, setSelectedFrame] = useState(0);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [draftBounds, setDraftBounds] = useState<Record<string, { startFrame: number; endFrame: number }>>({});
   const safeFrameCount = Math.max(1, frameCount);
   const maxFrame = Math.max(0, safeFrameCount - 1);
+  const activeFrame = clampFrame(selectedFrame, maxFrame);
   const sortedAnnotations = useMemo(
     () => [...annotations].sort((left, right) => left.startFrame - right.startFrame),
     [annotations]
@@ -54,14 +58,14 @@ export function TimelinePanel({
     await onCreateSegment({
       labelType: "important_frame",
       labelValue: "important_frame",
-      startFrame: selectedFrame,
-      endFrame: selectedFrame
+      startFrame: activeFrame,
+      endFrame: activeFrame
     });
   }
 
   async function handleCreateBadRange() {
-    const startFrame = clampFrame(selectedFrame - 5, maxFrame);
-    const endFrame = clampFrame(selectedFrame + 5, maxFrame);
+    const startFrame = clampFrame(activeFrame - 5, maxFrame);
+    const endFrame = clampFrame(activeFrame + 5, maxFrame);
     await onCreateSegment({
       labelType: "bad_range",
       labelValue: "bad_range",
@@ -74,7 +78,7 @@ export function TimelinePanel({
     if (event.target !== event.currentTarget) {
       return;
     }
-    setSelectedFrame(frameFromPointer(event, trackRef.current, maxFrame));
+    onSelectFrame(frameFromPointer(event, trackRef.current, maxFrame));
   }
 
   function handleDragPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
@@ -121,7 +125,7 @@ export function TimelinePanel({
       <div className="timeline-toolbar">
         <div>
           <div className="section-title">Timeline</div>
-          <div className="muted">Frame {selectedFrame}</div>
+          <div className="muted">Frame {activeFrame}</div>
         </div>
         <div className="timeline-actions">
           <button className="text-button compact-text-button" onClick={handleCreateMarker} type="button">
@@ -149,7 +153,7 @@ export function TimelinePanel({
       >
         <div
           className="timeline-selected-frame"
-          style={{ left: `${framePercent(selectedFrame, safeFrameCount)}%` }}
+          style={{ left: `${framePercent(activeFrame, safeFrameCount)}%` }}
         />
         {sortedAnnotations.map((annotation, index) => {
           const nextAnnotation = sortedAnnotations[index + 1] ?? null;
@@ -183,7 +187,7 @@ export function TimelinePanel({
                 className="timeline-segment-body"
                 onClick={(event) => {
                   event.stopPropagation();
-                  setSelectedFrame(bounds.startFrame);
+                  onSelectFrame(bounds.startFrame);
                 }}
                 type="button"
               >

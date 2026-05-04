@@ -1248,6 +1248,138 @@ button:disabled {
   padding: 12px;
 }
 
+.compact-empty-state {
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.frame-metadata-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.frame-status-row {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.frame-index-chip,
+.frame-bad-chip,
+.frame-ok-chip {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 5px;
+  line-height: 1;
+  padding: 6px 8px;
+}
+
+.frame-index-chip {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.frame-bad-chip {
+  background: #fde8ea;
+  border: 1px solid #edb5ba;
+  color: var(--danger);
+}
+
+.frame-ok-chip {
+  background: #e4f5ed;
+  border: 1px solid #acd8c1;
+  color: var(--accent-2);
+}
+
+.frame-meta-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.frame-meta-cell {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 8px;
+}
+
+.frame-meta-cell span,
+.frame-subtitle {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.frame-meta-cell strong {
+  color: var(--text);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vector-preview {
+  display: grid;
+  gap: 6px;
+}
+
+.frame-subtitle {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+}
+
+.vector-values {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 7px;
+}
+
+.vector-values span {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 3px 5px;
+}
+
+.frame-labels {
+  display: grid;
+  gap: 7px;
+}
+
+.frame-label-row {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 8px;
+}
+
+.frame-label-title {
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 label {
   color: var(--muted);
   display: grid;

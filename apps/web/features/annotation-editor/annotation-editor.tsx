@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Bot, Check, GitBranch, Plus, Save, Trash2, X } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
-import type { Episode, JobRecord, ReviewStatus, SegmentAnnotation } from "@/lib/types";
+import { FrameMetadataPanel } from "@/features/episode-viewer/frame-metadata-panel";
+import type { Episode, FrameRecord, JobRecord, ReviewStatus, SegmentAnnotation } from "@/lib/types";
 
 type AnnotationDraft = {
   labelType: string;
@@ -23,6 +24,9 @@ type EpisodeLabelDraft = {
 type AnnotationEditorProps = {
   episode: Episode;
   annotations: SegmentAnnotation[];
+  selectedFrame: number;
+  selectedFrameRecord: FrameRecord | null;
+  selectedFrameStatus: "idle" | "loading" | "ready" | "error";
   vlmJob: JobRecord | null;
   onCreateSegment: (draft: AnnotationDraft) => Promise<void>;
   onDeleteSegment: (annotationId: string) => Promise<void>;
@@ -36,6 +40,9 @@ type AnnotationEditorProps = {
 export function AnnotationEditor({
   episode,
   annotations,
+  selectedFrame,
+  selectedFrameRecord,
+  selectedFrameStatus,
   vlmJob,
   onCreateSegment,
   onDeleteSegment,
@@ -238,6 +245,12 @@ export function AnnotationEditor({
           Save labels
         </button>
       </section>
+
+      <FrameMetadataPanel
+        frame={selectedFrameRecord}
+        selectedFrame={selectedFrame}
+        status={selectedFrameStatus}
+      />
 
       <section className="panel-section">
         <div className="section-title">VLM Proposals</div>

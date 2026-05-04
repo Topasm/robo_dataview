@@ -27,6 +27,8 @@ import type { Episode, EpisodeTimeseries } from "@/lib/types";
 
 type EpisodeViewerProps = {
   episode: Episode;
+  onFrameChange: (frameIndex: number) => void;
+  selectedFrame: number;
 };
 
 type CameraLayout = "focus" | "grid";
@@ -36,7 +38,7 @@ const SYNC_DRIFT_SECONDS = 0.08;
 const STEP_FRAMES = 1;
 const JUMP_FRAMES = 30;
 
-export function EpisodeViewer({ episode }: EpisodeViewerProps) {
+export function EpisodeViewer({ episode, onFrameChange, selectedFrame }: EpisodeViewerProps) {
   const cameraNames = episode.cameraNames;
   const fps = episode.fps > 0 ? episode.fps : 20;
   const frameCount = Math.max(1, episode.length || 0);
@@ -63,9 +65,10 @@ export function EpisodeViewer({ episode }: EpisodeViewerProps) {
 
   useEffect(() => {
     setCurrentFrame(0);
+    onFrameChange(0);
     setIsPlaying(false);
     setVideoStatus({});
-  }, [episode.datasetId, episode.episodeIndex]);
+  }, [episode.datasetId, episode.episodeIndex, onFrameChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -106,10 +109,17 @@ export function EpisodeViewer({ episode }: EpisodeViewerProps) {
     (next: number) => {
       const clamped = Math.max(0, Math.min(lastFrame, Math.round(next)));
       setCurrentFrame(clamped);
+      onFrameChange(clamped);
       seekVideosToFrame(clamped);
     },
-    [lastFrame, seekVideosToFrame]
+    [lastFrame, onFrameChange, seekVideosToFrame]
   );
+
+  useEffect(() => {
+    const clamped = Math.max(0, Math.min(lastFrame, Math.round(selectedFrame)));
+    setCurrentFrame((current) => (current === clamped ? current : clamped));
+    seekVideosToFrame(clamped);
+  }, [lastFrame, seekVideosToFrame, selectedFrame]);
 
   const handleTogglePlay = useCallback(() => {
     setIsPlaying((current) => !current);
@@ -165,7 +175,13 @@ export function EpisodeViewer({ episode }: EpisodeViewerProps) {
           }
         });
         const frame = Math.min(lastFrame, Math.round(leader.currentTime * fps));
-        setCurrentFrame((current) => (current === frame ? current : frame));
+        setCurrentFrame((current) => {
+          if (current === frame) {
+            return current;
+          }
+          onFrameChange(frame);
+          return frame;
+        });
         if (frame >= lastFrame) {
           setIsPlaying(false);
           return;
@@ -181,7 +197,7 @@ export function EpisodeViewer({ episode }: EpisodeViewerProps) {
         window.cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [isPlaying, activeCamera, fps, lastFrame]);
+  }, [isPlaying, activeCamera, fps, lastFrame, onFrameChange]);
 
   const registerVideo = useCallback(
     (camera: string) => (element: HTMLVideoElement | null) => {

@@ -58,6 +58,29 @@ export type EpisodeTimeseries = {
   actionDim: number | null;
 };
 
+export type FrameLabel = {
+  annotationId: string;
+  labelType: string;
+  labelValue: string;
+  source: SegmentAnnotation["source"];
+  confidence: number;
+  reviewStatus: ReviewStatus;
+};
+
+export type FrameRecord = {
+  datasetId: string;
+  episodeIndex: number;
+  frameIndex: number;
+  timestamp: number | null;
+  taskIndex: number | null;
+  observationState: number[] | null;
+  action: number[] | null;
+  stateNorm: number | null;
+  actionNorm: number | null;
+  isBadFrame: boolean;
+  labels: FrameLabel[];
+};
+
 export type SegmentAnnotation = {
   id: string;
   datasetId: string;

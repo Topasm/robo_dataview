@@ -45,7 +45,7 @@ The repository has moved past a pure skeleton. The current MVP path can:
    summaries, and MP4 blobs with HTTP Range support when available.
 3. Serve frame-level samples through `GET /frames`, preferring `frames.lance`
    and falling back to episode time-series arrays with annotation labels and
-   bad-frame flags.
+   bad-frame flags, and show the selected frame in the web metadata panel.
 4. Store human and generated annotations as JSONL and mirror them to Lance when
    optional Lance dependencies are installed.
 5. Generate Rerun `.rrd` cache files for state/action timeline inspection and
@@ -65,7 +65,7 @@ The repository has moved past a pure skeleton. The current MVP path can:
 
 Known MVP gaps:
 
-- Frame mutation and the selected-frame metadata panel are not implemented yet.
+- Frame mutation is not implemented yet.
 - Rerun is embedded and records scalar timelines plus camera video assets when
   MP4 blobs are available; generation is still synchronous and workerless.
 - VLM labeling is heuristic/local scaffolding, not real model inference.

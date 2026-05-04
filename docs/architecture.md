@@ -85,6 +85,7 @@ Implemented now:
   blob endpoints, including HTTP Range support for browser video playback.
 - Frame listing API backed by `frames.lance` when present, with episode
   time-series fallback, annotation overlays, and bad-frame flags.
+- Selected-frame web metadata panel backed by the frame API.
 - Annotation CRUD with range validation, persisted JSONL, web edit actions, and
   midpoint split scaffolding.
 - Episode-level label overlay updates for caption, success/failure, failure

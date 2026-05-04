@@ -50,6 +50,7 @@ Working:
 - Rerun React viewer embed for ready `.rrd` sessions.
 - Frame listing endpoint with `frames.lance` preference, episode time-series
   fallback, state/action samples, annotation labels, and bad-frame flags.
+- Selected-frame metadata panel backed by `GET /frames`.
 - Export endpoint that writes a manifest and LeRobot v3-oriented snapshot with
   metadata, frame JSONL, optional Parquet, and available MP4 artifacts.
 - Version lineage JSONL and optional Lance mirror.
@@ -141,7 +142,7 @@ Definition of done:
 - [x] Add frame/time scrubber.
 - [x] Add state/action summary cards.
 - [x] Add state/action time-series chart.
-- [ ] Add selected-frame metadata panel.
+- [x] Add selected-frame metadata panel.
 - [ ] Add thumbnail or keyframe preview cache.
 
 ### P3: Annotation Workflow
@@ -178,8 +179,8 @@ Definition of done:
   rows.
 - [x] Return state/action vectors and norms.
 - [x] Overlay annotation labels and derive bad-frame flags.
+- [x] Add frame metadata panel in the web UI.
 - [ ] Add frame-level mutation endpoints.
-- [ ] Add frame metadata panel in the web UI.
 
 ### P5: Search and Filtering
 
@@ -232,8 +233,8 @@ Definition of done:
 
 ## Recommended Immediate Order
 
-1. Add selected-frame metadata UI backed by `GET /frames`.
-2. Add keyframe extraction and replace heuristic VLM with a real provider path.
+1. Add frame-level mutation endpoints.
+2. Replace heuristic VLM with a real provider path.
 3. Replace deterministic text embeddings with real model-backed vectors.
 4. Materialize fully LeRobot-loadable Parquet/MP4 export.
 5. Move Rerun/export/VLM work into queue-backed workers.

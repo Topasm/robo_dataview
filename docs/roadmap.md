@@ -88,10 +88,10 @@ Implemented:
 - Loading/error states for video metadata.
 - Browser-compatible MP4 byte-range serving.
 - State/action summary cards.
+- Selected-frame metadata panel backed by the frame API.
 
 Next:
 
-- Add selected-frame metadata panel backed by the frame API.
 - Add thumbnail or keyframe preview cache.
 - Replace in-process range slicing with direct blob/object-store range reads.
 

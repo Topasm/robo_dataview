@@ -24,6 +24,9 @@ export default function Home() {
     searchResults,
     selectedEpisode,
     selectedEpisodeIndex,
+    selectedFrameIndex,
+    selectedFrameRecord,
+    selectedFrameStatus,
     selectedSummary,
     vlmJob,
     handleCreateExport,
@@ -37,6 +40,7 @@ export default function Home() {
     handleOpenDataset,
     handleRunVlmLabel,
     handleSelectEpisode,
+    handleSelectFrame,
     handleSemanticSearch,
     handleSplitSegment,
     handleUpdateEpisodeLabels,
@@ -97,15 +101,21 @@ export default function Home() {
           />
           <div className="content-split">
             <div className="viewer-column">
-              <EpisodeViewer episode={selectedEpisode} />
+              <EpisodeViewer
+                episode={selectedEpisode}
+                onFrameChange={handleSelectFrame}
+                selectedFrame={selectedFrameIndex}
+              />
               <TimelinePanel
                 annotations={annotationRows}
                 frameCount={selectedEpisode.length}
                 onCreateSegment={handleCreateSegment}
                 onDeleteSegment={handleDeleteSegment}
                 onMergeSegments={handleMergeSegments}
+                onSelectFrame={handleSelectFrame}
                 onSplitSegment={handleSplitSegment}
                 onUpdateSegment={handleUpdateSegment}
+                selectedFrame={selectedFrameIndex}
               />
               <RerunPanel
                 onCreateSession={handleCreateRerunSession}
@@ -123,6 +133,9 @@ export default function Home() {
               onUpdateEpisodeLabels={handleUpdateEpisodeLabels}
               onUpdateSegment={handleUpdateSegment}
               onUpdateReviewStatus={handleUpdateReviewStatus}
+              selectedFrame={selectedFrameIndex}
+              selectedFrameRecord={selectedFrameRecord}
+              selectedFrameStatus={selectedFrameStatus}
               vlmJob={vlmJob}
             />
           </div>

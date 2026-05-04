@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   createExport,
@@ -14,6 +14,7 @@ import {
   fetchDatasetSummaries,
   fetchEpisodes,
   fetchFilterPresets,
+  fetchFrameRecord,
   filterSearch,
   openDataset,
   semanticSearch,
@@ -27,6 +28,7 @@ import type {
   Episode,
   ExportRecord,
   FilterPreset,
+  FrameRecord,
   JobRecord,
   RerunSession,
   ReviewStatus,
@@ -61,6 +63,11 @@ export function useStudioData() {
   const [exportRecord, setExportRecord] = useState<ExportRecord | null>(null);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [filterPresets, setFilterPresets] = useState<FilterPreset[]>([]);
+  const [selectedFrameIndex, setSelectedFrameIndex] = useState(0);
+  const [selectedFrameRecord, setSelectedFrameRecord] = useState<FrameRecord | null>(null);
+  const [selectedFrameStatus, setSelectedFrameStatus] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
   const [dataStatus, setDataStatus] = useState<"loading" | "api" | "sample">("loading");
 
   const selectedSummary =
@@ -149,6 +156,50 @@ export function useStudioData() {
   }, [selectedEpisode.datasetId, selectedEpisode.episodeIndex]);
 
   useEffect(() => {
+    setSelectedFrameIndex(0);
+    setSelectedFrameRecord(null);
+    setSelectedFrameStatus("idle");
+  }, [selectedEpisode.datasetId, selectedEpisode.episodeIndex]);
+
+  useEffect(() => {
+    if (selectedEpisode.length <= 0) {
+      setSelectedFrameRecord(null);
+      setSelectedFrameStatus("idle");
+      return;
+    }
+
+    let isMounted = true;
+    const maxFrame = Math.max(0, selectedEpisode.length - 1);
+    const frameIndex = Math.max(0, Math.min(maxFrame, Math.round(selectedFrameIndex)));
+    setSelectedFrameStatus("loading");
+    const timeoutId = window.setTimeout(() => {
+      fetchFrameRecord(selectedEpisode.datasetId, selectedEpisode.episodeIndex, frameIndex)
+        .then((frame) => {
+          if (isMounted) {
+            setSelectedFrameRecord(frame);
+            setSelectedFrameStatus(frame ? "ready" : "error");
+          }
+        })
+        .catch(() => {
+          if (isMounted) {
+            setSelectedFrameRecord(null);
+            setSelectedFrameStatus("error");
+          }
+        });
+    }, 120);
+
+    return () => {
+      isMounted = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    selectedEpisode.datasetId,
+    selectedEpisode.episodeIndex,
+    selectedEpisode.length,
+    selectedFrameIndex
+  ]);
+
+  useEffect(() => {
     let isMounted = true;
 
     async function loadFilterPresets() {
@@ -194,10 +245,17 @@ export function useStudioData() {
 
   function handleSelectEpisode(episodeIndex: number) {
     setSelectedEpisodeIndex(episodeIndex);
+    setSelectedFrameIndex(0);
+    setSelectedFrameRecord(null);
+    setSelectedFrameStatus("idle");
     setRerunSession(null);
     setVlmJob(null);
     setExportRecord(null);
   }
+
+  const handleSelectFrame = useCallback((frameIndex: number) => {
+    setSelectedFrameIndex(Math.max(0, Math.round(frameIndex)));
+  }, []);
 
   async function handleCreateSegment(draft: SegmentDraft) {
     const created = await createSegmentAnnotation({
@@ -367,6 +425,9 @@ export function useStudioData() {
     searchResults,
     selectedEpisode,
     selectedEpisodeIndex,
+    selectedFrameIndex,
+    selectedFrameRecord,
+    selectedFrameStatus,
     selectedSummary,
     vlmJob,
     handleCreateExport,
@@ -380,6 +441,7 @@ export function useStudioData() {
     handleOpenDataset,
     handleRunVlmLabel,
     handleSelectEpisode,
+    handleSelectFrame,
     handleSemanticSearch,
     handleSplitSegment,
     handleUpdateEpisodeLabels,
