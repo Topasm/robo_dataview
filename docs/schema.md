@@ -311,14 +311,20 @@ accepted annotations. It writes frame JSONL and available camera MP4 blobs, and
 also writes Parquet shards when `pyarrow` is installed. For materialized frame
 exports, `meta/info.json` derives concrete `observation.state` and `action`
 feature dimensions from exported rows, and `meta/stats.json` contains
-mean/std/min/max statistics for exported numeric frame features. Episode metadata includes
+mean/std/min/max statistics for exported numeric frame features. Frame rows
+include LeRobot's global `index` column in addition to compact local
+`episode_index`, `frame_index`, `timestamp`, compact local `task_index`,
+`source_episode_index`, `source_task_index`, `observation.state`, and `action`.
+Episode metadata includes `tasks`, `dataset_from_index`, `dataset_to_index`,
 `data/chunk_index`, `data/file_index`, and per-camera
-`videos/<video_key>/chunk_index` / `videos/<video_key>/file_index` entries so the
-official `video_path` template can resolve copied MP4 artifacts.
+`videos/<video_key>/chunk_index`, `videos/<video_key>/file_index`,
+`videos/<video_key>/from_timestamp`, and `videos/<video_key>/to_timestamp`
+entries so the official `data_path` and `video_path` templates can resolve
+copied artifacts.
 `validation.json` contains both the local loadability heuristic and an
-`official_loader` result. The local heuristic requires Parquet frame data plus
-data/video shard index metadata when video artifacts are present. When the optional
-`lerobot` package is installed, validation attempts
+`official_loader` result. The local heuristic requires Parquet task, episode,
+and frame data plus LeRobot offset and video timestamp metadata. When the
+optional `lerobot` package is installed, validation attempts
 `LeRobotDataset(repo_id, root=<export_root>)` and records success, dataset
 length, or the exact exception.
 

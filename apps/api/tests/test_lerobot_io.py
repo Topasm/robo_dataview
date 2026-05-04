@@ -54,7 +54,7 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertTrue(artifact["validation"]["metadata_ok"])
             self.assertEqual(summary["format"], "lerobot_v3_metadata_snapshot")
             self.assertEqual(summary["total_episodes"], 2)
-            self.assertEqual(summary["episode_indices"], [0, 2])
+            self.assertEqual(summary["episode_indices"], [0, 1])
             self.assertTrue(Path(artifact["files"]["stats"]).exists())
             self.assertTrue(Path(artifact["files"]["tasks_jsonl"]).exists())
             self.assertTrue(Path(artifact["files"]["episodes_jsonl"]).exists())
@@ -114,10 +114,24 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertEqual(info["features"]["observation.state"]["shape"], [2])
             self.assertEqual(info["features"]["action"]["shape"], [2])
             self.assertEqual(info["features"]["timestamp"]["shape"], [1])
+            self.assertEqual(info["features"]["index"]["shape"], [1])
+            self.assertEqual(info["features"]["cam_high"]["dtype"], "video")
             stats = json.loads((root / "meta/stats.json").read_text(encoding="utf-8"))
             self.assertEqual(stats["features"]["observation.state"]["min"], [0.0, 0.0])
             self.assertEqual(stats["features"]["observation.state"]["max"], [1.0, 1.0])
             self.assertEqual(stats["features"]["action"]["max"], [3.0, 4.0])
+            data_rows = [
+                json.loads(line)
+                for line in (root / "data/chunk-000/file-000.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+                if line.strip()
+            ]
+            self.assertEqual([row["index"] for row in data_rows], [0, 1, 2])
+            self.assertEqual({row["episode_index"] for row in data_rows}, {0})
+            self.assertEqual({row["source_episode_index"] for row in data_rows}, {0})
+            self.assertEqual({row["task_index"] for row in data_rows}, {0})
+            self.assertEqual({row["source_task_index"] for row in data_rows}, {3})
             episode_rows = [
                 json.loads(line)
                 for line in (root / "meta/episodes/chunk-000/file-000.jsonl")
@@ -125,10 +139,19 @@ class LeRobotIoTest(unittest.TestCase):
                 .splitlines()
                 if line.strip()
             ]
+            self.assertEqual(episode_rows[0]["episode_index"], 0)
+            self.assertEqual(episode_rows[0]["source_episode_index"], 0)
+            self.assertEqual(episode_rows[0]["tasks"], ["Fold the cloth."])
+            self.assertEqual(episode_rows[0]["task_index"], 0)
+            self.assertEqual(episode_rows[0]["source_task_index"], 3)
+            self.assertEqual(episode_rows[0]["dataset_from_index"], 0)
+            self.assertEqual(episode_rows[0]["dataset_to_index"], 3)
             self.assertEqual(episode_rows[0]["data/chunk_index"], 0)
             self.assertEqual(episode_rows[0]["data/file_index"], 0)
             self.assertEqual(episode_rows[0]["videos/cam_high/chunk_index"], 0)
             self.assertEqual(episode_rows[0]["videos/cam_high/file_index"], 0)
+            self.assertEqual(episode_rows[0]["videos/cam_high/from_timestamp"], 0.0)
+            self.assertEqual(episode_rows[0]["videos/cam_high/to_timestamp"], 0.15)
 
     def test_validate_lerobot_snapshot_records_official_loader_success(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -211,6 +234,14 @@ class LeRobotIoTest(unittest.TestCase):
                 video_blobs_by_episode={0: {"cam_high": b"fake mp4"}},
             )
             root = Path(artifact["root"])
+            (root / "meta/tasks.parquet").write_text(
+                "placeholder",
+                encoding="utf-8",
+            )
+            (root / "meta/episodes/chunk-000/file-000.parquet").write_text(
+                "placeholder",
+                encoding="utf-8",
+            )
             (root / "data/chunk-000/file-000.parquet").write_text(
                 "placeholder",
                 encoding="utf-8",

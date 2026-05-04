@@ -341,9 +341,13 @@ The manifest contains an `artifacts.lerobot_v3` object with the metadata snapsho
 root, file paths, materialization status, and validation report. The API
 response also includes the same `artifacts` object so the web UI can show export
 provenance without reading the manifest file. The validation report includes a
-local loadability heuristic and an `official_loader` object. When the optional
-`lerobot` package is installed, the official loader result records success,
-dataset length, or the exact exception.
+local loadability heuristic and an `official_loader` object. The exported frame
+rows include LeRobot's global `index` column and compact local episode/task
+indices; original dataset indices are preserved as `source_episode_index` and
+`source_task_index`. Episode metadata includes `tasks`, `dataset_from_index`,
+`dataset_to_index`, data shard indices, and per-camera video shard/timestamp
+fields. When the optional `lerobot` package is installed, the official loader
+result records success, dataset length, or the exact exception.
 
 For `format=lance`, the response contains `artifacts.lance_subset` when optional
 `pyarrow` and `lance` dependencies are installed. The subset contains

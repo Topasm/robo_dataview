@@ -65,17 +65,37 @@ def write_lerobot_v3_snapshot(
     annotations_path = root / ANNOTATIONS_JSONL_PATH
     validation_path = root / VALIDATION_JSON_PATH
 
-    task_rows = _task_rows(episodes)
-    frame_rows = _frame_rows(episodes, timeseries_by_episode or {})
-    video_rows = _write_video_blobs(root, episodes, video_blobs_by_episode or {})
-    episode_rows = _episode_rows(episodes, annotations_by_episode, video_rows)
+    task_rows, task_index_by_episode = _task_rows_and_mapping(episodes)
+    episode_index_by_source = {
+        episode.episode_index: local_index
+        for local_index, episode in enumerate(episodes)
+    }
+    frame_rows = _frame_rows(
+        episodes,
+        timeseries_by_episode or {},
+        episode_index_by_source=episode_index_by_source,
+        task_index_by_episode=task_index_by_episode,
+    )
+    video_rows = _write_video_blobs(
+        root,
+        episodes,
+        video_blobs_by_episode or {},
+        episode_index_by_source=episode_index_by_source,
+    )
+    episode_rows = _episode_rows(
+        episodes,
+        annotations_by_episode,
+        video_rows,
+        episode_index_by_source=episode_index_by_source,
+        task_index_by_episode=task_index_by_episode,
+    )
     annotation_rows = [
         _annotation_row(annotation)
         for annotations in annotations_by_episode.values()
         for annotation in annotations
     ]
     parquet_files = {
-        "tasks": _write_optional_parquet(tasks_parquet_path, task_rows),
+        "tasks": _write_optional_tasks_parquet(tasks_parquet_path, task_rows),
         "episodes": _write_optional_parquet(episodes_parquet_path, episode_rows),
         "data": _write_optional_parquet(data_parquet_path, frame_rows),
     }
@@ -85,6 +105,7 @@ def write_lerobot_v3_snapshot(
         video_rows=video_rows,
     )
 
+    fps = _common_fps(episodes) or 20.0
     info = {
         "dataset_id": dataset_id,
         "format": LEROBOT_SNAPSHOT_VERSION,
@@ -95,14 +116,14 @@ def write_lerobot_v3_snapshot(
         "total_episodes": len(episodes),
         "total_frames": sum(episode.length or 0 for episode in episodes),
         "total_tasks": len(task_rows),
-        "fps": _common_fps(episodes),
+        "fps": fps,
         "chunks_size": 1000,
         "data_files_size_in_mb": 100,
         "video_files_size_in_mb": 200,
         "data_path": "data/chunk-{chunk_index:03d}/file-{file_index:03d}.parquet",
         "video_path": "videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4",
         "camera_names": sorted({camera for episode in episodes for camera in episode.camera_names}),
-        "features": _feature_schema(frame_rows),
+        "features": _feature_schema(frame_rows, video_rows),
         "paths": {
             "data": "data/chunk-000/file-000.parquet",
             "data_jsonl": "data/chunk-000/file-000.jsonl",
@@ -187,8 +208,8 @@ def read_lerobot_snapshot_episodes(root: Path, dataset_id: str | None = None) ->
     return [
         EpisodeDetail(
             dataset_id=resolved_dataset_id,
-            episode_index=int(row["episode_index"]),
-            task_index=row.get("task_index"),
+            episode_index=int(row.get("source_episode_index", row["episode_index"])),
+            task_index=row.get("source_task_index", row.get("task_index")),
             length=row.get("length"),
             success_label=row.get("success_label"),
             quality_score=row.get("quality_score"),
@@ -258,6 +279,8 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         errors.append("missing task metadata")
     if not (present["episodes_parquet"] or present["episodes_jsonl"]):
         errors.append("missing episode metadata")
+    if info.get("fps") is None or float(info.get("fps") or 0) <= 0:
+        errors.append("meta/info.json must include a positive fps")
     if int(info.get("total_episodes") or 0) != len(episode_rows):
         errors.append("total_episodes does not match episode metadata rows")
     if len(data_index_rows) != len(episode_rows):
@@ -281,6 +304,12 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         previous_end = end
     if data_rows and len(data_rows) != previous_end:
         errors.append("materialized frame row count does not match indexed frame count")
+    if data_rows and not _frame_rows_have_official_indices(data_rows):
+        errors.append("frame rows must include contiguous global index values")
+    if episode_rows and not _episode_rows_have_dataset_offsets(episode_rows):
+        errors.append("episode metadata must include dataset_from_index and dataset_to_index")
+    if episode_rows and not _episode_rows_have_tasks(episode_rows):
+        errors.append("episode metadata must include tasks lists")
 
     if not present["tasks_parquet"]:
         warnings.append("pyarrow not available or parquet task metadata was not written")
@@ -295,11 +324,18 @@ def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
         if missing_videos:
             errors.append(f"video index references missing files: {missing_videos[:3]}")
 
+    frame_indices_ok = _frame_rows_have_official_indices(data_rows) if data_rows else True
     local_loadable = bool(
         not errors
+        and present["tasks_parquet"]
+        and present["episodes_parquet"]
         and present["data_parquet"]
+        and frame_indices_ok
         and _episode_rows_have_data_shard_indices(episode_rows)
+        and _episode_rows_have_dataset_offsets(episode_rows)
+        and _episode_rows_have_tasks(episode_rows)
         and _episode_rows_have_video_shard_indices(episode_rows, video_rows)
+        and _episode_rows_have_video_timestamps(episode_rows, video_rows)
     )
     official_loader = _validate_with_official_lerobot_loader(root, info)
     if official_loader["available"]:
@@ -331,6 +367,29 @@ def _episode_rows_have_data_shard_indices(episode_rows: list[dict[str, Any]]) ->
     )
 
 
+def _episode_rows_have_dataset_offsets(episode_rows: list[dict[str, Any]]) -> bool:
+    previous_end = 0
+    for row in episode_rows:
+        start = row.get("dataset_from_index")
+        end = row.get("dataset_to_index")
+        if start is None or end is None:
+            return False
+        start_int = int(start)
+        end_int = int(end)
+        if start_int != previous_end or end_int < start_int:
+            return False
+        previous_end = end_int
+    return True
+
+
+def _episode_rows_have_tasks(episode_rows: list[dict[str, Any]]) -> bool:
+    return all(isinstance(row.get("tasks"), list) and row.get("tasks") for row in episode_rows)
+
+
+def _frame_rows_have_official_indices(data_rows: list[dict[str, Any]]) -> bool:
+    return all(int(row.get("index", -1)) == index for index, row in enumerate(data_rows))
+
+
 def _episode_rows_have_video_shard_indices(
     episode_rows: list[dict[str, Any]],
     video_rows: list[dict[str, Any]],
@@ -345,6 +404,23 @@ def _episode_rows_have_video_shard_indices(
     return all(
         row.get(f"videos/{video_key}/chunk_index") is not None
         and row.get(f"videos/{video_key}/file_index") is not None
+        for row in episode_rows
+        for video_key in video_keys_by_episode.get(_episode_index_key(row), set())
+    )
+
+
+def _episode_rows_have_video_timestamps(
+    episode_rows: list[dict[str, Any]],
+    video_rows: list[dict[str, Any]],
+) -> bool:
+    video_keys_by_episode: dict[int, set[str]] = {}
+    for row in video_rows:
+        if row.get("episode_index") is None or not row.get("video_key"):
+            continue
+        video_keys_by_episode.setdefault(int(row["episode_index"]), set()).add(str(row["video_key"]))
+    return all(
+        row.get(f"videos/{video_key}/from_timestamp") is not None
+        and row.get(f"videos/{video_key}/to_timestamp") is not None
         for row in episode_rows
         for video_key in video_keys_by_episode.get(_episode_index_key(row), set())
     )
@@ -403,35 +479,48 @@ def _official_loader_repo_id(info: dict[str, Any], root: Path) -> str:
     return repo_id
 
 
-def _task_rows(episodes: list[EpisodeDetail]) -> list[dict[str, Any]]:
-    tasks: dict[int, str] = {}
+def _task_rows_and_mapping(
+    episodes: list[EpisodeDetail],
+) -> tuple[list[dict[str, Any]], dict[int, int]]:
+    task_texts: dict[str, int] = {}
+    task_index_by_episode: dict[int, int] = {}
     for episode in episodes:
-        task_index = int(episode.task_index or 0)
-        tasks.setdefault(
-            task_index,
-            episode.language_instruction or episode.caption or f"task_{task_index}",
-        )
-    return [
+        task = _episode_task(episode)
+        task_index = task_texts.setdefault(task, len(task_texts))
+        task_index_by_episode[episode.episode_index] = task_index
+    rows = [
         {"task_index": task_index, "task": task}
-        for task_index, task in sorted(tasks.items(), key=lambda item: item[0])
+        for task, task_index in sorted(task_texts.items(), key=lambda item: item[1])
     ]
+    return rows, task_index_by_episode
 
 
 def _episode_rows(
     episodes: list[EpisodeDetail],
     annotations_by_episode: dict[int, list[AnnotationRecord]],
     video_rows: list[dict[str, Any]],
+    *,
+    episode_index_by_source: dict[int, int],
+    task_index_by_episode: dict[int, int],
 ) -> list[dict[str, Any]]:
     rows = []
     data_start_idx = 0
     video_index = _video_index_by_episode(video_rows)
     for episode in episodes:
+        local_episode_index = episode_index_by_source[episode.episode_index]
         length = episode.length or 0
         data_end_idx = data_start_idx + length
+        task = _episode_task(episode)
+        local_task_index = task_index_by_episode[episode.episode_index]
         row = {
-            "episode_index": episode.episode_index,
-            "task_index": episode.task_index,
+            "episode_index": local_episode_index,
+            "source_episode_index": episode.episode_index,
+            "tasks": [task],
+            "task_index": local_task_index,
+            "source_task_index": episode.task_index,
             "length": length,
+            "dataset_from_index": data_start_idx,
+            "dataset_to_index": data_end_idx,
             "data_start_idx": data_start_idx,
             "data_end_idx": data_end_idx,
             "data/chunk_index": 0,
@@ -446,19 +535,25 @@ def _episode_rows(
             "camera_names": episode.camera_names,
             "accepted_annotation_count": len(annotations_by_episode.get(episode.episode_index, [])),
         }
-        row.update(video_index.get(episode.episode_index, {}))
+        row.update(video_index.get(local_episode_index, {}))
         rows.append(row)
         data_start_idx = data_end_idx
     return rows
 
 
-def _video_index_by_episode(video_rows: list[dict[str, Any]]) -> dict[int, dict[str, int]]:
-    index: dict[int, dict[str, int]] = {}
+def _video_index_by_episode(video_rows: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
+    index: dict[int, dict[str, Any]] = {}
     for row in video_rows:
         episode_index = int(row["episode_index"])
         video_key = str(row["video_key"])
         index.setdefault(episode_index, {})[f"videos/{video_key}/chunk_index"] = int(row["chunk_index"])
         index[episode_index][f"videos/{video_key}/file_index"] = int(row["file_index"])
+        index[episode_index][f"videos/{video_key}/from_timestamp"] = float(
+            row.get("from_timestamp") or 0.0
+        )
+        index[episode_index][f"videos/{video_key}/to_timestamp"] = float(
+            row.get("to_timestamp") or 0.0
+        )
     return index
 
 
@@ -467,8 +562,10 @@ def _data_index_rows(episode_rows: list[dict[str, Any]]) -> list[dict[str, Any]]
         {
             "episode_index": row["episode_index"],
             "data_file": "data/chunk-000/file-000.parquet",
-            "data_start_idx": row["data_start_idx"],
-            "data_end_idx": row["data_end_idx"],
+            "data_start_idx": row["dataset_from_index"],
+            "data_end_idx": row["dataset_to_index"],
+            "dataset_from_index": row["dataset_from_index"],
+            "dataset_to_index": row["dataset_to_index"],
         }
         for row in episode_rows
     ]
@@ -477,9 +574,15 @@ def _data_index_rows(episode_rows: list[dict[str, Any]]) -> list[dict[str, Any]]
 def _frame_rows(
     episodes: list[EpisodeDetail],
     timeseries_by_episode: dict[int, dict[str, Any]],
+    *,
+    episode_index_by_source: dict[int, int],
+    task_index_by_episode: dict[int, int],
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
+    dataset_index = 0
     for episode in episodes:
+        local_episode_index = episode_index_by_source[episode.episode_index]
+        local_task_index = task_index_by_episode[episode.episode_index]
         timeseries = timeseries_by_episode.get(episode.episode_index)
         if timeseries is None:
             continue
@@ -491,14 +594,18 @@ def _frame_rows(
         for frame_index in range(frame_count):
             rows.append(
                 {
-                    "episode_index": episode.episode_index,
+                    "index": dataset_index,
+                    "episode_index": local_episode_index,
+                    "source_episode_index": episode.episode_index,
                     "frame_index": frame_index,
                     "timestamp": _timestamp_at(timestamps, frame_index, fps),
-                    "task_index": episode.task_index,
+                    "task_index": local_task_index,
+                    "source_task_index": episode.task_index,
                     "observation.state": _numeric_list_at(states, frame_index),
                     "action": _numeric_list_at(actions, frame_index),
                 }
             )
+            dataset_index += 1
     return rows
 
 
@@ -506,9 +613,12 @@ def _write_video_blobs(
     root: Path,
     episodes: list[EpisodeDetail],
     video_blobs_by_episode: dict[int, dict[str, bytes]],
+    *,
+    episode_index_by_source: dict[int, int],
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for episode in episodes:
+        local_episode_index = episode_index_by_source[episode.episode_index]
         camera_blobs = video_blobs_by_episode.get(episode.episode_index, {})
         for camera, blob in sorted(camera_blobs.items()):
             if not blob:
@@ -519,17 +629,20 @@ def _write_video_blobs(
                 Path("videos")
                 / _safe_path_name(camera)
                 / "chunk-000"
-                / f"file-{episode.episode_index:03d}.mp4"
+                / f"file-{local_episode_index:03d}.mp4"
             )
             path = root / relative_path
             path.write_bytes(blob)
             rows.append(
                 {
-                    "episode_index": episode.episode_index,
+                    "episode_index": local_episode_index,
+                    "source_episode_index": episode.episode_index,
                     "camera": camera,
                     "video_key": _safe_path_name(camera),
                     "chunk_index": 0,
-                    "file_index": episode.episode_index,
+                    "file_index": local_episode_index,
+                    "from_timestamp": 0.0,
+                    "to_timestamp": _episode_duration_seconds(episode),
                     "video_file": relative_path.as_posix(),
                     "file_size_bytes": len(blob),
                 }
@@ -572,6 +685,18 @@ def _common_fps(episodes: list[EpisodeDetail]) -> float | None:
     if len(fps_values) == 1:
         return fps_values.pop()
     return None
+
+
+def _episode_task(episode: EpisodeDetail) -> str:
+    return episode.language_instruction or episode.caption or f"task_{int(episode.task_index or 0)}"
+
+
+def _episode_duration_seconds(episode: EpisodeDetail) -> float:
+    if episode.duration_seconds is not None:
+        return float(episode.duration_seconds)
+    if episode.length is not None and episode.fps:
+        return float(episode.length) / float(episode.fps)
+    return 0.0
 
 
 def _stats(frame_rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -631,19 +756,39 @@ def _std(values: list[float]) -> float:
     return math.sqrt(variance)
 
 
-def _feature_schema(frame_rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def _feature_schema(
+    frame_rows: list[dict[str, Any]],
+    video_rows: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
     features = {
-        "timestamp": {"dtype": "float32", "shape": [1]},
-        "episode_index": {"dtype": "int64", "shape": [1]},
-        "frame_index": {"dtype": "int64", "shape": [1]},
-        "task_index": {"dtype": "int64", "shape": [1]},
+        "timestamp": {"dtype": "float32", "shape": [1], "names": None},
+        "episode_index": {"dtype": "int64", "shape": [1], "names": None},
+        "frame_index": {"dtype": "int64", "shape": [1], "names": None},
+        "index": {"dtype": "int64", "shape": [1], "names": None},
+        "task_index": {"dtype": "int64", "shape": [1], "names": None},
+        "source_episode_index": {"dtype": "int64", "shape": [1], "names": None},
+        "source_task_index": {"dtype": "int64", "shape": [1], "names": None},
     }
     state_dim = _first_vector_dim_from_rows(frame_rows, "observation.state")
     action_dim = _first_vector_dim_from_rows(frame_rows, "action")
     if state_dim is not None:
-        features["observation.state"] = {"dtype": "float32", "shape": [state_dim]}
+        features["observation.state"] = {
+            "dtype": "float32",
+            "shape": [state_dim],
+            "names": None,
+        }
     if action_dim is not None:
-        features["action"] = {"dtype": "float32", "shape": [action_dim]}
+        features["action"] = {
+            "dtype": "float32",
+            "shape": [action_dim],
+            "names": None,
+        }
+    for video_key in sorted({str(row["video_key"]) for row in video_rows if row.get("video_key")}):
+        features[video_key] = {
+            "dtype": "video",
+            "shape": [3, 0, 0],
+            "names": ["channel", "height", "width"],
+        }
     return features
 
 
@@ -734,6 +879,24 @@ def _write_optional_parquet(path: Path, rows: list[dict[str, Any]]) -> bool:
     path.parent.mkdir(parents=True, exist_ok=True)
     table = pa.Table.from_pylist(rows)
     pq.write_table(table, path)
+    return True
+
+
+def _write_optional_tasks_parquet(path: Path, rows: list[dict[str, Any]]) -> bool:
+    if not rows:
+        return False
+    try:
+        import pandas as pd
+    except ImportError:
+        return _write_optional_parquet(path, rows)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    dataframe = pd.DataFrame(rows)
+    if "task" in dataframe:
+        dataframe = dataframe.set_index("task")
+    try:
+        dataframe.to_parquet(path)
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return False
     return True
 
 

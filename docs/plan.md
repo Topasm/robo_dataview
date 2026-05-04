@@ -65,6 +65,10 @@ Working:
 - Annotation-backed selected-frame exact-label mutation.
 - Export endpoint that writes a manifest and LeRobot v3-oriented snapshot with
   metadata, frame JSONL, optional Parquet, and available MP4 artifacts.
+- LeRobot v3 export metadata includes official-style compact episode/task
+  indices, global frame `index`, episode `dataset_from_index` /
+  `dataset_to_index`, `tasks`, source-index provenance, and per-camera video
+  timestamp fields for loader compatibility.
 - Version lineage JSONL and optional Lance mirror.
 - Main Next.js UI with dataset, episode, viewer, timeline, annotation, search,
   Rerun, and export areas.
