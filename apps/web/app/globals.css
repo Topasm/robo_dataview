@@ -453,7 +453,7 @@ button:disabled {
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   display: grid;
-  grid-template-rows: 58px minmax(0, 1fr) 48px 116px;
+  grid-template-rows: 58px minmax(0, 1fr) 48px 152px;
   min-height: 0;
   padding: 12px;
 }
@@ -471,8 +471,72 @@ button:disabled {
 .camera-preview {
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(0, 1fr) 220px;
   min-height: 0;
+}
+
+.camera-preview.layout-focus {
+  grid-template-columns: minmax(0, 1fr) 220px;
+}
+
+.camera-preview.layout-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.camera-grid {
+  display: grid;
+  gap: 10px;
+  grid-auto-rows: 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  min-height: 0;
+  overflow: auto;
+}
+
+.camera-grid-tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  grid-template-rows: 30px minmax(0, 1fr);
+  min-height: 160px;
+  overflow: hidden;
+  padding: 0;
+  text-align: left;
+}
+
+.camera-grid-tile:hover {
+  border-color: #8cc9d0;
+}
+
+.camera-grid-tile.leader {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.camera-grid-tile-top {
+  align-items: center;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  font-size: 11px;
+  gap: 6px;
+  justify-content: space-between;
+  padding: 0 9px;
+}
+
+.layout-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+.icon-button.active {
+  background: #e7f4f5;
+  border-color: #8cc9d0;
+  color: var(--text);
+}
+
+.video-hidden {
+  visibility: hidden;
 }
 
 .active-camera-stage {
@@ -631,30 +695,64 @@ button:disabled {
   padding-top: 10px;
 }
 
-.scrubber {
+.scrubber-input {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  flex: 1;
+  height: 18px;
+  margin: 0;
+  min-width: 0;
+}
+
+.scrubber-input:focus {
+  outline: 0;
+}
+
+.scrubber-input::-webkit-slider-runnable-track {
   background: var(--surface-3);
   border-radius: 999px;
-  flex: 1;
-  height: 9px;
-  position: relative;
+  height: 6px;
 }
 
-.scrubber-fill {
-  background: var(--accent);
-  border-radius: inherit;
-  height: 100%;
-  width: 36%;
-}
-
-.scrubber-thumb {
+.scrubber-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
   background: var(--surface);
   border: 2px solid var(--accent);
   border-radius: 50%;
-  height: 17px;
-  left: 35%;
-  position: absolute;
-  top: -4px;
-  width: 17px;
+  height: 16px;
+  margin-top: -5px;
+  width: 16px;
+}
+
+.scrubber-input::-moz-range-track {
+  background: var(--surface-3);
+  border-radius: 999px;
+  height: 6px;
+}
+
+.scrubber-input::-moz-range-thumb {
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  height: 16px;
+  width: 16px;
+}
+
+.scrubber-info {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  font-size: 11px;
+  gap: 8px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+.frame-step {
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .state-action-panel {
@@ -668,7 +766,10 @@ button:disabled {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 10px;
+  display: grid;
+  gap: 6px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  padding: 8px 10px;
 }
 
 .plot-title-row {
@@ -688,6 +789,58 @@ button:disabled {
   color: var(--muted);
   flex: 0 0 auto;
   font-size: 11px;
+}
+
+.timeseries-svg {
+  background: var(--surface-2);
+  border-radius: 4px;
+  display: block;
+  height: 100%;
+  min-height: 38px;
+  width: 100%;
+}
+
+.timeseries-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+
+.timeseries-axis {
+  stroke: var(--border);
+  stroke-dasharray: 2 3;
+  stroke-width: 0.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.timeseries-marker {
+  stroke: var(--danger);
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+}
+
+.timeseries-empty {
+  align-items: center;
+  background: var(--surface-2);
+  border-radius: 4px;
+  color: var(--muted);
+  display: flex;
+  font-size: 12px;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 10px;
+  text-align: center;
+}
+
+.plot-range {
+  display: flex;
+  font-size: 11px;
+  gap: 12px;
+  justify-content: space-between;
+  min-width: 0;
 }
 
 .norm-range,
