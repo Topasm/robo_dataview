@@ -164,7 +164,7 @@ button:disabled {
 
 .viewer-column {
   display: grid;
-  grid-template-rows: minmax(380px, 1fr) 94px 170px;
+  grid-template-rows: minmax(440px, 1fr) 94px 170px;
   min-width: 0;
 }
 
