@@ -216,6 +216,7 @@ Implemented:
 - Deterministic text-embedding semantic search over episode text and
   annotations.
 - Optional LanceDB vector table mirror/query path for deterministic embeddings.
+- Optional OpenAI-compatible text embedding provider.
 
 Next:
 

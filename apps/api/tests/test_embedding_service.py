@@ -1,14 +1,23 @@
 from __future__ import annotations
 
+import json
+import os
 import tempfile
 import sys
 import types
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from apps.api.schemas.episodes import EpisodeListItem
 from apps.api.schemas.search import SemanticSearchRequest
-from apps.api.services.embedding_service import EmbeddingIndex, embed_text
+from apps.api.services.embedding_service import (
+    DeterministicTextEmbeddingProvider,
+    EmbeddingIndex,
+    OpenAICompatibleEmbeddingProvider,
+    embed_text,
+    get_text_embedding_provider,
+)
 
 
 class EmbeddingServiceTest(unittest.TestCase):
@@ -32,6 +41,7 @@ class EmbeddingServiceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             index = EmbeddingIndex(
                 storage_root=Path(tmpdir),
+                embedding_provider=DeterministicTextEmbeddingProvider(),
                 mirror_lance=False,
                 mirror_lancedb=False,
             )
@@ -66,6 +76,7 @@ class EmbeddingServiceTest(unittest.TestCase):
             storage_root = Path(tmpdir)
             first_index = EmbeddingIndex(
                 storage_root=storage_root,
+                embedding_provider=DeterministicTextEmbeddingProvider(),
                 mirror_lance=False,
                 mirror_lancedb=False,
             )
@@ -82,13 +93,17 @@ class EmbeddingServiceTest(unittest.TestCase):
 
             second_index = EmbeddingIndex(
                 storage_root=storage_root,
+                embedding_provider=DeterministicTextEmbeddingProvider(),
                 mirror_lance=False,
                 mirror_lancedb=False,
             )
             second_records = second_index.records("sample")
             paths = second_index.storage_paths("sample")
 
-            self.assertEqual([record.embedding_id for record in second_records], [first_records[0].embedding_id])
+            self.assertEqual(
+                [record.embedding_id for record in second_records],
+                [first_records[0].embedding_id],
+            )
             self.assertTrue(Path(paths["jsonl"]).exists())
             self.assertTrue(paths["lance"].endswith("/embeddings.lance"))
             self.assertTrue(paths["lancedb"].endswith("/lancedb"))
@@ -99,6 +114,7 @@ class EmbeddingServiceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             index = EmbeddingIndex(
                 storage_root=Path(tmpdir),
+                embedding_provider=DeterministicTextEmbeddingProvider(),
                 mirror_lance=False,
                 mirror_lancedb=True,
             )
@@ -122,6 +138,90 @@ class EmbeddingServiceTest(unittest.TestCase):
         self.assertEqual(fake_db.opened_table_name, "embeddings")
         self.assertEqual(results[0].match_type, "lancedb_vector")
         self.assertEqual(results[0].episode_index, 1)
+
+    def test_embedding_index_uses_configured_embedding_provider(self) -> None:
+        provider = FakeTextEmbeddingProvider()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            index = EmbeddingIndex(
+                storage_root=Path(tmpdir),
+                embedding_provider=provider,
+                mirror_lance=False,
+                mirror_lancedb=False,
+            )
+            episodes = [
+                EpisodeListItem(
+                    dataset_id="sample",
+                    episode_index=1,
+                    task_index=3,
+                    length=100,
+                    caption="successful cloth edge grasp",
+                ),
+                EpisodeListItem(
+                    dataset_id="sample",
+                    episode_index=2,
+                    task_index=4,
+                    length=100,
+                    caption="empty workspace",
+                ),
+            ]
+
+            results = index.search(
+                SemanticSearchRequest(dataset_id="sample", text="cloth grasp", limit=2),
+                episodes=episodes,
+                annotations=[],
+            )
+            records = index.records("sample")
+
+        self.assertEqual(results[0].episode_index, 1)
+        self.assertEqual(records[0].source_model, "fake-text-embedding")
+        self.assertIn("cloth grasp", provider.seen_texts)
+
+    def test_openai_compatible_embedding_provider_posts_to_embeddings_endpoint(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_urlopen(request, timeout):
+            captured["url"] = request.full_url
+            captured["body"] = json.loads(request.data.decode("utf-8"))
+            captured["authorization"] = request.get_header("Authorization")
+            captured["timeout"] = timeout
+            return FakeHttpResponse(
+                {
+                    "data": [
+                        {"index": 0, "embedding": [3.0, 4.0]},
+                        {"index": 1, "embedding": [0.0, 2.0]},
+                    ]
+                }
+            )
+
+        provider = OpenAICompatibleEmbeddingProvider(
+            api_key="test-key",
+            base_url="https://embedding.example.test/v1",
+            model="embed-test",
+            timeout_seconds=3,
+        )
+        with patch("apps.api.services.embedding_service.urlopen", side_effect=fake_urlopen):
+            embeddings = provider.embed_many(["cloth", "empty"])
+
+        self.assertEqual(captured["url"], "https://embedding.example.test/v1/embeddings")
+        self.assertEqual(captured["authorization"], "Bearer test-key")
+        self.assertEqual(captured["body"], {"model": "embed-test", "input": ["cloth", "empty"]})
+        self.assertEqual(captured["timeout"], 3)
+        self.assertAlmostEqual(embeddings[0][0], 0.6)
+        self.assertEqual(provider.source_model, "openai-compatible:embed-test")
+
+    def test_embedding_provider_env_selects_openai_compatible(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "ROBOT_DATA_STUDIO_EMBEDDING_PROVIDER": "openai-compatible",
+                "ROBOT_DATA_STUDIO_EMBEDDING_BASE_URL": "https://embedding.example.test/v1",
+                "ROBOT_DATA_STUDIO_EMBEDDING_MODEL": "embed-test",
+            },
+            clear=False,
+        ):
+            provider = get_text_embedding_provider()
+
+        self.assertIsInstance(provider, OpenAICompatibleEmbeddingProvider)
 
 
 class FakeLanceDb:
@@ -158,6 +258,31 @@ class FakeLanceQuery:
 
     def to_list(self) -> list[dict[str, object]]:
         return self.rows[: self.limit_value]
+
+
+class FakeTextEmbeddingProvider:
+    source_model = "fake-text-embedding"
+
+    def __init__(self) -> None:
+        self.seen_texts: list[str] = []
+
+    def embed_many(self, texts: list[str]) -> list[list[float]]:
+        self.seen_texts.extend(texts)
+        return [[1.0, 0.0] if "cloth" in text else [0.0, 1.0] for text in texts]
+
+
+class FakeHttpResponse:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self.payload = payload
+
+    def __enter__(self) -> "FakeHttpResponse":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return json.dumps(self.payload).encode("utf-8")
 
 
 if __name__ == "__main__":

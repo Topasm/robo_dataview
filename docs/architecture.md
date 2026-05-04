@@ -94,8 +94,9 @@ Implemented now:
   reason, quality, split, and review status.
 - Optional `annotations.lance`, `embeddings.lance`, and `versions.lance`
   mirroring.
-- Deterministic text-embedding semantic search for local development, with
-  optional LanceDB table mirror/query when `lancedb` is installed.
+- Text-embedding semantic search with deterministic fallback, optional
+  OpenAI-compatible text inference, and optional LanceDB table mirror/query when
+  `lancedb` is installed.
 - VLM provider routing with heuristic fallback and optional OpenAI-compatible
   HTTP inference.
 - Rerun `.rrd` cache generation for state/action scalar timelines, optional

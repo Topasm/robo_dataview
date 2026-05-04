@@ -211,16 +211,19 @@ The source-of-truth code definition lives in
 environment with PyArrow installed, `build_embeddings_pyarrow_schema()` returns
 the schema used to create `embeddings.lance`.
 
-The API writes deterministic text embeddings under
-`data/lance/embeddings/<dataset>/embeddings.jsonl` for local search. When
-`pyarrow` and `lance` are installed, these rows are mirrored to
-`embeddings.lance`. When `lancedb` is installed, rows are also mirrored to
-`data/lance/embeddings/<dataset>/lancedb` and semantic search tries that vector
-table before falling back to the in-memory cosine scorer.
+The API writes text embeddings under
+`data/lance/embeddings/<dataset>/embeddings.jsonl` for local search. The default
+provider is a deterministic 64-dimensional text-hash fallback. When
+`ROBOT_DATA_STUDIO_EMBEDDING_PROVIDER=openai-compatible` is configured, the
+same table stores model-backed text vectors from an OpenAI-compatible
+`/embeddings` endpoint. When `pyarrow` and `lance` are installed, these rows
+are mirrored to `embeddings.lance`. When `lancedb` is installed, rows are also
+mirrored to `data/lance/embeddings/<dataset>/lancedb` and semantic search tries
+that vector table before falling back to the in-memory cosine scorer.
 
-Current status: embeddings are deterministic 64-dimensional text-hash vectors
-with optional LanceDB persistence/query. They are intended as a no-model local
-development path, not the final visual or video embedding system.
+Current status: embeddings are text-only, with deterministic fallback,
+optional OpenAI-compatible text inference, and optional LanceDB
+persistence/query. This is not the final visual or video embedding system.
 
 ## versions.lance
 

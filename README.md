@@ -51,8 +51,9 @@ The repository has moved past a pure skeleton. The current MVP path can:
 5. Generate Rerun `.rrd` cache files for state/action timeline inspection and
    load them through the Rerun React web viewer.
 6. Run basic filter search through a typed builder with saved presets, plus
-   deterministic text-embedding semantic search and optional LanceDB vector
-   table persistence/query when `lancedb` is installed.
+   text-embedding semantic search with deterministic fallback, optional
+   OpenAI-compatible embedding inference, and optional LanceDB vector table
+   persistence/query when `lancedb` is installed.
 7. Create VLM-style annotation proposals for review, including
    deterministic keyframe index sampling, versioned prompt tracking, and a
    provider interface with heuristic fallback, optional OpenAI-compatible model
@@ -71,9 +72,9 @@ Known MVP gaps:
   MP4 blobs are available; generation is still synchronous and workerless.
 - VLM labeling defaults to heuristic/local scaffolding; OpenAI-compatible model
   inference is available only when configured with environment variables.
-- Semantic search still uses deterministic text embeddings. LanceDB
-  persistence/query is optional, and real visual/video model embeddings are not
-  implemented yet.
+- Semantic search is still text-only. OpenAI-compatible text embeddings and
+  LanceDB persistence/query are optional; real visual/video model embeddings are
+  not implemented yet.
 - LeRobot export writes frame JSONL and available MP4 artifacts; training-ready
   Parquet shards still require optional `pyarrow`/LeRobot dependencies.
 

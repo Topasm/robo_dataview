@@ -42,8 +42,9 @@ Working:
 - Segment edit and midpoint split actions in the web UI.
 - Search filter endpoint.
 - Typed filter builder UI for common episode fields.
-- Deterministic text-embedding semantic search endpoint with optional LanceDB
-  vector table persistence/query.
+- Text-embedding semantic search endpoint with deterministic fallback, optional
+  OpenAI-compatible embedding provider, and optional LanceDB vector table
+  persistence/query.
 - VLM-label job endpoint with heuristic pending annotation proposals and
   optional OpenAI-compatible provider routing.
 - Deterministic keyframe index sampling for VLM prompt inputs.
@@ -74,8 +75,8 @@ Known limits:
 - Open datasets and sessions are in-memory.
 - VLM labeling defaults to heuristic scaffolding unless an OpenAI-compatible
   provider is configured.
-- Semantic search is still text-hash based; LanceDB is an optional persistence
-  and query path, not a real visual/video embedding pipeline yet.
+- Semantic search is still text-only; OpenAI-compatible text embedding and
+  LanceDB paths are optional, not a real visual/video embedding pipeline yet.
 - Export writes frame JSONL and available MP4 artifacts; training-ready Parquet
   shards require optional `pyarrow`/LeRobot dependencies.
 - Video ranges are sliced after loading the full episode blob; direct Lance blob
@@ -194,6 +195,7 @@ Definition of done:
 - [x] Add filter builder UI with typed fields.
 - [x] Add saved filter presets.
 - [x] Add optional LanceDB vector table mirror/query path.
+- [x] Add optional OpenAI-compatible text embedding provider.
 - [ ] Add full-text search.
 - [ ] Add CLIP, SigLIP, DINOv2, or video-VLM embeddings.
 - [ ] Combine structured filters with semantic ranking.
@@ -238,8 +240,8 @@ Definition of done:
 
 ## Recommended Immediate Order
 
-1. Replace deterministic text embeddings with real model-backed vectors.
-2. Add generated-label review queue.
+1. Add generated-label review queue.
+2. Add visual/video embedding models.
 3. Add general frame-level mutation endpoints.
 4. Materialize fully LeRobot-loadable Parquet/MP4 export.
 5. Move Rerun/export/VLM work into queue-backed workers.

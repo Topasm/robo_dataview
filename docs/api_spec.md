@@ -170,10 +170,16 @@ MVP filter syntax supports `AND` clauses with `=`, `==`, `!=`, `>`, `>=`, `<`,
 `task_index`, `success_label`, `quality_score`, `review_status`, `caption`, and
 `split`.
 
-`POST /search/semantic` currently uses deterministic text-hash embeddings over
-episode text and annotations. When `lancedb` is installed, those rows are
-mirrored to a local LanceDB table and queried there first; otherwise the API
-falls back to an in-memory cosine scorer.
+`POST /search/semantic` currently uses text embeddings over episode text and
+annotations. The default provider is deterministic text hashing. Set
+`ROBOT_DATA_STUDIO_EMBEDDING_PROVIDER=openai-compatible` to use an
+OpenAI-compatible `/embeddings` endpoint, with
+`ROBOT_DATA_STUDIO_EMBEDDING_BASE_URL`,
+`ROBOT_DATA_STUDIO_EMBEDDING_API_KEY`,
+`ROBOT_DATA_STUDIO_EMBEDDING_MODEL`, and
+`ROBOT_DATA_STUDIO_EMBEDDING_TIMEOUT_SECONDS` as needed. When `lancedb` is
+installed, rows are mirrored to a local LanceDB table and queried there first;
+otherwise the API falls back to an in-memory cosine scorer.
 
 Filter presets persist reusable structured filter queries to
 `data/lance/filter_presets/filter_presets.jsonl`.
