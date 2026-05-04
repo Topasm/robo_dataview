@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import json
 import math
 from pathlib import Path
+import traceback
 from typing import Any
 
 from apps.api.schemas.annotations import AnnotationRecord
@@ -735,6 +736,7 @@ def _validate_with_official_lerobot_loader(root: Path, info: dict[str, Any]) -> 
         "repo_id": repo_id,
         "root": str(root),
         "error": None,
+        "error_chain": [],
         "length": None,
     }
     try:
@@ -743,6 +745,7 @@ def _validate_with_official_lerobot_loader(root: Path, info: dict[str, Any]) -> 
         result["ok"] = True
     except Exception as exc:
         result["error"] = f"{type(exc).__name__}: {exc}"
+        result["error_chain"] = _exception_chain(exc)
     return result
 
 
@@ -754,8 +757,18 @@ def _unavailable_official_loader(reason: str) -> dict[str, Any]:
         "repo_id": None,
         "root": None,
         "error": reason,
+        "error_chain": [],
         "length": None,
     }
+
+
+def _exception_chain(exc: BaseException) -> list[str]:
+    chain = []
+    current: BaseException | None = exc
+    while current is not None:
+        chain.append("".join(traceback.format_exception_only(type(current), current)).strip())
+        current = current.__cause__ or current.__context__
+    return chain
 
 
 def _official_loader_repo_id(info: dict[str, Any], root: Path) -> str:

@@ -560,6 +560,7 @@ class LeRobotIoTest(unittest.TestCase):
             self.assertFalse(validation["lerobot_loadable"])
             self.assertEqual(validation["loadability_basis"], "official_loader")
             self.assertIn("RuntimeError: cannot load", validation["official_loader"]["error"])
+            self.assertEqual(validation["official_loader"]["error_chain"], ["RuntimeError: cannot load"])
 
     def test_validate_lerobot_snapshot_accepts_complete_local_shard_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

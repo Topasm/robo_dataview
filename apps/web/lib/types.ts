@@ -209,6 +209,7 @@ export type ExportArtifacts = {
         repo_id?: string | null;
         root?: string | null;
         error?: string | null;
+        error_chain?: string[];
         length?: number | null;
       };
       episode_count?: number;
