@@ -262,6 +262,8 @@ Implemented:
 - Export scope controls for selected episode or current train/val/test split.
 - Web export strip can launch LeRobot, Lance, JSONL, VLA, and HF Dataset
   exports.
+- Manual official-dependency workflow can verify native HF Dataset export with
+  real `datasets.save_to_disk()` / `load_from_disk()`.
 - Queue-backed export jobs through the shared job progress event stream.
 - Queue-backed Rerun session jobs with persisted session records.
 - Accepted annotations only.
@@ -270,4 +272,4 @@ Implemented:
 Next:
 
 - Materialize fully LeRobot-loadable Parquet/MP4 artifacts.
-- Add official-dependency CI for native Hugging Face Dataset export.
+- Add official-dependency CI coverage for full LeRobotDataset loading.

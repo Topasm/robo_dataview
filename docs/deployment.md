@@ -44,6 +44,14 @@ Use `.[export]` on machines that must write optional LeRobot Parquet/MP4
 artifacts and run official loader validation. Use `.[queue]` on API and worker
 machines that enqueue or execute Redis/RQ jobs.
 
+The manual GitHub Actions workflow `Official export dependencies` installs
+`.[export]` and runs opt-in export checks with real optional dependencies. The
+same check can be run locally with:
+
+```bash
+RUN_OFFICIAL_EXPORT_TESTS=1 python3 -m pytest apps/api/tests/test_official_export_dependencies.py -q
+```
+
 ## Environment
 
 Minimum web environment:
