@@ -1162,6 +1162,8 @@ class LanceDatasetStore:
         updates = model_dump(payload, exclude_unset=True)
         if "review_status" in updates and updates["review_status"] is not None:
             updates["review_status"] = getattr(updates["review_status"], "value", updates["review_status"])
+        elif "review_status" in updates:
+            updates.pop("review_status")
         if not updates:
             return existing
 

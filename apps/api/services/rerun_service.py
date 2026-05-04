@@ -28,8 +28,16 @@ RERUN_CACHE_DIR = Path("data/cache/rerun")
 RERUN_SESSION_RECORD_PATH = Path("data/app/rerun_sessions.jsonl")
 
 
-def _cache_key(dataset_id: str, episode_index: int, mode: str) -> str:
-    key = f"{dataset_id}|{episode_index}|{mode}|{RERUN_RECORDING_CONFIG_VERSION}"
+def _cache_key(
+    dataset_id: str,
+    episode_index: int,
+    mode: str,
+    dataset_fingerprint: str,
+) -> str:
+    key = (
+        f"{dataset_id}|{episode_index}|{mode}|"
+        f"{RERUN_RECORDING_CONFIG_VERSION}|{dataset_fingerprint}"
+    )
     return hashlib.sha1(key.encode("utf-8")).hexdigest()[:16]
 
 
@@ -41,7 +49,13 @@ class RerunSessionStore:
 
     def create(self, payload: RerunSessionCreate) -> RerunSessionRecord:
         session_id = str(uuid4())
-        cache_key = _cache_key(payload.dataset_id, payload.episode_index, payload.mode)
+        dataset_fingerprint = _dataset_cache_fingerprint(store, payload.dataset_id, payload.episode_index)
+        cache_key = _cache_key(
+            payload.dataset_id,
+            payload.episode_index,
+            payload.mode,
+            dataset_fingerprint,
+        )
         rrd_path = RERUN_CACHE_DIR / f"{payload.dataset_id}_episode_{payload.episode_index:06d}_{cache_key}.rrd"
         publish_uri = payload.publish_uri or configured_rerun_cache_publish_uri()
         record = RerunSessionRecord(
@@ -142,6 +156,36 @@ class RerunSessionStore:
 def _published_recording_relative_path(record: RerunSessionRecord, rrd_path: Path) -> str:
     dataset = re.sub(r"[^A-Za-z0-9_.-]+", "_", record.dataset_id).strip("_") or "dataset"
     return f"rerun/{dataset}/{rrd_path.name}"
+
+
+def _dataset_cache_fingerprint(
+    dataset_store: object,
+    dataset_id: str,
+    episode_index: int,
+) -> str:
+    payload: dict[str, object] = {"dataset_id": dataset_id, "episode_index": episode_index}
+    get_summary = getattr(dataset_store, "get_summary", None)
+    if callable(get_summary):
+        summary = get_summary(dataset_id)
+        if summary is not None:
+            payload["summary"] = _fingerprint_fields(
+                summary,
+                ("uri", "status", "episode_count", "frame_count", "fps", "camera_names"),
+            )
+    get_episode = getattr(dataset_store, "get_episode", None)
+    if callable(get_episode):
+        episode = get_episode(dataset_id, episode_index)
+        if episode is not None:
+            payload["episode"] = _fingerprint_fields(
+                episode,
+                ("length", "fps", "camera_names", "duration_seconds"),
+            )
+    serialized = json.dumps(payload, default=str, sort_keys=True)
+    return hashlib.sha1(serialized.encode("utf-8")).hexdigest()[:16]
+
+
+def _fingerprint_fields(source: object, fields: tuple[str, ...]) -> dict[str, object]:
+    return {field: getattr(source, field, None) for field in fields}
 
 
 rerun_sessions = RerunSessionStore(record_path=RERUN_SESSION_RECORD_PATH)

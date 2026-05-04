@@ -52,6 +52,18 @@ class FakeRerunModule:
 
 
 class FakeRerunStore:
+    def get_summary(self, dataset_id: str) -> object | None:
+        if dataset_id != "dataset-a":
+            return None
+        return types.SimpleNamespace(
+            uri="/datasets/dataset-a-v1",
+            status="indexed",
+            episode_count=1,
+            frame_count=3,
+            fps=10.0,
+            camera_names=["cam high"],
+        )
+
     def get_episode_timeseries(self, dataset_id: str, episode_index: int) -> dict[str, object] | None:
         if dataset_id != "dataset-a" or episode_index != 3:
             return None
@@ -70,6 +82,23 @@ class FakeRerunStore:
         if dataset_id == "dataset-a" and episode_index == 3 and camera == "cam high":
             return b"fake mp4"
         return None
+
+
+class MutableSummaryRerunStore(FakeRerunStore):
+    def __init__(self) -> None:
+        self.uri = "/datasets/dataset-a-v1"
+
+    def get_summary(self, dataset_id: str) -> object | None:
+        if dataset_id != "dataset-a":
+            return None
+        return types.SimpleNamespace(
+            uri=self.uri,
+            status="indexed",
+            episode_count=1,
+            frame_count=3,
+            fps=10.0,
+            camera_names=["cam high"],
+        )
 
 
 class RerunSessionStoreTest(unittest.TestCase):
@@ -148,6 +177,23 @@ class RerunSessionStoreTest(unittest.TestCase):
         self.assertEqual(first.cache_key, second.cache_key)
         self.assertEqual(first.rrd_path, second.rrd_path)
         self.assertEqual(len(fake_rerun.saved_paths), 1)
+
+    def test_cache_key_changes_when_dataset_fingerprint_changes(self) -> None:
+        fake_rerun = FakeRerunModule()
+        sys.modules["rerun"] = fake_rerun
+        fake_store = MutableSummaryRerunStore()
+
+        with patch.object(rerun_service, "store", fake_store):
+            sessions = RerunSessionStore()
+            first = sessions.create(RerunSessionCreate(dataset_id="dataset-a", episode_index=3))
+            fake_store.uri = "/datasets/dataset-a-v2"
+            second = sessions.create(RerunSessionCreate(dataset_id="dataset-a", episode_index=3))
+
+        self.assertEqual(first.status, "ready")
+        self.assertEqual(second.status, "ready")
+        self.assertNotEqual(first.cache_key, second.cache_key)
+        self.assertNotEqual(first.rrd_path, second.rrd_path)
+        self.assertEqual(len(fake_rerun.saved_paths), 2)
 
     def test_persistent_store_loads_worker_created_session_records(self) -> None:
         fake_rerun = FakeRerunModule()

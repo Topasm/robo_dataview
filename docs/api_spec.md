@@ -314,8 +314,10 @@ GET  /rerun/recordings/{session_id}.rrd
 scalar timeline data for timestamps, state norm, and action norm. When episode
 camera MP4 blobs are available, the recording also logs Rerun `AssetVideo`
 entries and per-frame `VideoFrameReference` rows. Responses include `cache_key`,
-`cache_hit`, `camera_count`, and local `rrd_url`/`rrd_path`; the same dataset,
-episode, mode, and visualization config reuses the existing `.rrd` file.
+`cache_hit`, `camera_count`, and local `rrd_url`/`rrd_path`; the same dataset
+fingerprint, episode, mode, and visualization config reuses the existing `.rrd`
+file. The fingerprint includes the opened dataset URI plus summary and episode
+metadata that affect the recording.
 `publish_uri` is optional. When present, the ready `.rrd` file is copied to the
 destination through local filesystem or optional `fsspec` storage and the
 response includes `published_uri` and `publish_size_bytes`. If omitted,

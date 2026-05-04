@@ -121,8 +121,8 @@ Implemented:
 - Web embeds ready `.rrd` recordings through `@rerun-io/web-viewer-react`.
 - Camera MP4 blobs are logged as Rerun `AssetVideo` entities when available,
   with per-frame `VideoFrameReference` entries on the frame timeline.
-- Deterministic cache keys reuse `.rrd` files for the same dataset, episode,
-  mode, and visualization config.
+- Deterministic cache keys reuse `.rrd` files for the same dataset
+  fingerprint, episode, mode, and visualization config.
 
 Next:
 

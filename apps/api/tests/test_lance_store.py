@@ -1152,6 +1152,35 @@ class LanceDatasetStoreTest(unittest.TestCase):
             self.assertEqual(reloaded.split, "val")
             self.assertEqual(reloaded.review_status, "edited")
 
+    def test_episode_label_update_ignores_null_review_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = LanceDatasetStore(
+                label_storage_root=Path(tmpdir),
+                persist_episode_labels=True,
+            )
+
+            first = store.update_episode_labels(
+                "sample-xvla-soft-fold",
+                0,
+                EpisodeLabelUpdate(
+                    caption="Reviewed fold",
+                    review_status=ReviewStatus.accepted,
+                ),
+            )
+            second = store.update_episode_labels(
+                "sample-xvla-soft-fold",
+                0,
+                EpisodeLabelUpdate(
+                    caption="Reviewed fold with note",
+                    review_status=None,
+                ),
+            )
+
+            self.assertIsNotNone(first)
+            self.assertIsNotNone(second)
+            self.assertEqual(second.caption, "Reviewed fold with note")
+            self.assertEqual(second.review_status, "accepted")
+
     def test_episode_label_updates_mirror_lance_table_when_available(self) -> None:
         written: dict[str, object] = {}
         sys.modules["pyarrow"] = FakePyArrowModule()
