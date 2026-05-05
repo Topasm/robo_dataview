@@ -84,8 +84,14 @@ Implemented now:
 
 - Lance dataset open/index for `frames.lance`, `episodes.lance`, and
   `videos.lance` style roots.
-- LeRobot v3 metadata snapshot import/export helpers, including optional
-  metadata parquet writes when `pyarrow` is installed.
+- LeRobot v3 metadata snapshot import/export helpers, plus v2.1
+  `meta/episodes.jsonl` import compatibility. Import derives FPS, task labels,
+  task indices, camera names/info, and state/action dimensions from
+  `meta/info.json` and task metadata when raw arrays are absent.
+- Local LeRobot v2.1/v3 to Lance bundle conversion service, API endpoint, and
+  CLI wrapper for creating `episodes.lance`, optional `frames.lance`, and
+  `videos.lance` from on-disk datasets when `pyarrow` and `lance` are
+  installed.
 - Dataset summary, schema, episode list/detail, state/action summary, and video
   blob endpoints, including HTTP Range support for browser video playback.
 - Frame listing API backed by `frames.lance` when present, with episode

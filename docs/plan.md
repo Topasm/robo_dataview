@@ -35,6 +35,14 @@ Working:
 
 - Lance dataset open/index path.
 - `xvla-soft-fold` summary and episode list through API.
+- LeRobot metadata snapshot import for v3 sharded Parquet/JSONL episode
+  metadata and v2.1 `meta/episodes.jsonl` compatibility layouts.
+- LeRobot metadata-derived FPS, task captions, task indices, camera names,
+  per-camera video info, and state/action dimensions when raw episode arrays
+  are not present.
+- Local LeRobot v2.1/v3 to Lance conversion service, API endpoint, and CLI
+  wrapper for building `episodes.lance`, optional `frames.lance`, and
+  `videos.lance` from on-disk datasets.
 - Dataset schema endpoint.
 - Episode detail, video blob, and state/action summary endpoints.
 - MP4 video blob serving with `HEAD` and byte-range support.
@@ -116,32 +124,47 @@ Known limits:
 - Full frame-table browser UX exists for local frame review, but raw
   `frames.lance` table mutation remains annotation-backed rather than rewriting
   source rows.
+- Metadata-only LeRobot snapshots can report state/action dimensions from
+  `meta/info.json`, but min/max norm bounds remain unavailable until frame rows
+  or episode arrays are materialized.
+- Episode-table camera columns are treated as canonical for Lance bundles.
+  `videos.lance` camera names are fallback-only to avoid polluted converter
+  values such as shard names in `camera_angle`.
+- The LeRobot-to-Lance converter requires optional `pyarrow` and `lance`
+  packages and still needs real-dataset smoke coverage across large v2.1/v3
+  sources before treating it as production-safe.
 
 ## Next Milestone
 
 Milestone name:
 
 ```text
-M1: Reviewable Episode Viewer
+M2: Real-Data Compatibility Hardening
 ```
 
 Goal:
 
 ```text
-A user can open xvla-soft-fold, select an episode, play or inspect camera video,
-scrub the timeline, add/edit phase annotations, generate a Rerun replay, and
-export the selected reviewed episode.
+Robot Data Studio can reliably open representative local and remote LeRobot /
+Lance datasets, preserve camera/video metadata, validate exports with official
+loaders where available, and surface clear degradation when optional ML/storage
+providers are not configured.
 ```
 
 Definition of done:
 
-- A selectable active camera video pane renders for available episode videos.
-- Synchronized multi-camera playback can be inspected or is clearly planned.
-- Episode selection loads metadata, annotations, and state/action summary.
-- Timeline can create and update phase segments.
-- Rerun panel opens the generated `.rrd` in an embedded viewer path.
-- Export includes accepted annotations and produces a validation summary.
-- The full path is covered by API tests plus web typecheck/build.
+- Real local LeRobot v2.1 and v3 metadata snapshots index with correct episode
+  count, FPS, task captions, task indices, camera names, camera info, and
+  state/action dimensions.
+- A representative `hf://` Lance dataset can be opened and sampled without
+  loading whole video artifacts when range-readable paths are available.
+- Export smoke tests cover metadata-only, frame JSONL, Parquet, no-video, and
+  video-backed snapshots.
+- Official loader validation passes when optional dependencies are installed,
+  and reports actionable warnings otherwise.
+- Rerun, VLM, embedding, export, and publish jobs fail gracefully when optional
+  providers are absent.
+- The full path is covered by API tests plus web lint/typecheck/build.
 
 ## Todo List
 
@@ -159,6 +182,9 @@ Definition of done:
 
 - [x] Open Lance dataset roots.
 - [x] Open LeRobot v3 metadata snapshots.
+- [x] Open LeRobot v2.1 `meta/episodes.jsonl` metadata snapshots.
+- [x] Convert local LeRobot v2.1/v3 datasets into Lance bundles through API
+  and CLI paths.
 - [x] Show dataset summary.
 - [x] List episodes.
 - [x] Load state/action summary.
@@ -286,11 +312,17 @@ Definition of done:
 
 ## Recommended Immediate Order
 
-1. Run the opt-in real-dataset export smoke workflow with video materialization
+1. Run local compatibility smoke tests for representative LeRobot v2.1 and v3
+   snapshots, including metadata-only snapshots where state/action arrays are
+   absent.
+2. Run local LeRobot-to-Lance conversion smoke tests with small v2.1 and v3
+   datasets, including non-contiguous episode indices and multi-camera video
+   references.
+3. Run the opt-in real-dataset export smoke workflow with video materialization
    and larger representative downloaded or `hf://` Lance subsets.
-2. Run the opt-in real CLIP/SigLIP text-to-image search smoke workflow with
+4. Run the opt-in real CLIP/SigLIP text-to-image search smoke workflow with
    generated visual embeddings.
-3. Run the manual artifact-publish smoke workflow against local publish
+5. Run the manual artifact-publish smoke workflow against local publish
    destinations.
 
 ## Validation Checklist

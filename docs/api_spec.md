@@ -31,6 +31,7 @@ When the user header is omitted, the API records `local`.
 ```text
 GET  /datasets
 POST /datasets/open
+POST /datasets/convert-lerobot
 POST /datasets/{dataset_id}/reload
 DELETE /datasets/{dataset_id}
 GET  /datasets/{dataset_id}/summary
@@ -62,6 +63,43 @@ the API process restarts. `POST /datasets/{dataset_id}/reload` re-indexes an
 opened dataset from its stored URI and display name. `DELETE /datasets/{dataset_id}`
 closes the dataset and removes it from the restart registry without deleting raw
 data or local annotation overlays.
+
+`POST /datasets/convert-lerobot` converts a local LeRobot v2.1 or v3 dataset
+into a Lance bundle and can open the converted result immediately. This endpoint
+requires optional `pyarrow` and `lance` dependencies.
+
+Request:
+
+```json
+{
+  "source": "/data/lerobot/raw",
+  "target": "/data/lance/raw_lance",
+  "overwrite": false,
+  "limit": 8,
+  "include_frames": true,
+  "include_video_blobs": true,
+  "open_after": true,
+  "name": "raw-lance"
+}
+```
+
+Response:
+
+```json
+{
+  "report": {
+    "layout_detected": "v2_1",
+    "episodes_written": 8,
+    "frames_written": 1200,
+    "videos_written": 24,
+    "cameras": ["observation_images_cam_head"]
+  },
+  "dataset": {
+    "dataset_id": "raw-lance",
+    "status": "indexed"
+  }
+}
+```
 
 ## Episodes
 

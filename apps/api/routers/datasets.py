@@ -1,10 +1,31 @@
+from pathlib import Path
+from typing import Any
+
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from apps.api.schemas.datasets import DatasetOpenRequest, DatasetRecord, DatasetSummary
+from apps.api.services.lance_conversion import convert_lerobot_to_lance
 from apps.api.services.lance_store import store
 
 
 router = APIRouter(tags=["datasets"])
+
+
+class LerobotConversionRequest(BaseModel):
+    source: str
+    target: str
+    overwrite: bool = False
+    limit: int | None = None
+    include_frames: bool = True
+    include_video_blobs: bool = True
+    open_after: bool = True
+    name: str | None = None
+
+
+class LerobotConversionResponse(BaseModel):
+    report: dict[str, Any]
+    dataset: DatasetRecord | None = None
 
 
 @router.get("/datasets", response_model=list[DatasetRecord])
@@ -47,3 +68,32 @@ def dataset_schema(dataset_id: str) -> dict[str, list[str]]:
     if schema is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return schema
+
+
+@router.post("/datasets/convert-lerobot", response_model=LerobotConversionResponse)
+def convert_lerobot(payload: LerobotConversionRequest) -> LerobotConversionResponse:
+    """Convert a LeRobot v2.1 or v3 dataset on disk into a Lance bundle and
+    optionally open the result."""
+
+    try:
+        report = convert_lerobot_to_lance(
+            Path(payload.source),
+            Path(payload.target),
+            overwrite=payload.overwrite,
+            limit=payload.limit,
+            include_frames=payload.include_frames,
+            include_video_blobs=payload.include_video_blobs,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    record: DatasetRecord | None = None
+    if payload.open_after:
+        record = store.open_dataset(
+            DatasetOpenRequest(uri=payload.target, name=payload.name)
+        )
+    return LerobotConversionResponse(report=report, dataset=record)
