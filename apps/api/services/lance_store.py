@@ -318,15 +318,20 @@ def _iter_binary_range(
         yield chunk
 
 
-def _video_source_from_blob_file(blob_file: Any) -> VideoSource:
+def _video_source_from_blob_file(blob_file: Any) -> VideoSource | None:
     try:
         if hasattr(blob_file, "seek") and hasattr(blob_file, "tell"):
             blob_file.seek(0, 2)
             size = int(blob_file.tell())
             blob_file.seek(0)
+            if size <= 0:
+                blob_file.close()
+                return None
             return VideoSource(size=size, reader=blob_file)
         blob = blob_file.read()
         blob_file.close()
+        if not blob:
+            return None
         return VideoSource(size=len(blob), data=blob)
     except Exception:
         if hasattr(blob_file, "close"):
@@ -531,6 +536,21 @@ def _camera_names_from_schema(names: list[str]) -> list[str]:
             cameras.append(name[: -len("_video_blob")])
         elif name.endswith("_video"):
             cameras.append(name[: -len("_video")])
+    return cameras
+
+
+def _camera_names_with_video(row: dict[str, Any], schema_names: list[str]) -> list[str]:
+    cameras: list[str] = []
+    for camera in _camera_names_from_schema(schema_names):
+        column = _video_column_for_camera(schema_names, camera)
+        if column is None:
+            continue
+        value = row.get(column)
+        if isinstance(value, dict):
+            if int(value.get("size") or 0) > 0:
+                cameras.append(camera)
+        elif value:
+            cameras.append(camera)
     return cameras
 
 
@@ -1466,7 +1486,7 @@ class LanceDatasetStore:
             )
             if row is not None:
                 blob = _blob_to_bytes(row.get(column))
-                if blob is not None:
+                if blob:
                     return VideoSource(size=len(blob), data=blob)
         return self._get_video_source_from_videos_table(bundle, episode_row, episode_index, camera)
 
@@ -1731,15 +1751,16 @@ class LanceDatasetStore:
         dataset = bundle.tables["episodes"]
         columns = _metadata_columns(bundle.schemas["episodes"], include_arrays=False)
         rows = _read_rows(dataset, columns=columns, limit=limit, offset=offset)
-        return [
-            EpisodeListItem(
-                **self._apply_episode_overrides(
-                    dataset_id,
-                    self._episode_payload(dataset_id, row, bundle.schemas["episodes"]),
-                )
+        camera_names = self._camera_names_for_bundle(bundle)
+        items: list[EpisodeListItem] = []
+        for row in rows:
+            payload = self._apply_episode_overrides(
+                dataset_id,
+                self._episode_payload(dataset_id, row, bundle.schemas["episodes"]),
             )
-            for row in rows
-        ]
+            payload["camera_names"] = camera_names
+            items.append(EpisodeListItem(**payload))
+        return items
 
     def _get_lance_episode(
         self,
@@ -2028,7 +2049,7 @@ class LanceDatasetStore:
             "has_human_label": bool(row.get("has_human_label", False)),
             "split": row.get("train_val_test_split", row.get("split")),
             "fps": float(fps) if fps is not None else None,
-            "camera_names": _camera_names_from_schema(schema_names),
+            "camera_names": _camera_names_with_video(row, schema_names),
             "duration_seconds": (length / float(fps)) if length is not None and fps else None,
             "language_instruction": row.get("language_instruction") or row.get("instruction"),
         }
@@ -2038,10 +2059,56 @@ class LanceDatasetStore:
         # the canonical source). Only consult videos.lance when episodes.lance
         # exposes nothing — some converters mis-populate `camera_angle` with a
         # path component (e.g. "chunk-000") so unioning would pollute the list.
-        episode_cameras = set(_camera_names_from_schema(bundle.schemas["episodes"]))
+        episode_cameras = set(self._camera_names_from_episode_rows(bundle))
         if episode_cameras:
             return sorted(episode_cameras)
         return sorted(self._camera_names_from_videos_table(bundle))
+
+    def _camera_names_from_episode_rows(self, bundle: LanceBundle) -> list[str]:
+        schema = bundle.schemas["episodes"]
+        blob_columns = [
+            name for name in schema if _looks_like_video_blob_column(name)
+        ]
+        if not blob_columns:
+            return []
+        episodes = bundle.tables["episodes"]
+        row_count = min(_count_rows(episodes), 100)
+        if hasattr(episodes, "scanner"):
+            try:
+                scanner = episodes.scanner(
+                    columns=["episode_index", *blob_columns],
+                    limit=row_count,
+                )
+                rows = scanner.to_table().to_pylist()
+                cameras: set[str] = set()
+                for row in rows:
+                    cameras.update(_camera_names_with_video(row, schema))
+                return sorted(cameras)
+            except Exception:
+                pass
+        if hasattr(episodes, "take_blobs"):
+            cameras: set[str] = set()
+            indices = list(range(row_count))
+            for column in blob_columns:
+                try:
+                    blob_files = episodes.take_blobs(column, indices=indices)
+                except Exception:
+                    continue
+                for blob_file in blob_files:
+                    source = _video_source_from_blob_file(blob_file)
+                    if source is not None and source.size > 0:
+                        cameras.add(_video_column_base_name(column))
+                        break
+            return sorted(cameras)
+        rows = _read_rows(
+            episodes,
+            columns=["episode_index", *blob_columns],
+            limit=row_count,
+        )
+        cameras: set[str] = set()
+        for row in rows:
+            cameras.update(_camera_names_with_video(row, schema))
+        return sorted(cameras)
 
     def _camera_names_from_videos_table(self, bundle: LanceBundle) -> list[str]:
         videos = bundle.tables.get("videos")

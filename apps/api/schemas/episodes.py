@@ -19,6 +19,10 @@ class EpisodeListItem(BaseModel):
     has_vlm_label: bool = False
     has_human_label: bool = False
     split: str | None = None
+    fps: float | None = None
+    camera_names: list[str] = Field(default_factory=list)
+    duration_seconds: float | None = None
+    language_instruction: str | None = None
 
 
 class EpisodeListPage(BaseModel):
@@ -35,10 +39,7 @@ class EpisodeListPage(BaseModel):
 
 
 class EpisodeDetail(EpisodeListItem):
-    fps: float | None = None
-    camera_names: list[str]
-    duration_seconds: float | None = None
-    language_instruction: str | None = None
+    pass
 
 
 class StateActionSummary(BaseModel):
