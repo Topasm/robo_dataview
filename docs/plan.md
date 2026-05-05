@@ -40,9 +40,9 @@ Working:
 - LeRobot metadata-derived FPS, task captions, task indices, camera names,
   per-camera video info, and state/action dimensions when raw episode arrays
   are not present.
-- Local LeRobot v2.1/v3 to Lance conversion service, API endpoint, and CLI
-  wrapper for building `episodes.lance`, optional `frames.lance`, and
-  `videos.lance` from on-disk datasets.
+- LeRobot v2.1/v3 to Lance conversion lives in the standalone
+  [`lerobot2lance`](https://github.com/Topasm/lerobot2lance) package and is
+  surfaced via `POST /datasets/convert-lerobot` when the package is installed.
 - Dataset schema endpoint.
 - Episode detail, video blob, and state/action summary endpoints.
 - MP4 video blob serving with `HEAD` and byte-range support.

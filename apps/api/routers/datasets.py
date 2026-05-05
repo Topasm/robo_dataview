@@ -5,8 +5,12 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from apps.api.schemas.datasets import DatasetOpenRequest, DatasetRecord, DatasetSummary
-from apps.api.services.lance_conversion import convert_lerobot_to_lance
 from apps.api.services.lance_store import store
+
+try:
+    from lerobot2lance import convert_lerobot_to_lance
+except ImportError:  # pragma: no cover - exercised only when extra missing
+    convert_lerobot_to_lance = None  # type: ignore[assignment]
 
 
 router = APIRouter(tags=["datasets"])
@@ -73,7 +77,19 @@ def dataset_schema(dataset_id: str) -> dict[str, list[str]]:
 @router.post("/datasets/convert-lerobot", response_model=LerobotConversionResponse)
 def convert_lerobot(payload: LerobotConversionRequest) -> LerobotConversionResponse:
     """Convert a LeRobot v2.1 or v3 dataset on disk into a Lance bundle and
-    optionally open the result."""
+    optionally open the result. Requires the optional ``lerobot2lance`` package
+    (``pip install lerobot2lance``)."""
+
+    if convert_lerobot_to_lance is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "lerobot2lance is not installed. "
+                "Install it with `pip install lerobot2lance` "
+                "(or `pip install -e .[convert]` for the bundled extras) "
+                "to enable LeRobot→Lance conversion."
+            ),
+        )
 
     try:
         report = convert_lerobot_to_lance(

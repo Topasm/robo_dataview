@@ -6,16 +6,17 @@ import unittest
 from pathlib import Path
 
 from apps.api.schemas.datasets import DatasetOpenRequest
-from apps.api.services.lance_conversion import convert_lerobot_to_lance
 from apps.api.services.lance_store import LanceDatasetStore
 
 
 try:
     import lance  # noqa: F401
     import pyarrow  # noqa: F401
+    from lerobot2lance import convert_lerobot_to_lance
 
     HAS_CONVERSION_DEPS = True
 except ImportError:
+    convert_lerobot_to_lance = None  # type: ignore[assignment]
     HAS_CONVERSION_DEPS = False
 
 
@@ -215,6 +216,7 @@ class LanceConversionTest(unittest.TestCase):
             videos = lance.dataset(str(target / "videos.lance"))
             self.assertEqual(videos.count_rows(), 2)
 
+    @unittest.skipUnless(HAS_CONVERSION_DEPS, "requires lerobot2lance")
     def test_convert_missing_source_raises(self) -> None:
         with self.assertRaises(FileNotFoundError):
             convert_lerobot_to_lance(Path("/nonexistent/path"), Path("/tmp/out"))

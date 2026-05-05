@@ -35,7 +35,7 @@ Full validation gate before declaring a milestone done is enumerated in `docs/pl
 
 ## Environment Setup
 
-The repo deliberately does **not** create or mutate `.venv` for you. Activate one yourself, then `pip install -e ".[dev]"`. The Python package surface is split into many optional extras (`lance`, `rerun`, `lerobot`, `export`, `queue`, `video`, `storage`, `ml`) — install only what the feature you're touching needs. Code paths that depend on extras must degrade gracefully when imports are missing (see existing `try/except ImportError` patterns in `services/lance_store.py`, `services/lance_export.py`, etc.).
+The repo deliberately does **not** create or mutate `.venv` for you. Activate one yourself, then `pip install -e ".[dev]"`. The Python package surface is split into many optional extras (`lance`, `rerun`, `lerobot`, `export`, `queue`, `video`, `storage`, `convert`, `ml`) — install only what the feature you're touching needs. The `convert` extra pulls in the standalone [`lerobot2lance`](https://github.com/Topasm/lerobot2lance) package, which powers `POST /datasets/convert-lerobot`. Code paths that depend on extras must degrade gracefully when imports are missing (see existing `try/except ImportError` patterns in `services/lance_store.py`, `services/lance_export.py`, and `routers/datasets.py` for the lerobot2lance hook).
 
 Copy `.env.example` to `.env`. Key vars: `NEXT_PUBLIC_API_BASE_URL`, `ROBOT_DATA_STUDIO_API_KEY` (optional auth), `ROBOT_DATA_STUDIO_JOB_QUEUE=rq` + `ROBOT_DATA_STUDIO_REDIS_URL` (switches from inline to RQ job execution), and the various `*_PROVIDER` / `*_BASE_URL` knobs for VLM and embedding providers.
 

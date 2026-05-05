@@ -66,7 +66,10 @@ data or local annotation overlays.
 
 `POST /datasets/convert-lerobot` converts a local LeRobot v2.1 or v3 dataset
 into a Lance bundle and can open the converted result immediately. This endpoint
-requires optional `pyarrow` and `lance` dependencies.
+delegates to the standalone [`lerobot2lance`](https://github.com/Topasm/lerobot2lance)
+package; install it with `pip install lerobot2lance` (or
+`pip install -e ".[convert]"`). When the package is missing the endpoint
+returns `503` with install instructions.
 
 Request:
 

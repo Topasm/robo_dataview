@@ -38,6 +38,9 @@ storage = [
   "fsspec>=2024.2.0",
   "huggingface-hub>=0.23.0",
 ]
+convert = [
+  "lerobot2lance>=0.1.0",
+]
 ml = [
   "pillow>=10.0.0",
   "torch>=2.2.0",

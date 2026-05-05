@@ -88,10 +88,11 @@ Implemented now:
   `meta/episodes.jsonl` import compatibility. Import derives FPS, task labels,
   task indices, camera names/info, and state/action dimensions from
   `meta/info.json` and task metadata when raw arrays are absent.
-- Local LeRobot v2.1/v3 to Lance bundle conversion service, API endpoint, and
-  CLI wrapper for creating `episodes.lance`, optional `frames.lance`, and
-  `videos.lance` from on-disk datasets when `pyarrow` and `lance` are
-  installed.
+- LeRobot v2.1/v3 → Lance bundle conversion is provided by the standalone
+  [`lerobot2lance`](https://github.com/Topasm/lerobot2lance) package
+  (`pip install lerobot2lance`); the API exposes it through
+  `POST /datasets/convert-lerobot` and falls back to a clear `503` if the
+  package is not installed.
 - Dataset summary, schema, episode list/detail, state/action summary, and video
   blob endpoints, including HTTP Range support for browser video playback.
 - Frame listing API backed by `frames.lance` when present, with episode
