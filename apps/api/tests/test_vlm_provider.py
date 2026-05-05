@@ -308,6 +308,121 @@ class VlmProviderTest(unittest.TestCase):
         self.assertEqual(result.proposals[1].label_value, "failure")
         self.assertEqual(result.proposals[2].label_value, "cloth slipped")
 
+    def test_transformers_local_provider_runs_pipeline_and_parses_annotations(self) -> None:
+        episode = EpisodeDetail(
+            dataset_id="dataset-a",
+            episode_index=2,
+            task_index=3,
+            length=24,
+            fps=20.0,
+            camera_names=["cam_high"],
+        )
+        captured: dict[str, object] = {}
+
+        def fake_extract(**kwargs):
+            return [
+                KeyframeArtifact(
+                    camera=kwargs["camera"],
+                    frame_index=0,
+                    uri="/tmp/fake-keyframe.jpg",
+                    width=32,
+                    height=24,
+                )
+            ]
+
+        class FakePipeline:
+            def __call__(self, payload, **kwargs):
+                captured["payload"] = payload
+                captured["kwargs"] = kwargs
+                return [
+                    {
+                        "generated_text": json.dumps(
+                            {
+                                "episode_caption": "In-process model labels the episode.",
+                                "success_label": {
+                                    "value": "success",
+                                    "confidence": 0.87,
+                                },
+                                "phases": [
+                                    {
+                                        "label": "fold",
+                                        "start_frame": 4,
+                                        "end_frame": 17,
+                                        "confidence": 0.76,
+                                    }
+                                ],
+                            }
+                        )
+                    }
+                ]
+
+        def fake_load_pipeline(task, model_name):
+            captured["task"] = task
+            captured["model_name"] = model_name
+            return FakePipeline()
+
+        with (
+            patch.dict(os.environ, {"ROBOT_DATA_STUDIO_VLM_PROVIDER": ""}, clear=False),
+            patch("workers.vlm_provider.extract_keyframes_from_blob", side_effect=fake_extract),
+            patch("workers.vlm_provider._load_transformers_pipeline", side_effect=fake_load_pipeline),
+            patch("workers.vlm_provider._load_transformers_images", return_value=["fake-image"]),
+        ):
+            provider = get_vlm_provider("transformers-vlm:test/model")
+            result = provider.propose(
+                dataset_id="dataset-a",
+                episode=episode,
+                config=AutoLabelConfig(
+                    model="transformers-vlm:test/model",
+                    prompt_template="episode_autolabel_v1",
+                    prompt_version="v1",
+                    prompt_body="Return JSON labels.",
+                    max_keyframes=4,
+                ),
+                video_blobs={"cam_high": b"fake mp4"},
+            )
+
+        self.assertEqual(result.provider, "transformers-local")
+        self.assertEqual(captured["task"], "image-text-to-text")
+        self.assertEqual(captured["model_name"], "test/model")
+        self.assertEqual(captured["payload"]["images"], ["fake-image"])
+        self.assertEqual(captured["kwargs"]["max_new_tokens"], 1024)
+        self.assertEqual(result.raw_response["proposal_count"], 3)
+        self.assertEqual(result.proposals[0].label_type, "episode_caption")
+        self.assertEqual(result.proposals[1].label_value, "success")
+        self.assertEqual(result.proposals[2].label_value, "fold")
+
+    def test_transformers_provider_reports_missing_optional_dependencies(self) -> None:
+        episode = EpisodeDetail(
+            dataset_id="dataset-a",
+            episode_index=2,
+            task_index=3,
+            length=24,
+            fps=20.0,
+            camera_names=[],
+        )
+
+        with (
+            patch.dict(os.environ, {"ROBOT_DATA_STUDIO_VLM_PROVIDER": "transformers"}, clear=False),
+            patch(
+                "workers.vlm_provider._load_transformers_pipeline",
+                side_effect=RuntimeError("missing transformers"),
+            ),
+        ):
+            provider = get_vlm_provider("heuristic-vlm-fallback")
+            result = provider.propose(
+                dataset_id="dataset-a",
+                episode=episode,
+                config=AutoLabelConfig(
+                    model="heuristic-vlm-fallback",
+                    prompt_template="episode_autolabel_v1",
+                    prompt_version="v1",
+                ),
+            )
+
+        self.assertEqual(result.provider, "transformers-local")
+        self.assertIn("missing transformers", str(result.raw_response["error"]))
+        self.assertEqual(result.proposals, [])
+
 
 class FakeHttpResponse:
     def __init__(self, payload: dict[str, object]) -> None:

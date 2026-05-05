@@ -69,8 +69,9 @@ packages/robot_schema
   PyArrow schema builders for those local curation tables
 
 workers
-  Heuristic VLM proposal generator, optional OpenAI-compatible and
-  Ollama-compatible providers, and provider interface
+  Heuristic VLM proposal generator, optional OpenAI-compatible,
+  Ollama-compatible, and in-process Transformers providers, and provider
+  interface
   Optional RQ entry point for queued VLM, visual embedding, export, and Rerun
   session jobs
 
@@ -108,8 +109,9 @@ Implemented now:
 - Optional CLIP/SigLIP text embedding provider for compatible text-to-image
   vector search against stored visual rows.
 - Full-text search over episode metadata and annotation text.
-- VLM provider routing with heuristic fallback plus optional OpenAI-compatible
-  and local Ollama-compatible HTTP inference.
+- VLM provider routing with heuristic fallback plus optional OpenAI-compatible,
+  local Ollama-compatible HTTP inference, and in-process Transformers
+  inference.
 - Generated-label review queue for pending VLM/heuristic proposals.
 - SQLite job metadata store under `data/app/metadata.sqlite3`.
 - Optional API-key auth and request-header user identities for review audit
@@ -145,8 +147,6 @@ Implemented now:
 Not implemented yet:
 
 - Durable external database for app settings.
-- Direct in-process local VLM/video-model inference beyond the
-  Ollama-compatible HTTP provider.
 - Larger strict real-dataset LeRobot Parquet/MP4 smoke runs with video
   materialization.
 

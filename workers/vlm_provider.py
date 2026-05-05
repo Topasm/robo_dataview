@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
-from typing import Protocol
+from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -288,11 +288,128 @@ class OllamaVlmProvider:
             return json.loads(response.read().decode("utf-8"))
 
 
+class TransformersLocalVlmProvider:
+    name = "transformers-local"
+
+    def __init__(
+        self,
+        *,
+        model_name: str | None = None,
+        task: str | None = None,
+        max_new_tokens: int | None = None,
+    ) -> None:
+        self.model_name = (
+            model_name
+            or os.getenv("ROBOT_DATA_STUDIO_TRANSFORMERS_VLM_MODEL")
+            or os.getenv("ROBOT_DATA_STUDIO_VLM_MODEL")
+            or "HuggingFaceTB/SmolVLM-Instruct"
+        )
+        self.task = task or os.getenv(
+            "ROBOT_DATA_STUDIO_TRANSFORMERS_VLM_TASK",
+            "image-text-to-text",
+        )
+        self.max_new_tokens = (
+            max_new_tokens
+            if max_new_tokens is not None
+            else int(os.getenv("ROBOT_DATA_STUDIO_TRANSFORMERS_VLM_MAX_NEW_TOKENS", "1024"))
+        )
+
+    def propose(
+        self,
+        *,
+        dataset_id: str,
+        episode: EpisodeDetail,
+        config: AutoLabelConfig,
+        video_blobs: dict[str, bytes] | None = None,
+    ) -> VlmProviderResult:
+        keyframes = select_keyframes(
+            max(1, episode.length or 1),
+            min_keyframes=config.min_keyframes,
+            max_keyframes=config.max_keyframes,
+        )
+        artifacts = _extract_keyframe_artifacts(
+            dataset_id=dataset_id,
+            episode=episode,
+            config=config,
+            keyframes=keyframes,
+            video_blobs=video_blobs or {},
+        )
+        prompt = _vlm_user_prompt(episode=episode, config=config, keyframes=keyframes)
+        raw_response: dict[str, object] = {
+            "provider": self.name,
+            "model": self.model_name,
+            "task": self.task,
+            "prompt_template": config.prompt_template,
+            "prompt_version": config.prompt_version,
+            "episode_index": episode.episode_index,
+            "keyframes": keyframes,
+            "keyframe_images": [_artifact_payload(artifact) for artifact in artifacts],
+            "keyframe_image_count": len(artifacts),
+            "request": {
+                "prompt": prompt,
+                "image_count": min(len(artifacts), config.max_keyframes),
+                "max_new_tokens": self.max_new_tokens,
+            },
+        }
+
+        try:
+            response_payload = self._run_pipeline(prompt, artifacts[: config.max_keyframes])
+            parsed_output = _parse_transformers_output(response_payload)
+            proposals = _annotation_proposals_from_model_output(
+                dataset_id=dataset_id,
+                episode=episode,
+                config=config,
+                output=parsed_output,
+            )
+        except (RuntimeError, OSError, ValueError, TypeError) as exc:
+            raw_response["error"] = str(exc)
+            return VlmProviderResult(provider=self.name, raw_response=raw_response, proposals=[])
+
+        raw_response["response"] = _json_safe(response_payload)
+        raw_response["parsed_output"] = parsed_output
+        raw_response["proposal_count"] = len(proposals)
+        return VlmProviderResult(provider=self.name, raw_response=raw_response, proposals=proposals)
+
+    def _run_pipeline(self, prompt: str, artifacts: list[KeyframeArtifact]) -> object:
+        pipeline = _load_transformers_pipeline(self.task, self.model_name)
+        images = _load_transformers_images(artifacts)
+        try:
+            payload: dict[str, object] = {"text": prompt}
+            if images:
+                payload["images"] = images
+            try:
+                return pipeline(payload, max_new_tokens=self.max_new_tokens, return_full_text=False)
+            except TypeError:
+                try:
+                    return pipeline(
+                        text=prompt,
+                        images=images,
+                        max_new_tokens=self.max_new_tokens,
+                        return_full_text=False,
+                    )
+                except TypeError:
+                    if not images:
+                        return pipeline(prompt, max_new_tokens=self.max_new_tokens)
+                    return pipeline(images[0], prompt=prompt, max_new_tokens=self.max_new_tokens)
+        finally:
+            for image in images:
+                close = getattr(image, "close", None)
+                if callable(close):
+                    close()
+
+
 def get_vlm_provider(model: str) -> VlmProvider:
     provider_name = os.getenv("ROBOT_DATA_STUDIO_VLM_PROVIDER", "").lower()
     model_name = model.lower()
     if provider_name == "ollama" or model_name.startswith("ollama:"):
         return OllamaVlmProvider()
+    if (
+        provider_name in {"transformers", "transformers-local", "local-vlm", "hf-vlm"}
+        or model_name.startswith(("transformers:", "transformers-vlm:", "local-vlm:", "hf-vlm:"))
+    ):
+        if model_name.startswith(("transformers:", "transformers-vlm:", "local-vlm:", "hf-vlm:")):
+            return TransformersLocalVlmProvider(model_name=_provider_model(model))
+        return TransformersLocalVlmProvider()
     if (
         provider_name in {"openai", "openai-compatible"}
         or model_name.startswith("openai:")
@@ -538,6 +655,30 @@ def _parse_ollama_output(response_payload: dict[str, object]) -> dict[str, objec
     return response_payload
 
 
+def _parse_transformers_output(response_payload: object) -> dict[str, object]:
+    if isinstance(response_payload, list) and response_payload:
+        return _parse_transformers_output(response_payload[0])
+    if isinstance(response_payload, dict):
+        for key in ("generated_text", "output_text", "answer", "text"):
+            value = response_payload.get(key)
+            if isinstance(value, str):
+                return _load_json_from_text(value)
+            if isinstance(value, dict):
+                return value
+            if isinstance(value, list):
+                text = " ".join(
+                    str(item.get("text", ""))
+                    for item in value
+                    if isinstance(item, dict) and item.get("text")
+                )
+                if text:
+                    return _load_json_from_text(text)
+        return response_payload
+    if isinstance(response_payload, str):
+        return _load_json_from_text(response_payload)
+    raise ValueError("Transformers VLM output did not contain parseable text or JSON")
+
+
 def _load_json_from_text(text: str) -> dict[str, object]:
     cleaned = text.strip()
     if cleaned.startswith("```"):
@@ -706,10 +847,58 @@ def _bounded_frame(value: object, last_frame: int) -> int:
 
 
 def _provider_model(model: str) -> str:
-    for prefix in ("openai-compatible:", "openai:", "ollama:"):
+    for prefix in (
+        "openai-compatible:",
+        "openai:",
+        "ollama:",
+        "transformers-vlm:",
+        "transformers:",
+        "local-vlm:",
+        "hf-vlm:",
+    ):
         if model.lower().startswith(prefix):
             return model[len(prefix) :]
     return model
+
+
+def _load_transformers_pipeline(task: str, model_name: str) -> Any:
+    try:
+        from transformers import pipeline
+    except ImportError as exc:
+        raise RuntimeError(
+            "transformers and pillow are required for local in-process VLM inference. "
+            "Install the optional ml dependencies."
+        ) from exc
+    return pipeline(task, model=model_name)
+
+
+def _load_transformers_images(artifacts: list[KeyframeArtifact]) -> list[Any]:
+    if not artifacts:
+        return []
+    try:
+        from PIL import Image
+    except ImportError as exc:
+        raise RuntimeError(
+            "pillow is required to load keyframe images for local in-process VLM inference."
+        ) from exc
+    images: list[Any] = []
+    for artifact in artifacts:
+        path = Path(artifact.uri)
+        if path.exists() and path.is_file():
+            images.append(Image.open(path).convert("RGB"))
+    return images
+
+
+def _json_safe(value: object) -> object:
+    try:
+        json.dumps(value)
+        return value
+    except TypeError:
+        if isinstance(value, dict):
+            return {str(key): _json_safe(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [_json_safe(item) for item in value]
+        return str(value)
 
 
 def _dataset_cache_dir(dataset_id: str) -> str:

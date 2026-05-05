@@ -374,7 +374,13 @@ OpenAI-compatible `/chat/completions` provider. Configure
 `model = "ollama:<model-name>"` or `ROBOT_DATA_STUDIO_VLM_PROVIDER=ollama` to
 use a local Ollama-compatible `/api/chat` endpoint; configure
 `ROBOT_DATA_STUDIO_OLLAMA_BASE_URL` when it is not running at
-`http://127.0.0.1:11434`. The web VLM button can be pointed at either route
+`http://127.0.0.1:11434`. Set `model = "transformers-vlm:<model-name>"` or
+`ROBOT_DATA_STUDIO_VLM_PROVIDER=transformers` to run an in-process
+Transformers vision-language pipeline. Configure
+`ROBOT_DATA_STUDIO_TRANSFORMERS_VLM_MODEL`,
+`ROBOT_DATA_STUDIO_TRANSFORMERS_VLM_TASK`, and
+`ROBOT_DATA_STUDIO_TRANSFORMERS_VLM_MAX_NEW_TOKENS`; this route requires the
+optional `.[ml]` dependencies. The web VLM button can be pointed at any route
 with `NEXT_PUBLIC_VLM_MODEL`.
 
 `POST /jobs/visual-embeddings`

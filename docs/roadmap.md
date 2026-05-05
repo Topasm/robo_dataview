@@ -200,12 +200,13 @@ Implemented:
   environment configuration.
 - Optional local Ollama-compatible provider path selected by model prefix or
   environment configuration.
+- Optional in-process Transformers VLM provider path selected by model prefix
+  or environment configuration.
 - Generated-label review queue with accept/reject actions.
 - Queue-backed job execution through the optional Redis/RQ backend.
 
 Next:
 
-- Add direct in-process local VLM provider implementations beyond Ollama.
 - Add confidence rationale fields to real provider responses.
 
 ## Phase 6: Search and Filtering

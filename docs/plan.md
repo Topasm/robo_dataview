@@ -53,7 +53,8 @@ Working:
   optional Transformers CLIP/SigLIP/DINO-style provider, keyframe JPEG
   extraction, and image embedding persistence.
 - VLM-label job endpoint with heuristic pending annotation proposals and
-  optional OpenAI-compatible or local Ollama-compatible provider routing.
+  optional OpenAI-compatible, local Ollama-compatible, or in-process
+  Transformers provider routing.
 - Configurable VLM keyframe window from API and web environment.
 - Generated-label review queue in the annotation panel.
 - Deterministic keyframe index sampling for VLM prompt inputs.
@@ -89,8 +90,8 @@ Known limits:
 - VLM, visual embedding, export, and Rerun session jobs can run through the
   optional RQ backend.
 - Some app settings are still in-memory.
-- VLM labeling defaults to heuristic scaffolding unless an OpenAI-compatible
-  or local Ollama-compatible provider is configured.
+- VLM labeling defaults to heuristic scaffolding unless an OpenAI-compatible,
+  local Ollama-compatible, or in-process Transformers provider is configured.
 - Semantic search can target stored visual embedding rows by modality and source
   model. Meaningful cross-modal text-to-image ranking requires configuring the
   text embedding provider and visual embedding worker with the same compatible
@@ -246,6 +247,7 @@ Definition of done:
 - [x] Add decoded keyframe image extraction from video blobs.
 - [x] Add optional OpenAI-compatible model/API integration.
 - [x] Add optional local Ollama-compatible VLM integration.
+- [x] Add optional in-process Transformers VLM integration.
 - [x] Expose VLM keyframe sampling controls through job payloads.
 - [x] Store raw response and model metadata.
 - [x] Add review queue for generated labels.
