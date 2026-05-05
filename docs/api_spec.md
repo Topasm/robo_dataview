@@ -350,7 +350,10 @@ include decoded keyframe JPEG artifact metadata. Set
 `ROBOT_DATA_STUDIO_KEYFRAME_CACHE_PUBLISH_URI` or the shared
 `ROBOT_DATA_STUDIO_CACHE_PUBLISH_URI` to publish those JPEG artifacts; each
 raw-response image entry then includes `published_uri`, `publish_size_bytes`,
-and `publish_error` metadata.
+and `publish_error` metadata. Real provider responses include parsed model JSON
+under `raw_response.parsed_output` and confidence/rationale summaries under
+`raw_response.parsed_rationales` when the model returns `confidence`,
+`rationale`, `reasoning`, `reason`, or `evidence` fields.
 
 `POST /jobs/vlm-label`
 

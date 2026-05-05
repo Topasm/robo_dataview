@@ -250,6 +250,7 @@ Definition of done:
 - [x] Add optional in-process Transformers VLM integration.
 - [x] Expose VLM keyframe sampling controls through job payloads.
 - [x] Store raw response and model metadata.
+- [x] Store parsed confidence/rationale metadata from real provider responses.
 - [x] Add review queue for generated labels.
 
 ### P7: Export and Versioning

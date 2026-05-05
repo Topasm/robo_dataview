@@ -140,10 +140,12 @@ class VlmProviderTest(unittest.TestCase):
                                             "episode_caption": {
                                                 "text": "Robot grasps the cloth edge.",
                                                 "confidence": 0.91,
+                                                "rationale": "The gripper approaches and contacts the cloth edge.",
                                             },
                                             "success_label": {
                                                 "value": "success",
                                                 "confidence": 0.88,
+                                                "reasoning": "The cloth remains controlled through release.",
                                             },
                                             "object_list": ["cloth", "gripper"],
                                             "phases": [
@@ -152,6 +154,7 @@ class VlmProviderTest(unittest.TestCase):
                                                     "start_frame": 0,
                                                     "end_frame": 8,
                                                     "confidence": 0.7,
+                                                    "rationale": "The wrist camera shows approach motion.",
                                                 }
                                             ],
                                             "important_frames": [
@@ -159,6 +162,7 @@ class VlmProviderTest(unittest.TestCase):
                                                     "frame_index": 5,
                                                     "label": "edge contact",
                                                     "confidence": 0.67,
+                                                    "evidence": "The gripper first touches the edge.",
                                                 }
                                             ],
                                         }
@@ -208,6 +212,14 @@ class VlmProviderTest(unittest.TestCase):
         ])
         self.assertEqual(result.proposals[0].label_value, "Robot grasps the cloth edge.")
         self.assertEqual(result.proposals[-1].start_frame, 5)
+        rationales = result.raw_response["parsed_rationales"]
+        self.assertEqual(
+            rationales["episode_caption"]["rationale"],
+            "The gripper approaches and contacts the cloth edge.",
+        )
+        self.assertEqual(rationales["success_label"]["confidence"], 0.88)
+        self.assertEqual(rationales["phases"][0]["label"], "approach")
+        self.assertEqual(rationales["important_frames"][0]["frame_index"], 5)
         redacted_url = result.raw_response["request"]["messages"][1]["content"][1]["image_url"]["url"]
         self.assertEqual(redacted_url, "[image-data-url]")
 
@@ -252,6 +264,7 @@ class VlmProviderTest(unittest.TestCase):
                                     "failure_reason": {
                                         "text": "cloth slipped",
                                         "confidence": 0.74,
+                                        "rationale": "The cloth leaves the gripper after contact.",
                                     },
                                     "object_list": ["cloth", "left gripper"],
                                     "phases": [
@@ -307,6 +320,10 @@ class VlmProviderTest(unittest.TestCase):
         self.assertEqual(result.proposals[0].label_type, "episode_caption")
         self.assertEqual(result.proposals[1].label_value, "failure")
         self.assertEqual(result.proposals[2].label_value, "cloth slipped")
+        self.assertEqual(
+            result.raw_response["parsed_rationales"]["failure_reason"]["rationale"],
+            "The cloth leaves the gripper after contact.",
+        )
 
     def test_transformers_local_provider_runs_pipeline_and_parses_annotations(self) -> None:
         episode = EpisodeDetail(
@@ -342,6 +359,7 @@ class VlmProviderTest(unittest.TestCase):
                                 "success_label": {
                                     "value": "success",
                                     "confidence": 0.87,
+                                    "rationale": "The final cloth state matches the task.",
                                 },
                                 "phases": [
                                     {
@@ -390,6 +408,10 @@ class VlmProviderTest(unittest.TestCase):
         self.assertEqual(result.proposals[0].label_type, "episode_caption")
         self.assertEqual(result.proposals[1].label_value, "success")
         self.assertEqual(result.proposals[2].label_value, "fold")
+        self.assertEqual(
+            result.raw_response["parsed_rationales"]["success_label"]["rationale"],
+            "The final cloth state matches the task.",
+        )
 
     def test_transformers_provider_reports_missing_optional_dependencies(self) -> None:
         episode = EpisodeDetail(

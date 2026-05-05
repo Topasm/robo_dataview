@@ -171,6 +171,7 @@ class OpenAICompatibleVlmProvider:
 
         raw_response["response"] = response_payload
         raw_response["parsed_output"] = parsed_output
+        raw_response["parsed_rationales"] = _rationales_from_model_output(parsed_output)
         raw_response["proposal_count"] = len(proposals)
         return VlmProviderResult(provider=self.name, raw_response=raw_response, proposals=proposals)
 
@@ -271,6 +272,7 @@ class OllamaVlmProvider:
 
         raw_response["response"] = response_payload
         raw_response["parsed_output"] = parsed_output
+        raw_response["parsed_rationales"] = _rationales_from_model_output(parsed_output)
         raw_response["proposal_count"] = len(proposals)
         return VlmProviderResult(provider=self.name, raw_response=raw_response, proposals=proposals)
 
@@ -367,6 +369,7 @@ class TransformersLocalVlmProvider:
 
         raw_response["response"] = _json_safe(response_payload)
         raw_response["parsed_output"] = parsed_output
+        raw_response["parsed_rationales"] = _rationales_from_model_output(parsed_output)
         raw_response["proposal_count"] = len(proposals)
         return VlmProviderResult(provider=self.name, raw_response=raw_response, proposals=proposals)
 
@@ -575,6 +578,7 @@ def _vlm_user_prompt(
             "- object_list: string or list[str]",
             "- phases: list of {label, start_frame, end_frame, confidence}",
             "- important_frames: list of frame indices or {frame_index, label, confidence}",
+            "For any object value you may include rationale, reason, or evidence text.",
         ]
     )
 
@@ -805,6 +809,71 @@ def _annotation_proposals_from_model_output(
             )
 
     return proposals
+
+
+def _rationales_from_model_output(output: dict[str, object]) -> dict[str, object]:
+    rationales: dict[str, object] = {}
+    for key in ("episode_caption", "success_label", "failure_reason", "object_list"):
+        metadata = _metadata_from_value(output.get(key))
+        if metadata:
+            rationales[key] = metadata
+
+    phases = output.get("phases")
+    if isinstance(phases, list):
+        phase_metadata = []
+        for phase in phases:
+            if not isinstance(phase, dict):
+                continue
+            metadata = _metadata_from_value(phase)
+            if not metadata:
+                continue
+            label = _clean_text(phase.get("label") or phase.get("phase") or phase.get("name"))
+            if label:
+                metadata["label"] = label
+            if phase.get("start_frame") is not None:
+                metadata["start_frame"] = phase.get("start_frame")
+            if phase.get("end_frame") is not None:
+                metadata["end_frame"] = phase.get("end_frame")
+            phase_metadata.append(metadata)
+        if phase_metadata:
+            rationales["phases"] = phase_metadata
+
+    important_frames = output.get("important_frames")
+    if isinstance(important_frames, list):
+        frame_metadata = []
+        for item in important_frames:
+            if not isinstance(item, dict):
+                continue
+            metadata = _metadata_from_value(item)
+            if not metadata:
+                continue
+            if item.get("frame_index") is not None:
+                metadata["frame_index"] = item.get("frame_index")
+            label = _clean_text(item.get("label") or item.get("reason"))
+            if label:
+                metadata["label"] = label
+            frame_metadata.append(metadata)
+        if frame_metadata:
+            rationales["important_frames"] = frame_metadata
+
+    return rationales
+
+
+def _metadata_from_value(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return {}
+    metadata: dict[str, object] = {}
+    if "confidence" in value:
+        metadata["confidence"] = _confidence(value.get("confidence"))
+    rationale = _clean_text(
+        value.get("rationale")
+        or value.get("reasoning")
+        or value.get("reason")
+        or value.get("evidence")
+    )
+    if rationale:
+        metadata["rationale"] = rationale
+    return metadata
 
 
 def _text_and_confidence(value: object) -> tuple[str | None, float]:

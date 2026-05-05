@@ -195,6 +195,8 @@ Implemented:
 - Versioned prompt registry and prompt validation.
 - VLM provider interface with heuristic fallback provider.
 - Raw provider responses persisted to job-scoped JSONL.
+- Parsed provider confidence and rationale metadata persisted in raw response
+  rows for review tooling.
 - Optional OpenCV keyframe image extraction from available episode video blobs.
 - Optional OpenAI-compatible provider path selected by model prefix or
   environment configuration.
@@ -207,7 +209,7 @@ Implemented:
 
 Next:
 
-- Add confidence rationale fields to real provider responses.
+- Surface provider rationales in the web review UI.
 
 ## Phase 6: Search and Filtering
 
