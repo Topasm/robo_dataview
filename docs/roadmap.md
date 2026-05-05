@@ -194,10 +194,10 @@ Implemented:
 - Optional local Ollama-compatible provider path selected by model prefix or
   environment configuration.
 - Generated-label review queue with accept/reject actions.
+- Queue-backed job execution through the optional Redis/RQ backend.
 
 Next:
 
-- Move job execution to RQ/Celery.
 - Add direct in-process local VLM provider implementations beyond Ollama.
 - Add confidence rationale fields to real provider responses.
 
@@ -231,12 +231,12 @@ Implemented:
   Transformers CLIP/SigLIP/DINO-style image model route.
 - Semantic search modality/source-model filters for stored visual rows.
 - Optional CLIP/SigLIP text encoder route for compatible text-to-image search.
+- Visual embedding jobs can run through the optional Redis/RQ backend.
 
 Next:
 
 - Run a real CLIP/SigLIP text-to-image search smoke with generated visual
   embeddings.
-- Move embedding jobs to a queue-backed worker process.
 
 ## Phase 7: Export and Versioning
 
