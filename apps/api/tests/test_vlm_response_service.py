@@ -29,6 +29,34 @@ class VlmResponseServiceTest(unittest.TestCase):
             self.assertEqual(row["provider"], "heuristic-fallback")
             self.assertEqual(row["raw_response"]["keyframes"], [0, 10])
 
+    def test_store_lists_raw_response_records_for_job(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = VlmResponseStore(storage_root=Path(tmpdir))
+            response_id = store.append(
+                dataset_id="dataset-a",
+                job_id="job-1",
+                episode_index=3,
+                provider="openai-compatible",
+                raw_response={
+                    "parsed_rationales": {
+                        "success_label": {
+                            "confidence": 0.9,
+                            "rationale": "The final state matches the task.",
+                        }
+                    }
+                },
+            )
+
+            [record] = store.list_for_job(dataset_id="dataset-a", job_id="job-1")
+
+            self.assertEqual(record.response_id, response_id)
+            self.assertEqual(record.provider, "openai-compatible")
+            self.assertEqual(
+                record.raw_response["parsed_rationales"]["success_label"]["rationale"],
+                "The final state matches the task.",
+            )
+            self.assertEqual(store.list_for_job(dataset_id="dataset-a", job_id="missing"), [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -181,6 +181,16 @@ export type JobRecord = {
   queueJobId: string | null;
 };
 
+export type VlmResponseRecord = {
+  responseId: string;
+  datasetId: string;
+  jobId: string;
+  episodeIndex: number;
+  provider: string;
+  createdAt: string;
+  rawResponse: Record<string, unknown>;
+};
+
 export type JobProgressEvent = {
   jobId: string;
   kind: string;
@@ -188,6 +198,8 @@ export type JobProgressEvent = {
   progress: number;
   message: string | null;
   queueJobId: string | null;
+  rawResponseIds: string[];
+  rawResponseUri: string | null;
   createdExportId: string | null;
   exportFormat: string | null;
   exportUri: string | null;

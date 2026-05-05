@@ -335,6 +335,7 @@ POST /jobs/vlm-label
 POST /jobs/visual-embeddings
 POST /jobs/export
 POST /jobs/rerun-session
+GET  /jobs/{job_id}/vlm-responses
 GET  /jobs/{job_id}
 GET  /jobs/{job_id}/events
 ```
@@ -354,6 +355,9 @@ and `publish_error` metadata. Real provider responses include parsed model JSON
 under `raw_response.parsed_output` and confidence/rationale summaries under
 `raw_response.parsed_rationales` when the model returns `confidence`,
 `rationale`, `reasoning`, `reason`, or `evidence` fields.
+`GET /jobs/{job_id}/vlm-responses` returns those job-scoped raw response rows
+so the web review UI can show provider rationale summaries without reading
+local JSONL files directly.
 
 `POST /jobs/vlm-label`
 

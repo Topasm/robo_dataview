@@ -77,6 +77,8 @@ class JobsRouterTest(unittest.TestCase):
             rerun_rrd_url="/api/rerun/recordings/session-1.rrd",
             rerun_rrd_path="data/cache/rerun/session-1.rrd",
             rerun_published_uri="s3://bucket/rerun/session-1.rrd",
+            raw_response_ids=["response-1"],
+            raw_response_uri="data/lance/vlm_responses/dataset-a/job-1.jsonl",
         )
 
         event = jobs_router._job_sse_event(record)
@@ -93,6 +95,8 @@ class JobsRouterTest(unittest.TestCase):
         self.assertIn('"rerun_rrd_url": "/api/rerun/recordings/session-1.rrd"', event)
         self.assertIn('"rerun_rrd_path": "data/cache/rerun/session-1.rrd"', event)
         self.assertIn('"rerun_published_uri": "s3://bucket/rerun/session-1.rrd"', event)
+        self.assertIn('"raw_response_ids": ["response-1"]', event)
+        self.assertIn('"raw_response_uri": "data/lance/vlm_responses/dataset-a/job-1.jsonl"', event)
 
     def test_stream_job_events_returns_sse_response(self) -> None:
         fake_jobs = FakeJobs()
@@ -102,6 +106,22 @@ class JobsRouterTest(unittest.TestCase):
 
         self.assertEqual(response.media_type, "text/event-stream")
         self.assertEqual(response.headers["cache-control"], "no-cache")
+
+    def test_list_vlm_responses_uses_job_dataset(self) -> None:
+        fake_jobs = FakeJobs()
+        fake_store = FakeVlmResponseStore()
+
+        with (
+            patch.object(jobs_router, "jobs", fake_jobs),
+            patch.object(jobs_router, "vlm_response_store", fake_store),
+        ):
+            responses = jobs_router.list_vlm_responses("job-1")
+
+        self.assertEqual(fake_store.calls, [("dataset-a", "job-1")])
+        self.assertEqual(
+            responses[0]["raw_response"]["parsed_rationales"]["success_label"]["confidence"],
+            0.9,
+        )
 
 
 class FakeJobs:
@@ -136,6 +156,43 @@ class FakeJobs:
             record.rerun_rrd_url = "/api/rerun/recordings/session-1.rrd"
             record.rerun_published_uri = "s3://bucket/rerun/session-1.rrd"
         return record
+
+    def get(self, job_id: str) -> JobRecord:
+        return JobRecord(
+            job_id=job_id,
+            kind="vlm_label",
+            status=JobStatus.succeeded,
+            dataset_id="dataset-a",
+            episode_indices=[1],
+            raw_response_ids=["response-1"],
+            raw_response_uri="data/lance/vlm_responses/dataset-a/job-1.jsonl",
+        )
+
+
+class FakeVlmResponseStore:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
+    def list_for_job(self, *, dataset_id: str, job_id: str):
+        self.calls.append((dataset_id, job_id))
+        return [
+            {
+                "response_id": "response-1",
+                "dataset_id": dataset_id,
+                "job_id": job_id,
+                "episode_index": 1,
+                "provider": "openai-compatible",
+                "created_at": "2026-05-05T00:00:00Z",
+                "raw_response": {
+                    "parsed_rationales": {
+                        "success_label": {
+                            "confidence": 0.9,
+                            "rationale": "The model saw task completion.",
+                        }
+                    }
+                },
+            }
+        ]
 
 
 if __name__ == "__main__":

@@ -21,6 +21,7 @@ import {
   fetchFrameWindowPage,
   fetchCurrentUser,
   fetchRerunSession,
+  fetchVlmResponses,
   filterSearch,
   fullTextSearch,
   openDataset,
@@ -46,7 +47,8 @@ import type {
   RerunSession,
   ReviewStatus,
   SearchResult,
-  SegmentAnnotation
+  SegmentAnnotation,
+  VlmResponseRecord
 } from "@/lib/types";
 
 type SegmentDraft = {
@@ -101,6 +103,8 @@ function mergeJobEvent(record: JobRecord, event: JobProgressEvent): JobRecord {
     progress: event.progress,
     message: event.message,
     queueJobId: event.queueJobId,
+    rawResponseIds: event.rawResponseIds,
+    rawResponseUri: event.rawResponseUri,
     createdExportId: event.createdExportId,
     exportFormat: event.exportFormat,
     exportUri: event.exportUri,
@@ -125,6 +129,7 @@ export function useStudioData() {
   const [rerunSession, setRerunSession] = useState<RerunSession | null>(null);
   const [rerunJob, setRerunJob] = useState<JobRecord | null>(null);
   const [vlmJob, setVlmJob] = useState<JobRecord | null>(null);
+  const [vlmResponses, setVlmResponses] = useState<VlmResponseRecord[]>([]);
   const [exportJob, setExportJob] = useState<JobRecord | null>(null);
   const [exportRecord, setExportRecord] = useState<ExportRecord | null>(null);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -424,6 +429,30 @@ export function useStudioData() {
   }, [selectedDatasetId]);
 
   useEffect(() => {
+    if (!vlmJobId || (vlmJob?.rawResponseIds.length ?? 0) === 0) {
+      setVlmResponses([]);
+      return;
+    }
+
+    let isMounted = true;
+    fetchVlmResponses(vlmJobId)
+      .then((responses) => {
+        if (isMounted) {
+          setVlmResponses(responses);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setVlmResponses([]);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [vlmJob?.rawResponseIds.length, vlmJobId, vlmJobStatus]);
+
+  useEffect(() => {
     if (!vlmJobId || !vlmJobStatus || TERMINAL_JOB_STATUSES.has(vlmJobStatus)) {
       return;
     }
@@ -586,6 +615,7 @@ export function useStudioData() {
     setRerunSession(null);
     setRerunJob(null);
     setVlmJob(null);
+    setVlmResponses([]);
     setExportJob(null);
     setExportRecord(null);
     setSearchResults([]);
@@ -619,6 +649,7 @@ export function useStudioData() {
     setSelectedFrameStatus("idle");
     setRerunSession(null);
     setVlmJob(null);
+    setVlmResponses([]);
     setExportRecord(null);
     setAnnotationHistoryRows([]);
   }
@@ -1097,6 +1128,7 @@ export function useStudioData() {
     selectedFrameStatus,
     selectedSummary,
     vlmJob,
+    vlmResponses,
     handleCreateExport,
     handleAssignAnnotation,
     handleCreateFilterPreset,

@@ -1285,6 +1285,31 @@ button:disabled {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.rationale-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.rationale-row {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+}
+
+.rationale-label {
+  align-items: center;
+  display: flex;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
 .compact-progress-track {
   margin: 0;
 }

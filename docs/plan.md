@@ -251,6 +251,7 @@ Definition of done:
 - [x] Expose VLM keyframe sampling controls through job payloads.
 - [x] Store raw response and model metadata.
 - [x] Store parsed confidence/rationale metadata from real provider responses.
+- [x] Expose raw VLM response rows and rationale summaries in web review UI.
 - [x] Add review queue for generated labels.
 
 ### P7: Export and Versioning

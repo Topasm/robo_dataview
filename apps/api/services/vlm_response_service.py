@@ -7,6 +7,8 @@ from pathlib import Path
 import re
 from uuid import uuid4
 
+from apps.api.schemas.jobs import VlmResponseRecord
+
 
 VLM_RESPONSE_STORAGE_ROOT = Path("data/lance/vlm_responses")
 
@@ -42,6 +44,17 @@ class VlmResponseStore:
 
     def job_uri(self, *, dataset_id: str, job_id: str) -> str:
         return str(self.job_path(dataset_id=dataset_id, job_id=job_id))
+
+    def list_for_job(self, *, dataset_id: str, job_id: str) -> list[VlmResponseRecord]:
+        path = self.job_path(dataset_id=dataset_id, job_id=job_id)
+        if not path.exists():
+            return []
+        records: list[VlmResponseRecord] = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            records.append(VlmResponseRecord(**json.loads(line)))
+        return records
 
     def job_path(self, *, dataset_id: str, job_id: str) -> Path:
         return self._dataset_dir(dataset_id) / f"{job_id}.jsonl"

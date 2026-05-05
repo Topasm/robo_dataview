@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from apps.api.schemas.common import ExportFormat, JobStatus
@@ -27,6 +29,16 @@ class PromptTemplateRecord(BaseModel):
     title: str
     description: str
     expected_outputs: list[str]
+
+
+class VlmResponseRecord(BaseModel):
+    response_id: str
+    dataset_id: str
+    job_id: str
+    episode_index: int
+    provider: str
+    created_at: str
+    raw_response: dict[str, Any]
 
 
 class JobRecord(BaseModel):

@@ -16,7 +16,8 @@ import type {
   SearchResult,
   SegmentAnnotation,
   StateActionSummary,
-  UserIdentity
+  UserIdentity,
+  VlmResponseRecord
 } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000/api";
@@ -160,6 +161,8 @@ type JobProgressEventResponse = {
   progress: number;
   message: string | null;
   queue_job_id: string | null;
+  raw_response_ids: string[];
+  raw_response_uri: string | null;
   created_export_id: string | null;
   export_format: string | null;
   export_uri: string | null;
@@ -168,6 +171,16 @@ type JobProgressEventResponse = {
   rerun_rrd_path: string | null;
   rerun_published_uri: string | null;
   rerun_viewer_url: string | null;
+};
+
+type VlmResponseRecordResponse = {
+  response_id: string;
+  dataset_id: string;
+  job_id: string;
+  episode_index: number;
+  provider: string;
+  created_at: string;
+  raw_response: Record<string, unknown>;
 };
 
 type ExportRecordResponse = {
@@ -674,6 +687,11 @@ export async function createVlmLabelJob(
   return toJobRecord(row);
 }
 
+export async function fetchVlmResponses(jobId: string): Promise<VlmResponseRecord[]> {
+  const rows = await request<VlmResponseRecordResponse[]>(`/jobs/${jobId}/vlm-responses`);
+  return rows.map(toVlmResponseRecord);
+}
+
 export async function createVisualEmbeddingJob(
   datasetId: string,
   episodeIndices: number[],
@@ -911,6 +929,8 @@ function parseJobSseEvent(rawEvent: string): JobProgressEvent | null {
     progress: payload.progress,
     message: payload.message,
     queueJobId: payload.queue_job_id,
+    rawResponseIds: payload.raw_response_ids ?? [],
+    rawResponseUri: payload.raw_response_uri ?? null,
     createdExportId: payload.created_export_id,
     exportFormat: payload.export_format,
     exportUri: payload.export_uri,
@@ -919,6 +939,18 @@ function parseJobSseEvent(rawEvent: string): JobProgressEvent | null {
     rerunRrdPath: payload.rerun_rrd_path,
     rerunPublishedUri: payload.rerun_published_uri,
     rerunViewerUrl: payload.rerun_viewer_url
+  };
+}
+
+function toVlmResponseRecord(raw: VlmResponseRecordResponse): VlmResponseRecord {
+  return {
+    responseId: raw.response_id,
+    datasetId: raw.dataset_id,
+    jobId: raw.job_id,
+    episodeIndex: raw.episode_index,
+    provider: raw.provider,
+    createdAt: raw.created_at,
+    rawResponse: raw.raw_response
   };
 }
 
@@ -1102,8 +1134,8 @@ function toJobRecord(raw: JobRecordResponse): JobRecord {
     promptTemplate: raw.prompt_template,
     promptVersion: raw.prompt_version,
     provider: raw.provider,
-    rawResponseIds: raw.raw_response_ids,
-    rawResponseUri: raw.raw_response_uri,
+    rawResponseIds: raw.raw_response_ids ?? [],
+    rawResponseUri: raw.raw_response_uri ?? null,
     createdEmbeddingIds: raw.created_embedding_ids,
     artifactCount: raw.artifact_count,
     createdExportId: raw.created_export_id,

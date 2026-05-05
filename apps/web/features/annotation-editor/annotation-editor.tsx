@@ -11,7 +11,8 @@ import type {
   JobRecord,
   ReviewStatus,
   AnnotationHistoryRecord,
-  SegmentAnnotation
+  SegmentAnnotation,
+  VlmResponseRecord
 } from "@/lib/types";
 
 type AnnotationDraft = {
@@ -44,6 +45,7 @@ type AnnotationEditorProps = {
   selectedFrameStatus: "idle" | "loading" | "ready" | "error";
   reviewerUserId: string;
   vlmJob: JobRecord | null;
+  vlmResponses: VlmResponseRecord[];
   onAssignAnnotation: (annotationId: string, assignedTo: string | null) => Promise<void>;
   onCreateSegment: (draft: AnnotationDraft) => Promise<void>;
   onDeleteSegment: (annotationId: string) => Promise<void>;
@@ -78,6 +80,7 @@ export function AnnotationEditor({
   selectedFrameStatus,
   reviewerUserId,
   vlmJob,
+  vlmResponses,
   onAssignAnnotation,
   onCreateSegment,
   onDeleteSegment,
@@ -122,6 +125,7 @@ export function AnnotationEditor({
   const recentHistory = [...annotationHistory]
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
     .slice(0, 8);
+  const rationaleRows = vlmResponses.flatMap(responseRationaleRows).slice(0, 6);
 
   useEffect(() => {
     setEpisodeDraft(toEpisodeDraft(episode));
@@ -412,6 +416,21 @@ export function AnnotationEditor({
               </div>
               <span className="mono">{vlmProgressPercent}%</span>
             </div>
+          </div>
+        ) : null}
+        {rationaleRows.length > 0 ? (
+          <div className="rationale-list">
+            {rationaleRows.map((row) => (
+              <div className="rationale-row" key={row.id}>
+                <div className="rationale-label">
+                  <span>{row.label}</span>
+                  {row.confidence !== null ? (
+                    <span className="mono">{row.confidence.toFixed(2)}</span>
+                  ) : null}
+                </div>
+                {row.rationale ? <div className="muted">{row.rationale}</div> : null}
+              </div>
+            ))}
           </div>
         ) : null}
         {generatedProposals.length > 0 ? (
@@ -752,4 +771,61 @@ function formatHistoryTime(value: string): string {
     month: "short",
     day: "numeric"
   }).format(timestamp);
+}
+
+type RationaleRow = {
+  id: string;
+  label: string;
+  confidence: number | null;
+  rationale: string | null;
+};
+
+function responseRationaleRows(response: VlmResponseRecord): RationaleRow[] {
+  const raw = response.rawResponse;
+  const rationales = objectField(raw, "parsed_rationales");
+  if (!rationales) {
+    return [];
+  }
+  const rows: RationaleRow[] = [];
+  for (const [key, value] of Object.entries(rationales)) {
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => {
+        const metadata = objectValue(item);
+        if (metadata) {
+          rows.push(rationaleRow(response, `${key}.${index}`, key, metadata));
+        }
+      });
+      continue;
+    }
+    const metadata = objectValue(value);
+    if (metadata) {
+      rows.push(rationaleRow(response, key, key, metadata));
+    }
+  }
+  return rows;
+}
+
+function rationaleRow(
+  response: VlmResponseRecord,
+  idSuffix: string,
+  fallbackLabel: string,
+  metadata: Record<string, unknown>,
+): RationaleRow {
+  const label = stringField(metadata, "label") ?? fallbackLabel;
+  return {
+    id: `${response.responseId}-${idSuffix}`,
+    label,
+    confidence: numberField(metadata, "confidence"),
+    rationale: stringField(metadata, "rationale")
+  };
+}
+
+function objectField(payload: Record<string, unknown>, key: string): Record<string, unknown> | null {
+  return objectValue(payload[key]);
+}
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }

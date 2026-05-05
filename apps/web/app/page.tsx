@@ -39,6 +39,7 @@ export default function Home() {
     selectedFrameStatus,
     selectedSummary,
     vlmJob,
+    vlmResponses,
     handleAssignAnnotation,
     handleCreateExport,
     handleCreateFilterPreset,
@@ -176,6 +177,7 @@ export default function Home() {
               selectedFrameStatus={selectedFrameStatus}
               reviewerUserId={reviewerUserId}
               vlmJob={vlmJob}
+              vlmResponses={vlmResponses}
             />
           </div>
           <ExportStrip

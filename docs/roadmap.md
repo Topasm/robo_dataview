@@ -197,6 +197,8 @@ Implemented:
 - Raw provider responses persisted to job-scoped JSONL.
 - Parsed provider confidence and rationale metadata persisted in raw response
   rows for review tooling.
+- Web review panel surfaces provider rationale summaries from VLM raw
+  responses.
 - Optional OpenCV keyframe image extraction from available episode video blobs.
 - Optional OpenAI-compatible provider path selected by model prefix or
   environment configuration.
@@ -209,7 +211,7 @@ Implemented:
 
 Next:
 
-- Surface provider rationales in the web review UI.
+- Add richer provider-specific rationale inspection and raw response drilldown.
 
 ## Phase 6: Search and Filtering
 

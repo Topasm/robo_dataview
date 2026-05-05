@@ -12,10 +12,12 @@ from apps.api.schemas.jobs import (
     JobCreateRequest,
     JobRecord,
     PromptTemplateRecord,
+    VlmResponseRecord,
     VisualEmbeddingJobCreateRequest,
 )
 from apps.api.schemas.rerun import RerunSessionCreate
 from apps.api.services.job_service import jobs
+from apps.api.services.vlm_response_service import vlm_response_store
 from packages.prompts import list_prompt_templates
 
 
@@ -55,6 +57,12 @@ def list_vlm_prompts() -> list[PromptTemplateRecord]:
         )
         for prompt in list_prompt_templates()
     ]
+
+
+@router.get("/jobs/{job_id}/vlm-responses", response_model=list[VlmResponseRecord])
+def list_vlm_responses(job_id: str) -> list[VlmResponseRecord]:
+    record = jobs.get(job_id)
+    return vlm_response_store.list_for_job(dataset_id=record.dataset_id, job_id=job_id)
 
 
 @router.get("/jobs/{job_id}", response_model=JobRecord)
@@ -98,6 +106,8 @@ def _job_sse_event(record: JobRecord) -> str:
             "progress": record.progress,
             "message": record.message,
             "queue_job_id": record.queue_job_id,
+            "raw_response_ids": record.raw_response_ids,
+            "raw_response_uri": record.raw_response_uri,
             "created_export_id": record.created_export_id,
             "export_format": record.export_format,
             "export_uri": record.export_uri,
