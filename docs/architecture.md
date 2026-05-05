@@ -169,20 +169,22 @@ Frontend state
 
 FastAPI services
   Own dataset indexing, validation, API contracts, local persistence, and
-  synchronous MVP job execution.
+  both synchronous development execution and queue-backed job dispatch.
 
 Lance-compatible stores
   Own annotation, embedding, and version records. JSONL is the mandatory local
   fallback; Lance mirroring is optional.
 
 Workers
-  Will own expensive or asynchronous compute. The current VLM path is executed
-  synchronously through `JobStore` as a development scaffold.
+  Own expensive or asynchronous compute. VLM labeling, visual embedding,
+  export, and Rerun session jobs can run through the optional Redis/RQ backend,
+  while the synchronous path remains available for local development.
 
 Rerun
   Owns replay visualization artifacts only. Annotation source of truth stays in
-  the annotation store. Current recordings are regenerated per session and log
-  timestamp, state norm, and action norm scalars only.
+  the annotation store. Current recordings are keyed and cached by dataset
+  fingerprint, episode, mode, and visualization config, and log state/action
+  scalar timelines plus available camera video assets.
 ```
 
 ## Runtime Flow

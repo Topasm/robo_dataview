@@ -154,6 +154,7 @@ Implemented:
 - Optional Lance mirror.
 - Review status updates.
 - Immutable annotation history API and JSONL audit trail.
+- Dedicated web history browser in the annotation editor.
 - Segment edit form and midpoint split action in the web UI.
 - Episode-level label editing for caption, success/failure, failure reason,
   quality, split, and review status.
@@ -162,7 +163,8 @@ Implemented:
 
 Next:
 
-- Add a dedicated history browser and richer reviewer workflow UI.
+- Add richer reviewer workflow UI for assignment, reviewer queues, and bulk
+  review operations.
 
 ## Phase 5: VLM Auto-Labeling
 
