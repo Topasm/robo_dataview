@@ -1186,16 +1186,6 @@ button:disabled {
   text-decoration: none;
 }
 
-.rerun-canvas {
-  background: #182428;
-  border: 1px solid #2e4a51;
-  border-radius: 8px;
-  height: clamp(220px, 32vh, 420px);
-  margin-top: 10px;
-  overflow: hidden;
-  position: relative;
-}
-
 .rerun-frame {
   background: #182428;
   border: 1px solid #2e4a51;
@@ -1222,31 +1212,6 @@ button:disabled {
   display: flex;
   font-size: 12px;
   justify-content: center;
-}
-
-.axis {
-  border-radius: 999px;
-  height: 2px;
-  left: 50%;
-  position: absolute;
-  top: 50%;
-  transform-origin: left center;
-  width: 96px;
-}
-
-.x-axis {
-  background: #ed6a5a;
-  transform: rotate(0deg);
-}
-
-.y-axis {
-  background: #7bc96f;
-  transform: rotate(120deg);
-}
-
-.z-axis {
-  background: #5aa3ed;
-  transform: rotate(245deg);
 }
 
 .right-panel {

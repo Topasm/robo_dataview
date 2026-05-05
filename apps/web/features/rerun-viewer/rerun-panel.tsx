@@ -70,13 +70,7 @@ export function RerunPanel({ job, session, viewerUrl, onCreateSession }: RerunPa
           src={effectiveViewerUrl}
           title="Rerun Web Viewer"
         />
-      ) : (
-        <div className="rerun-canvas">
-          <div className="axis x-axis" />
-          <div className="axis y-axis" />
-          <div className="axis z-axis" />
-        </div>
-      )}
+      ) : null}
     </section>
   );
 }
