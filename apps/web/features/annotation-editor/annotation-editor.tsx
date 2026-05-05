@@ -103,6 +103,7 @@ export function AnnotationEditor({
   const [editingRows, setEditingRows] = useState<Record<string, AnnotationDraft>>({});
   const [isSavingEpisode, setIsSavingEpisode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isBulkReviewing, setIsBulkReviewing] = useState(false);
   const [isRunningVlm, setIsRunningVlm] = useState(false);
   const generatedProposals = annotations
     .filter(
@@ -111,6 +112,11 @@ export function AnnotationEditor({
         annotation.reviewStatus === "pending"
     )
     .sort((left, right) => left.startFrame - right.startFrame);
+  const pendingAnnotations = annotations.filter((annotation) => annotation.reviewStatus === "pending");
+  const claimablePendingAnnotations = pendingAnnotations.filter(
+    (annotation) => annotation.assignedTo !== reviewerUserId
+  );
+  const assignedAnnotations = annotations.filter((annotation) => annotation.assignedTo !== null);
   const isVlmJobActive = vlmJob ? !["succeeded", "failed"].includes(vlmJob.status) : false;
   const vlmProgressPercent = Math.round(Math.max(0, Math.min(1, vlmJob?.progress ?? 0)) * 100);
   const recentHistory = [...annotationHistory]
@@ -195,6 +201,48 @@ export function AnnotationEditor({
       await onRunVlmLabel();
     } finally {
       setIsRunningVlm(false);
+    }
+  }
+
+  async function handleBulkReview(rows: SegmentAnnotation[], status: ReviewStatus) {
+    if (rows.length === 0) {
+      return;
+    }
+    setIsBulkReviewing(true);
+    try {
+      for (const annotation of rows) {
+        await onUpdateReviewStatus(annotation.id, status);
+      }
+    } finally {
+      setIsBulkReviewing(false);
+    }
+  }
+
+  async function handleClaimPending() {
+    if (claimablePendingAnnotations.length === 0) {
+      return;
+    }
+    setIsBulkReviewing(true);
+    try {
+      for (const annotation of claimablePendingAnnotations) {
+        await onAssignAnnotation(annotation.id, reviewerUserId);
+      }
+    } finally {
+      setIsBulkReviewing(false);
+    }
+  }
+
+  async function handleClearAssignments() {
+    if (assignedAnnotations.length === 0) {
+      return;
+    }
+    setIsBulkReviewing(true);
+    try {
+      for (const annotation of assignedAnnotations) {
+        await onAssignAnnotation(annotation.id, null);
+      }
+    } finally {
+      setIsBulkReviewing(false);
     }
   }
 
@@ -366,6 +414,28 @@ export function AnnotationEditor({
             </div>
           </div>
         ) : null}
+        {generatedProposals.length > 0 ? (
+          <div className="review-action-grid">
+            <button
+              className="text-button compact-text-button"
+              disabled={isBulkReviewing}
+              onClick={() => void handleBulkReview(generatedProposals, "accepted")}
+              type="button"
+            >
+              <Check size={14} />
+              Accept all
+            </button>
+            <button
+              className="text-button compact-text-button"
+              disabled={isBulkReviewing}
+              onClick={() => void handleBulkReview(generatedProposals, "rejected")}
+              type="button"
+            >
+              <X size={14} />
+              Reject all
+            </button>
+          </div>
+        ) : null}
         <div className="proposal-list">
           {generatedProposals.length === 0 ? (
             <div className="empty-state compact-empty-state">No pending generated labels.</div>
@@ -461,6 +531,26 @@ export function AnnotationEditor({
 
       <section className="panel-section">
         <div className="section-title">Segments</div>
+        <div className="review-action-grid">
+          <button
+            className="text-button compact-text-button"
+            disabled={isBulkReviewing || claimablePendingAnnotations.length === 0}
+            onClick={() => void handleClaimPending()}
+            type="button"
+          >
+            <UserCheck size={14} />
+            Claim pending
+          </button>
+          <button
+            className="text-button compact-text-button"
+            disabled={isBulkReviewing || assignedAnnotations.length === 0}
+            onClick={() => void handleClearAssignments()}
+            type="button"
+          >
+            <UserX size={14} />
+            Clear assigned
+          </button>
+        </div>
         <div className="segment-list">
           {annotations.length === 0 ? <div className="empty-state">No annotations for this episode.</div> : null}
           {annotations.map((annotation) => (
