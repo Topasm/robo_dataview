@@ -159,6 +159,8 @@ Implemented:
   clearing assignment.
 - Bulk review controls for accepting/rejecting generated labels and bulk
   claiming/clearing pending assignments.
+- Cross-episode reviewer queue summary in the dataset browser with jumps to
+  pending annotation episodes.
 - Segment edit form and midpoint split action in the web UI.
 - Episode-level label editing for caption, success/failure, failure reason,
   quality, split, and review status.
@@ -167,7 +169,7 @@ Implemented:
 
 Next:
 
-- Add richer reviewer queues across episodes and datasets.
+- Add dataset-level reviewer queue filters and saved reviewer worklists.
 
 ## Phase 5: VLM Auto-Labeling
 

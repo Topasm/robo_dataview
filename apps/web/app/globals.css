@@ -328,6 +328,43 @@ button:disabled {
   gap: 8px;
 }
 
+.review-queue-metrics {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.review-queue-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.review-queue-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px;
+  text-align: left;
+}
+
+.review-queue-row:hover {
+  border-color: #9fb6cc;
+}
+
+.review-queue-label {
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .camera-list {
   display: flex;
   flex-wrap: wrap;

@@ -29,6 +29,7 @@ export default function Home() {
     rerunJob,
     rerunSession,
     rerunViewerUrl,
+    reviewQueueRows,
     reviewerUserId,
     searchResults,
     selectedEpisode,
@@ -104,7 +105,13 @@ export default function Home() {
       </div>
 
       <div className="workspace">
-        <DatasetBrowser onOpenDataset={handleOpenDataset} summary={selectedSummary} />
+        <DatasetBrowser
+          onOpenDataset={handleOpenDataset}
+          onSelectEpisode={handleSelectEpisode}
+          reviewQueueRows={reviewQueueRows}
+          reviewerUserId={reviewerUserId}
+          summary={selectedSummary}
+        />
         <div className="center-column">
           <SearchFilterBar
             filterPresets={filterPresets}

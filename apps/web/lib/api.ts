@@ -511,12 +511,12 @@ export async function updateEpisodeLabels(
 
 export async function fetchAnnotations(
   datasetId: string,
-  episodeIndex: number,
+  episodeIndex?: number,
 ): Promise<SegmentAnnotation[]> {
-  const query = new URLSearchParams({
-    dataset_id: datasetId,
-    episode_index: String(episodeIndex)
-  });
+  const query = new URLSearchParams({ dataset_id: datasetId });
+  if (episodeIndex !== undefined) {
+    query.set("episode_index", String(episodeIndex));
+  }
   const rows = await request<AnnotationResponse[]>(`/annotations?${query}`);
   return rows.map(toSegmentAnnotation);
 }

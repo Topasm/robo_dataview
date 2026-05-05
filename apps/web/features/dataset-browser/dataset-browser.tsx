@@ -2,18 +2,36 @@ import { useState } from "react";
 import { Database, FolderOpen, SlidersHorizontal } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
-import type { DatasetSummary } from "@/lib/types";
+import type { DatasetSummary, SegmentAnnotation } from "@/lib/types";
 
 type DatasetBrowserProps = {
   summary: DatasetSummary;
+  reviewQueueRows: SegmentAnnotation[];
+  reviewerUserId: string;
   onOpenDataset: (uri: string) => Promise<void>;
+  onSelectEpisode: (episodeIndex: number) => void;
 };
 
-export function DatasetBrowser({ summary, onOpenDataset }: DatasetBrowserProps) {
+export function DatasetBrowser({
+  summary,
+  reviewQueueRows,
+  reviewerUserId,
+  onOpenDataset,
+  onSelectEpisode
+}: DatasetBrowserProps) {
   const [uri, setUri] = useState("hf://datasets/lance-format/lerobot-xvla-soft-fold/data");
   const [isOpening, setIsOpening] = useState(false);
   const reviewedPercent =
     summary.episodeCount === 0 ? 0 : Math.round((summary.reviewedCount / summary.episodeCount) * 100);
+  const pendingRows = reviewQueueRows.filter((annotation) => annotation.reviewStatus === "pending");
+  const assignedRows = pendingRows.filter((annotation) => annotation.assignedTo === reviewerUserId);
+  const generatedRows = pendingRows.filter(
+    (annotation) => annotation.source === "vlm" || annotation.source === "heuristic"
+  );
+  const queueRows = [
+    ...assignedRows,
+    ...pendingRows.filter((annotation) => annotation.assignedTo !== reviewerUserId)
+  ].slice(0, 4);
 
   async function handleOpenDataset() {
     if (!uri.trim()) {
@@ -84,6 +102,34 @@ export function DatasetBrowser({ summary, onOpenDataset }: DatasetBrowserProps) 
           <span>{summary.acceptedCount}</span>
           <StatusPill status="rejected" />
           <span>{summary.rejectedCount}</span>
+        </div>
+      </section>
+
+      <section className="panel-section">
+        <div className="section-title">Reviewer Queue</div>
+        <div className="review-queue-metrics">
+          <Metric label="Pending" value={pendingRows.length.toString()} />
+          <Metric label="Mine" value={assignedRows.length.toString()} />
+          <Metric label="Generated" value={generatedRows.length.toString()} />
+        </div>
+        <div className="review-queue-list">
+          {queueRows.length === 0 ? (
+            <div className="empty-state compact-empty-state">No pending annotations.</div>
+          ) : (
+            queueRows.map((annotation) => (
+              <button
+                className="review-queue-row"
+                key={annotation.id}
+                onClick={() => onSelectEpisode(annotation.episodeIndex)}
+                type="button"
+              >
+                <span className="review-queue-label">{annotation.labelValue}</span>
+                <span className="muted mono">
+                  ep {annotation.episodeIndex} / f{annotation.startFrame}-{annotation.endFrame}
+                </span>
+              </button>
+            ))
+          )}
         </div>
       </section>
 

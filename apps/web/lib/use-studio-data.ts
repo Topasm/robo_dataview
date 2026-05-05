@@ -120,6 +120,7 @@ export function useStudioData() {
   const [annotationRows, setAnnotationRows] = useState<SegmentAnnotation[]>(annotations);
   const [annotationHistoryRows, setAnnotationHistoryRows] =
     useState<AnnotationHistoryRecord[]>(annotationHistory);
+  const [reviewQueueRows, setReviewQueueRows] = useState<SegmentAnnotation[]>(annotations);
   const [reviewerUserId, setReviewerUserId] = useState("local");
   const [rerunSession, setRerunSession] = useState<RerunSession | null>(null);
   const [rerunJob, setRerunJob] = useState<JobRecord | null>(null);
@@ -173,6 +174,15 @@ export function useStudioData() {
           (event) => event.datasetId === datasetId && event.episodeIndex === episodeIndex
         )
       );
+    }
+  }, []);
+
+  const refreshReviewQueue = useCallback(async (datasetId: string) => {
+    try {
+      const rows = await fetchAnnotations(datasetId);
+      setReviewQueueRows(rows);
+    } catch {
+      setReviewQueueRows(annotations.filter((annotation) => annotation.datasetId === datasetId));
     }
   }, []);
 
@@ -234,6 +244,10 @@ export function useStudioData() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    void refreshReviewQueue(selectedDatasetId);
+  }, [refreshReviewQueue, selectedDatasetId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -435,6 +449,7 @@ export function useStudioData() {
                   selectedEpisode.datasetId,
                   selectedEpisode.episodeIndex
                 );
+                void refreshReviewQueue(selectedEpisode.datasetId);
               }
             })
             .catch(() => undefined);
@@ -462,6 +477,7 @@ export function useStudioData() {
     };
   }, [
     refreshAnnotationHistory,
+    refreshReviewQueue,
     selectedEpisode.datasetId,
     selectedEpisode.episodeIndex,
     vlmJobId,
@@ -575,6 +591,7 @@ export function useStudioData() {
     setSearchResults([]);
     setFilterPresets([]);
     setAnnotationHistoryRows([]);
+    setReviewQueueRows([]);
   }
 
   async function handleOpenDataset(uri: string) {
@@ -667,6 +684,7 @@ export function useStudioData() {
         sortAnnotations(current.map((annotation) => (annotation.id === optimistic.id ? created : annotation)))
       );
       await refreshAnnotationHistory(created.datasetId, created.episodeIndex);
+      await refreshReviewQueue(created.datasetId);
     } catch (error) {
       setAnnotationRows(previousAnnotations);
       throw error;
@@ -755,6 +773,7 @@ export function useStudioData() {
         sortAnnotations(current.map((annotation) => (annotation.id === annotationId ? updated : annotation)))
       );
       await refreshAnnotationHistory(updated.datasetId, updated.episodeIndex);
+      await refreshReviewQueue(updated.datasetId);
     } catch (error) {
       setAnnotationRows(previousAnnotations);
       throw error;
@@ -822,6 +841,7 @@ export function useStudioData() {
         ])
       );
       await refreshAnnotationHistory(annotation.datasetId, annotation.episodeIndex);
+      await refreshReviewQueue(annotation.datasetId);
     } catch (error) {
       setAnnotationRows(previousAnnotations);
       throw error;
@@ -867,6 +887,7 @@ export function useStudioData() {
         ])
       );
       await refreshAnnotationHistory(left.datasetId, left.episodeIndex);
+      await refreshReviewQueue(left.datasetId);
     } catch (error) {
       setAnnotationRows(previousAnnotations);
       throw error;
@@ -886,6 +907,7 @@ export function useStudioData() {
         current.map((annotation) => (annotation.id === annotationId ? updated : annotation))
       );
       await refreshAnnotationHistory(updated.datasetId, updated.episodeIndex);
+      await refreshReviewQueue(updated.datasetId);
     } catch (error) {
       setAnnotationRows(previousAnnotations);
       throw error;
@@ -905,6 +927,7 @@ export function useStudioData() {
         current.map((annotation) => (annotation.id === annotationId ? updated : annotation))
       );
       await refreshAnnotationHistory(updated.datasetId, updated.episodeIndex);
+      await refreshReviewQueue(updated.datasetId);
     } catch (error) {
       setAnnotationRows(previousAnnotations);
       throw error;
@@ -917,6 +940,7 @@ export function useStudioData() {
     try {
       await deleteAnnotation(annotationId);
       await refreshAnnotationHistory(selectedEpisode.datasetId, selectedEpisode.episodeIndex);
+      await refreshReviewQueue(selectedEpisode.datasetId);
     } catch (error) {
       setAnnotationRows(previousAnnotations);
       throw error;
@@ -939,6 +963,7 @@ export function useStudioData() {
       const apiAnnotations = await fetchAnnotations(selectedEpisode.datasetId, selectedEpisode.episodeIndex);
       setAnnotationRows(apiAnnotations);
       await refreshAnnotationHistory(selectedEpisode.datasetId, selectedEpisode.episodeIndex);
+      await refreshReviewQueue(selectedEpisode.datasetId);
     }
   }
 
@@ -1043,6 +1068,7 @@ export function useStudioData() {
     const apiAnnotations = await fetchAnnotations(selectedEpisode.datasetId, selectedEpisode.episodeIndex);
     setAnnotationRows(apiAnnotations);
     await refreshAnnotationHistory(selectedEpisode.datasetId, selectedEpisode.episodeIndex);
+    await refreshReviewQueue(selectedEpisode.datasetId);
   }
 
   return {
@@ -1061,6 +1087,7 @@ export function useStudioData() {
     rerunJob,
     rerunSession,
     rerunViewerUrl,
+    reviewQueueRows,
     reviewerUserId,
     searchResults,
     selectedEpisode,
