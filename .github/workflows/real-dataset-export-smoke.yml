@@ -40,8 +40,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install Lance and export dependencies
-        run: python3 -m pip install -e ".[lance,export,video,dev]"
+      - name: Install Lance, storage, and export dependencies
+        run: python3 -m pip install -e ".[lance,export,video,storage,dev]"
       - name: Run real dataset export smoke test
         env:
           RUN_REAL_DATASET_EXPORT_SMOKE: "1"

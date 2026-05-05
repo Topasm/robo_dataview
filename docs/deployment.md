@@ -58,9 +58,9 @@ RUN_OFFICIAL_EXPORT_TESTS=1 python3 -m pytest apps/api/tests/test_official_expor
 ```
 
 The manual GitHub Actions workflow `Real dataset export smoke` installs
-`.[lance,export,video,dev]`, opens a real Lance dataset URI, exports a selected
-episode window to a LeRobot snapshot, and verifies the artifact with the
-official loader. It defaults to
+`.[lance,export,video,storage,dev]`, opens a real Lance dataset URI, exports a
+selected episode window to a LeRobot snapshot, and verifies the artifact with
+the official loader. It defaults to
 `hf://datasets/lance-format/lerobot-xvla-soft-fold/data` with one episode from
 offset 0 and no video materialization. The same check can be run locally with:
 
