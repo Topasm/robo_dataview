@@ -45,6 +45,7 @@ type DatasetSummaryResponse = DatasetRecordResponse & {
   frame_count: number;
   fps: number | null;
   camera_names: string[];
+  camera_info?: Record<string, Record<string, unknown>> | null;
   reviewed_count: number;
   accepted_count: number;
   rejected_count: number;
@@ -992,6 +993,7 @@ function toDatasetSummary(raw: DatasetSummaryResponse): DatasetSummary {
     frameCount: raw.frame_count,
     fps: raw.fps ?? 0,
     cameraNames: raw.camera_names,
+    cameraInfo: raw.camera_info ?? null,
     reviewedCount: raw.reviewed_count,
     acceptedCount: raw.accepted_count,
     rejectedCount: raw.rejected_count,

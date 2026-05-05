@@ -9,6 +9,7 @@ export const datasetSummary: DatasetSummary = {
   frameCount: 576,
   fps: 20,
   cameraNames: ["cam_high", "cam_left_wrist", "cam_right_wrist"],
+  cameraInfo: null,
   reviewedCount: 2,
   acceptedCount: 2,
   rejectedCount: 0

@@ -194,6 +194,37 @@ class FakeDataset:
         return {column: row[column] for column in columns if column in row}
 
 
+class NoScannerDataset(FakeDataset):
+    """Drops the `scanner` API to force the offset / linear-scan fallback in
+    `_read_episode_row_by_index`."""
+
+    scanner = None  # type: ignore[assignment]
+
+
+class ArrayFetchFailingDataset(FakeDataset):
+    """FakeDataset where reads that include `STATE_COLUMNS` or `ACTION_COLUMNS`
+    raise IOError, simulating an HF rate-limit or network failure on heavy
+    fragment fetches."""
+
+    HEAVY_COLUMNS = frozenset({"observation_state", "actions", "action", "state"})
+
+    def take(self, indices: list[int], columns: list[str] | None = None) -> FakeTable:
+        if columns and any(column in self.HEAVY_COLUMNS for column in columns):
+            raise IOError("simulated rate limit")
+        return super().take(indices, columns)
+
+    def scanner(
+        self,
+        columns: list[str] | None = None,
+        filter: str | None = None,
+        limit: int | None = None,
+        **_: object,
+    ) -> FakeScanner:
+        if columns and any(column in self.HEAVY_COLUMNS for column in columns):
+            raise IOError("simulated rate limit")
+        return super().scanner(columns=columns, filter=filter, limit=limit)
+
+
 class FakeSeekableBlobDataset(FakeDataset):
     def __init__(self, rows: list[dict[str, object]], names: list[str], blob_column: str) -> None:
         super().__init__(rows, names)
@@ -1229,6 +1260,107 @@ class LanceDatasetStoreTest(unittest.TestCase):
         self.assertEqual(history_writes[0]["mode"], "overwrite")
         self.assertEqual(history_table.rows[0]["action"], "update")
         self.assertEqual(history_table.rows[0]["actor"], "local")
+
+    def test_camera_info_extracted_from_lerobot_info_features(self) -> None:
+        from apps.api.services.lance_store import _camera_info_from_features
+
+        features = {
+            "observation.images.cam_high": {
+                "dtype": "video",
+                "shape": [480, 640, 3],
+                "info": {
+                    "video.fps": 20,
+                    "video.codec": "h264",
+                    "video.pix_fmt": "yuv420p",
+                    "video.has_audio": False,
+                },
+            },
+            "observation.images.cam_left_wrist": {
+                "dtype": "video",
+                "shape": [240, 320, 3],
+                "video_info": {"video.fps": 20.0, "video.codec": "av1"},
+            },
+            "observation.state": {"dtype": "float32", "shape": [14]},
+        }
+
+        result = _camera_info_from_features(features)
+
+        self.assertIsNotNone(result)
+        self.assertIn("observation_images_cam_high", result)
+        cam_high = result["observation_images_cam_high"]
+        self.assertEqual(cam_high["height"], 480)
+        self.assertEqual(cam_high["width"], 640)
+        self.assertEqual(cam_high["channels"], 3)
+        self.assertEqual(cam_high["codec"], "h264")
+        self.assertEqual(cam_high["pix_fmt"], "yuv420p")
+        self.assertEqual(cam_high["fps"], 20)
+        self.assertEqual(cam_high["has_audio"], False)
+        cam_left = result["observation_images_cam_left_wrist"]
+        self.assertEqual(cam_left["codec"], "av1")
+        self.assertEqual(cam_left["fps"], 20.0)
+        self.assertNotIn("observation_state", result)
+
+    def test_camera_info_returns_none_when_no_video_features(self) -> None:
+        from apps.api.services.lance_store import _camera_info_from_features
+
+        self.assertIsNone(_camera_info_from_features(None))
+        self.assertIsNone(_camera_info_from_features({"observation.state": {"dtype": "float32"}}))
+
+    def test_read_episode_row_by_index_handles_gappy_indices(self) -> None:
+        from apps.api.services.lance_store import _read_episode_row_by_index
+
+        rows = [
+            {"episode_index": 0, "task_index": 1, "fps": 20.0},
+            {"episode_index": 2, "task_index": 1, "fps": 20.0},
+            {"episode_index": 5, "task_index": 1, "fps": 20.0},
+        ]
+        dataset = NoScannerDataset(rows, ["episode_index", "task_index", "fps"])
+
+        row_5 = _read_episode_row_by_index(dataset, 5, columns=["episode_index", "fps"])
+        row_0 = _read_episode_row_by_index(dataset, 0, columns=["episode_index", "fps"])
+        row_missing = _read_episode_row_by_index(dataset, 4, columns=["episode_index", "fps"])
+
+        self.assertIsNotNone(row_5)
+        self.assertEqual(row_5["episode_index"], 5)
+        self.assertIsNotNone(row_0)
+        self.assertEqual(row_0["episode_index"], 0)
+        self.assertIsNone(row_missing)
+
+    def test_state_action_summary_returns_partial_when_array_fetch_fails(self) -> None:
+        episode_rows = [
+            {
+                "episode_index": 0,
+                "task_index": 1,
+                "fps": 20.0,
+                "timestamps": [0.0, 0.05, 0.1, 0.15, 0.2],
+                "actions": [[0.0, 1.0]] * 5,
+                "observation_state": [[1.0, 0.0]] * 5,
+            },
+        ]
+        frame_rows = [
+            {"episode_index": 0, "frame_index": 0, "observation_state": [0.1, 0.2], "action": [0.3, 0.4]},
+        ]
+        fake_tables = {
+            "/datasets/x/episodes.lance": ArrayFetchFailingDataset(
+                episode_rows, list(episode_rows[0].keys())
+            ),
+            "/datasets/x/frames.lance": FakeDataset(
+                frame_rows, list(frame_rows[0].keys())
+            ),
+            "/datasets/x/videos.lance": FakeDataset([], ["camera_angle", "video_blob"]),
+        }
+        sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+
+        store = LanceDatasetStore()
+        record = store.open_dataset(DatasetOpenRequest(uri="/datasets/x", name="x"))
+        summary = store.get_state_action_summary(record.dataset_id, 0)
+
+        self.assertIsNotNone(summary)
+        self.assertEqual(summary.frame_count, 5)
+        self.assertEqual(summary.state_dim, 2)
+        self.assertEqual(summary.action_dim, 2)
+        self.assertIsNone(summary.state_norm_min)
+        self.assertIsNone(summary.action_norm_min)
 
     def test_episode_label_history_records_actor_and_diff(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

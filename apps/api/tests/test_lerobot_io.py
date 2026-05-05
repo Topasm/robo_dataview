@@ -816,10 +816,6 @@ class LeRobotIoTest(unittest.TestCase):
                 "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
                 encoding="utf-8",
             )
-            (root / "data/chunk-000/file-000.parquet").write_text(
-                "placeholder",
-                encoding="utf-8",
-            )
 
             validation = validate_lerobot_v3_snapshot(root)
 

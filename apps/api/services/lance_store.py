@@ -98,6 +98,108 @@ def _table_uri(base_uri: str, table_name: str) -> str:
     return _join_uri(base_uri, f"{table_name}.lance")
 
 
+def _normalize_camera_name(value: str) -> str:
+    return re.sub(r"[^0-9A-Za-z_]", "_", value)
+
+
+def _fetch_text_uri(uri: str) -> str | None:
+    if uri.startswith("hf://"):
+        try:
+            from huggingface_hub import hf_hub_download
+        except ImportError:
+            return None
+        parts = uri.removeprefix("hf://").rstrip("/").split("/")
+        if len(parts) < 4 or parts[0] != "datasets":
+            return None
+        repo_id = f"{parts[1]}/{parts[2]}"
+        filename = "/".join(parts[3:])
+        try:
+            local_path = hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
+        except Exception:
+            return None
+        try:
+            return Path(local_path).read_text(encoding="utf-8")
+        except OSError:
+            return None
+    if uri.startswith(("http://", "https://")):
+        try:
+            with urlopen(uri, timeout=15) as response:
+                return response.read().decode("utf-8")
+        except Exception:
+            return None
+    candidate = _local_path_from_uri(uri)
+    if candidate is not None and candidate.is_file():
+        try:
+            return candidate.read_text(encoding="utf-8")
+        except OSError:
+            return None
+    return None
+
+
+def _load_lerobot_camera_info(uri: str) -> dict[str, dict[str, Any]] | None:
+    """Read a sibling LeRobot ``meta/info.json`` (when present) and extract
+    per-camera encoding metadata. Returns ``None`` if no info.json is found
+    or no video features can be parsed. Best-effort: any unexpected error
+    while probing degrades to ``None`` rather than raising."""
+
+    base = uri.rstrip("/")
+    candidates: list[str] = [_join_uri(base, "meta/info.json")]
+    if "/" in base:
+        parent = base.rsplit("/", 1)[0]
+        if parent and parent != base:
+            candidates.append(_join_uri(parent, "meta/info.json"))
+    for candidate in candidates:
+        try:
+            text = _fetch_text_uri(candidate)
+        except Exception:
+            continue
+        if text is None:
+            continue
+        try:
+            info = json.loads(text)
+        except (ValueError, json.JSONDecodeError):
+            continue
+        return _camera_info_from_features(info.get("features"))
+    return None
+
+
+def _camera_info_from_features(
+    features: dict[str, Any] | None,
+) -> dict[str, dict[str, Any]] | None:
+    if not isinstance(features, dict):
+        return None
+    cameras: dict[str, dict[str, Any]] = {}
+    for key, feature in features.items():
+        if not isinstance(feature, dict) or feature.get("dtype") != "video":
+            continue
+        details: dict[str, Any] = {}
+        shape = feature.get("shape")
+        if isinstance(shape, (list, tuple)) and len(shape) >= 2:
+            details["height"] = int(shape[0]) if shape[0] is not None else None
+            details["width"] = int(shape[1]) if shape[1] is not None else None
+            if len(shape) >= 3 and shape[2] is not None:
+                details["channels"] = int(shape[2])
+        # Both our writer (`video_info`) and standard LeRobot (`info`) store
+        # the codec details under a sub-dict keyed by `video.*` names.
+        sub = feature.get("info") or feature.get("video_info") or {}
+        if isinstance(sub, dict):
+            for source_key, target_key in (
+                ("video.fps", "fps"),
+                ("video.codec", "codec"),
+                ("video.pix_fmt", "pix_fmt"),
+                ("video.height", "height"),
+                ("video.width", "width"),
+                ("video.channels", "channels"),
+                ("video.is_depth_map", "is_depth_map"),
+                ("video.has_audio", "has_audio"),
+            ):
+                if source_key in sub and sub[source_key] is not None:
+                    details[target_key] = sub[source_key]
+        if details:
+            cameras[_normalize_camera_name(key)] = details
+    return cameras or None
+
+
 def _schema_names(dataset: Any) -> list[str]:
     schema = getattr(dataset, "schema", None)
     if schema is None:
@@ -208,6 +310,28 @@ def _read_episode_row_by_index(
         rows = _read_rows(dataset, columns=columns, limit=1, offset=episode_index)
     except Exception:
         rows = []
+    if rows and int(rows[0].get("episode_index", episode_index)) == episode_index:
+        return rows[0]
+    # Fallback for gappy / non-contiguous episode_index: locate the actual
+    # row offset by scanning only the episode_index column, then re-fetch
+    # with the requested column projection.
+    try:
+        index_rows = _read_rows(
+            dataset, columns=["episode_index"], limit=_count_rows(dataset)
+        )
+    except Exception:
+        return None
+    target_offset: int | None = None
+    for offset, row in enumerate(index_rows):
+        if int(row.get("episode_index", -1)) == episode_index:
+            target_offset = offset
+            break
+    if target_offset is None:
+        return None
+    try:
+        rows = _read_rows(dataset, columns=columns, limit=1, offset=target_offset)
+    except Exception:
+        return None
     if rows and int(rows[0].get("episode_index", episode_index)) == episode_index:
         return rows[0]
     return None
@@ -816,6 +940,7 @@ class LanceBundle:
     base_uri: str
     tables: dict[str, Any]
     schemas: dict[str, list[str]]
+    camera_info: dict[str, dict[str, Any]] | None = None
 
 
 @dataclass
@@ -1497,6 +1622,7 @@ class LanceDatasetStore:
             base_uri=uri,
             tables=tables,
             schemas={name: _schema_names(dataset) for name, dataset in tables.items()},
+            camera_info=_load_lerobot_camera_info(uri),
         )
 
     def _build_summary(self, record: DatasetRecord, bundle: LanceBundle) -> DatasetSummary:
@@ -1518,6 +1644,7 @@ class LanceDatasetStore:
             frame_count=frame_count,
             fps=sample.fps if sample is not None else None,
             camera_names=camera_names,
+            camera_info=bundle.camera_info,
             reviewed_count=0,
             accepted_count=0,
             rejected_count=0,
@@ -1570,26 +1697,80 @@ class LanceDatasetStore:
         schema = bundle.schemas["episodes"]
         state_name = _first_present_name(schema, STATE_COLUMNS)
         action_name = _first_present_name(schema, ACTION_COLUMNS)
-        timestamp_name = _first_present_name(schema, TIMESTAMP_COLUMNS)
-        columns = [column for column in (state_name, action_name, timestamp_name, "episode_index") if column]
-        row = _read_episode_row_by_index(bundle.tables["episodes"], episode_index, columns=columns)
-        if row is None:
+
+        metadata_row = _read_episode_row_by_index(
+            bundle.tables["episodes"],
+            episode_index,
+            columns=_metadata_columns(schema, include_arrays=False),
+        )
+        if metadata_row is None:
             return None
-        states = row.get(state_name) if state_name else None
-        actions = row.get(action_name) if action_name else None
-        state_min, state_max = _norm_bounds(states)
-        action_min, action_max = _norm_bounds(actions)
+
+        frame_count = _episode_length(metadata_row) or 0
+        state_dim: int | None = None
+        action_dim: int | None = None
+        state_min: float | None = None
+        state_max: float | None = None
+        action_min: float | None = None
+        action_max: float | None = None
+
+        array_columns = [
+            column for column in (state_name, action_name, "episode_index") if column
+        ]
+        if state_name or action_name:
+            array_row = _read_episode_row_by_index(
+                bundle.tables["episodes"], episode_index, columns=array_columns
+            )
+            if array_row is not None:
+                states = array_row.get(state_name) if state_name else None
+                actions = array_row.get(action_name) if action_name else None
+                state_min, state_max = _norm_bounds(states)
+                action_min, action_max = _norm_bounds(actions)
+                state_dim = _vector_dim(states)
+                action_dim = _vector_dim(actions)
+
+        if state_dim is None and action_dim is None:
+            sampled_state_dim, sampled_action_dim = self._sample_state_action_dims_from_frames(bundle)
+            state_dim = state_dim or sampled_state_dim
+            action_dim = action_dim or sampled_action_dim
+
         return StateActionSummary(
             dataset_id=dataset_id,
             episode_index=episode_index,
-            frame_count=_episode_length(row) or 0,
-            state_dim=_vector_dim(states),
-            action_dim=_vector_dim(actions),
+            frame_count=frame_count,
+            state_dim=state_dim,
+            action_dim=action_dim,
             state_norm_min=state_min,
             state_norm_max=state_max,
             action_norm_min=action_min,
             action_norm_max=action_max,
         )
+
+    def _sample_state_action_dims_from_frames(
+        self, bundle: LanceBundle
+    ) -> tuple[int | None, int | None]:
+        frames = bundle.tables.get("frames")
+        if frames is None or _count_rows(frames) == 0:
+            return None, None
+        frames_schema = bundle.schemas.get("frames", [])
+        state_name = _first_present_name(frames_schema, STATE_COLUMNS)
+        action_name = _first_present_name(frames_schema, ACTION_COLUMNS)
+        columns = [column for column in (state_name, action_name) if column]
+        if not columns:
+            return None, None
+        try:
+            rows = _read_rows(frames, columns=columns, limit=1, offset=0)
+        except Exception:
+            return None, None
+        if not rows:
+            return None, None
+        row = rows[0]
+        # In frames.lance each row's state/action column is the per-frame
+        # vector directly (1D), not the episode-level (T, D) array, so use
+        # _safe_len rather than _vector_dim.
+        state_dim = _safe_len(row.get(state_name)) if state_name else None
+        action_dim = _safe_len(row.get(action_name)) if action_name else None
+        return state_dim, action_dim
 
     def _get_lance_episode_timeseries(
         self,

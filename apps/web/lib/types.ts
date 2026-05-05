@@ -10,6 +10,7 @@ export type DatasetSummary = {
   frameCount: number;
   fps: number;
   cameraNames: string[];
+  cameraInfo: Record<string, Record<string, unknown>> | null;
   reviewedCount: number;
   acceptedCount: number;
   rejectedCount: number;

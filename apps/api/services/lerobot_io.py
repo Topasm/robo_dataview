@@ -1271,21 +1271,14 @@ def _write_optional_parquet(path: Path, rows: list[dict[str, Any]]) -> bool:
 
 
 def _write_optional_tasks_parquet(path: Path, rows: list[dict[str, Any]]) -> bool:
+    """Write ``meta/tasks.parquet`` with plain ``task_index`` (int) and
+    ``task`` (string) columns — the shape the official LeRobot loader's
+    ``pd.read_parquet`` expects. Returns False (no fallback) when pyarrow
+    is unavailable so the caller can issue a clear warning."""
+
     if not rows:
         return False
-    try:
-        import pandas as pd
-    except ImportError:
-        return _write_optional_parquet(path, rows)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    dataframe = pd.DataFrame(rows)
-    if "task" in dataframe:
-        dataframe = dataframe.set_index("task")
-    try:
-        dataframe.to_parquet(path)
-    except (ImportError, ModuleNotFoundError, ValueError):
-        return False
-    return True
+    return _write_optional_parquet(path, rows)
 
 
 def _write_optional_data_parquet(

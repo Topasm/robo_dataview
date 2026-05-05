@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -23,6 +25,14 @@ class DatasetSummary(BaseModel):
     frame_count: int
     fps: float | None = None
     camera_names: list[str]
+    camera_info: dict[str, dict[str, Any]] | None = Field(
+        default=None,
+        description=(
+            "Per-camera encoding metadata sourced from a sibling LeRobot "
+            "meta/info.json when present (codec, fps, resolution, channels). "
+            "Null when the dataset does not ship info.json."
+        ),
+    )
     reviewed_count: int = 0
     accepted_count: int = 0
     rejected_count: int = 0
