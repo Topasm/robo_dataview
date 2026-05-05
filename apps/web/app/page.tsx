@@ -29,6 +29,7 @@ export default function Home() {
     rerunJob,
     rerunSession,
     rerunViewerUrl,
+    reviewerUserId,
     searchResults,
     selectedEpisode,
     selectedEpisodeIndex,
@@ -37,6 +38,7 @@ export default function Home() {
     selectedFrameStatus,
     selectedSummary,
     vlmJob,
+    handleAssignAnnotation,
     handleCreateExport,
     handleCreateFilterPreset,
     handleCreateRerunSession,
@@ -149,6 +151,7 @@ export default function Home() {
               frameBrowserStart={frameBrowserStart}
               framePage={framePage}
               onCreateSegment={handleCreateSegment}
+              onAssignAnnotation={handleAssignAnnotation}
               onDeleteSegment={handleDeleteSegment}
               onRunVlmLabel={handleRunVlmLabel}
               onSelectFrame={handleSelectFrame}
@@ -164,6 +167,7 @@ export default function Home() {
               selectedFrame={selectedFrameIndex}
               selectedFrameRecord={selectedFrameRecord}
               selectedFrameStatus={selectedFrameStatus}
+              reviewerUserId={reviewerUserId}
               vlmJob={vlmJob}
             />
           </div>

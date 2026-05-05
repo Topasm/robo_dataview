@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
+  assignAnnotation,
   createExportJob,
   createFilterPreset,
   createRerunSessionJob,
@@ -18,6 +19,7 @@ import {
   fetchFilterPresets,
   fetchFrameRecord,
   fetchFrameWindowPage,
+  fetchCurrentUser,
   fetchRerunSession,
   filterSearch,
   fullTextSearch,
@@ -118,6 +120,7 @@ export function useStudioData() {
   const [annotationRows, setAnnotationRows] = useState<SegmentAnnotation[]>(annotations);
   const [annotationHistoryRows, setAnnotationHistoryRows] =
     useState<AnnotationHistoryRecord[]>(annotationHistory);
+  const [reviewerUserId, setReviewerUserId] = useState("local");
   const [rerunSession, setRerunSession] = useState<RerunSession | null>(null);
   const [rerunJob, setRerunJob] = useState<JobRecord | null>(null);
   const [vlmJob, setVlmJob] = useState<JobRecord | null>(null);
@@ -171,6 +174,26 @@ export function useStudioData() {
         )
       );
     }
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetchCurrentUser()
+      .then((identity) => {
+        if (isMounted) {
+          setReviewerUserId(identity.userId);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setReviewerUserId("local");
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -869,6 +892,25 @@ export function useStudioData() {
     }
   }
 
+  async function handleAssignAnnotation(annotationId: string, assignedTo: string | null) {
+    const previousAnnotations = annotationRows;
+    setAnnotationRows((current) =>
+      current.map((annotation) =>
+        annotation.id === annotationId ? { ...annotation, assignedTo } : annotation
+      )
+    );
+    try {
+      const updated = await assignAnnotation(annotationId, assignedTo);
+      setAnnotationRows((current) =>
+        current.map((annotation) => (annotation.id === annotationId ? updated : annotation))
+      );
+      await refreshAnnotationHistory(updated.datasetId, updated.episodeIndex);
+    } catch (error) {
+      setAnnotationRows(previousAnnotations);
+      throw error;
+    }
+  }
+
   async function handleDeleteSegment(annotationId: string) {
     const previousAnnotations = annotationRows;
     setAnnotationRows((current) => current.filter((annotation) => annotation.id !== annotationId));
@@ -1019,6 +1061,7 @@ export function useStudioData() {
     rerunJob,
     rerunSession,
     rerunViewerUrl,
+    reviewerUserId,
     searchResults,
     selectedEpisode,
     selectedEpisodeIndex,
@@ -1028,6 +1071,7 @@ export function useStudioData() {
     selectedSummary,
     vlmJob,
     handleCreateExport,
+    handleAssignAnnotation,
     handleCreateFilterPreset,
     handleCreateRerunSession,
     handleCreateSegment,

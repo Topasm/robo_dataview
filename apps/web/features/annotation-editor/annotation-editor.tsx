@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bot, Check, GitBranch, Minus, Plus, Save, Trash2, X } from "lucide-react";
+import { Bot, Check, GitBranch, Minus, Plus, Save, Trash2, UserCheck, UserX, X } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
 import { FrameMetadataPanel } from "@/features/episode-viewer/frame-metadata-panel";
@@ -42,7 +42,9 @@ type AnnotationEditorProps = {
   selectedFrame: number;
   selectedFrameRecord: FrameRecord | null;
   selectedFrameStatus: "idle" | "loading" | "ready" | "error";
+  reviewerUserId: string;
   vlmJob: JobRecord | null;
+  onAssignAnnotation: (annotationId: string, assignedTo: string | null) => Promise<void>;
   onCreateSegment: (draft: AnnotationDraft) => Promise<void>;
   onDeleteSegment: (annotationId: string) => Promise<void>;
   onRunVlmLabel: () => Promise<void>;
@@ -74,7 +76,9 @@ export function AnnotationEditor({
   selectedFrame,
   selectedFrameRecord,
   selectedFrameStatus,
+  reviewerUserId,
   vlmJob,
+  onAssignAnnotation,
   onCreateSegment,
   onDeleteSegment,
   onRunVlmLabel,
@@ -494,11 +498,30 @@ export function AnnotationEditor({
                   value={(editingRows[annotation.id] ?? toDraft(annotation)).endFrame}
                 />
                 <div className="muted mono">
-                  {annotation.source} / {annotation.confidence.toFixed(2)}
+                  {annotation.source} / {annotation.confidence.toFixed(2)} / assigned{" "}
+                  {annotation.assignedTo ?? "none"}
                 </div>
               </div>
               <StatusPill status={annotation.reviewStatus} />
               <div className="segment-actions">
+                <button
+                  className="icon-button compact"
+                  disabled={annotation.assignedTo === reviewerUserId}
+                  onClick={() => onAssignAnnotation(annotation.id, reviewerUserId)}
+                  title={`Assign to ${reviewerUserId}`}
+                  type="button"
+                >
+                  <UserCheck size={14} />
+                </button>
+                <button
+                  className="icon-button compact"
+                  disabled={annotation.assignedTo === null}
+                  onClick={() => onAssignAnnotation(annotation.id, null)}
+                  title="Clear assignment"
+                  type="button"
+                >
+                  <UserX size={14} />
+                </button>
                 <button
                   className="icon-button compact"
                   disabled={isSaving}
