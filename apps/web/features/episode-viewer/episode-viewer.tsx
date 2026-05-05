@@ -56,6 +56,11 @@ export function EpisodeViewer({ episode, onFrameChange, selectedFrame }: Episode
 
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   const animationRef = useRef<number | null>(null);
+  const currentFrameRef = useRef(0);
+
+  useEffect(() => {
+    currentFrameRef.current = currentFrame;
+  }, [currentFrame]);
 
   useEffect(() => {
     setActiveCamera((current) =>
@@ -64,6 +69,7 @@ export function EpisodeViewer({ episode, onFrameChange, selectedFrame }: Episode
   }, [cameraNames]);
 
   useEffect(() => {
+    currentFrameRef.current = 0;
     setCurrentFrame(0);
     onFrameChange(0);
     setIsPlaying(false);
@@ -108,6 +114,7 @@ export function EpisodeViewer({ episode, onFrameChange, selectedFrame }: Episode
   const setFrame = useCallback(
     (next: number) => {
       const clamped = Math.max(0, Math.min(lastFrame, Math.round(next)));
+      currentFrameRef.current = clamped;
       setCurrentFrame(clamped);
       onFrameChange(clamped);
       seekVideosToFrame(clamped);
@@ -117,6 +124,7 @@ export function EpisodeViewer({ episode, onFrameChange, selectedFrame }: Episode
 
   useEffect(() => {
     const clamped = Math.max(0, Math.min(lastFrame, Math.round(selectedFrame)));
+    currentFrameRef.current = clamped;
     setCurrentFrame((current) => (current === clamped ? current : clamped));
     seekVideosToFrame(clamped);
   }, [lastFrame, seekVideosToFrame, selectedFrame]);
@@ -175,13 +183,11 @@ export function EpisodeViewer({ episode, onFrameChange, selectedFrame }: Episode
           }
         });
         const frame = Math.min(lastFrame, Math.round(leader.currentTime * fps));
-        setCurrentFrame((current) => {
-          if (current === frame) {
-            return current;
-          }
+        if (currentFrameRef.current !== frame) {
+          currentFrameRef.current = frame;
+          setCurrentFrame(frame);
           onFrameChange(frame);
-          return frame;
-        });
+        }
         if (frame >= lastFrame) {
           setIsPlaying(false);
           return;
