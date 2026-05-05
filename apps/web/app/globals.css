@@ -648,6 +648,8 @@ button:disabled {
 }
 
 .video-hidden {
+  opacity: 0;
+  pointer-events: none;
   visibility: hidden;
 }
 
@@ -702,8 +704,9 @@ button:disabled {
 .video-element {
   background: #182428;
   height: 100%;
+  inset: 0;
   object-fit: contain;
-  position: relative;
+  position: absolute;
   width: 100%;
   z-index: 1;
 }
