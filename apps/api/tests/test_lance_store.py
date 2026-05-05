@@ -353,13 +353,77 @@ class LanceDatasetStoreTest(unittest.TestCase):
             episodes = store.list_episodes(record.dataset_id, limit=10, offset=0)
 
             self.assertEqual(record.status, "indexed")
-            self.assertEqual(record.message, "LeRobot v3 metadata snapshot indexed.")
+            self.assertEqual(record.message, "LeRobot metadata snapshot indexed.")
             self.assertIsNotNone(summary)
             self.assertEqual(summary.episode_count, 1)
             self.assertEqual(summary.frame_count, 30)
             self.assertEqual(summary.camera_names, ["cam_high"])
             self.assertEqual(episodes[0].episode_index, 7)
             self.assertEqual(episodes[0].task_index, 4)
+
+    def test_open_dataset_indexes_lerobot_v2_1_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "ffw"
+            (root / "meta").mkdir(parents=True)
+            (root / "data" / "chunk-000").mkdir(parents=True)
+            (root / "videos" / "chunk-000" / "observation.images.cam_head").mkdir(parents=True)
+            info = {
+                "codebase_version": "v2.1",
+                "robot_type": "ffw_bg2_rev4",
+                "total_episodes": 2,
+                "total_frames": 50,
+                "total_tasks": 1,
+                "fps": 30,
+                "data_path": "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet",
+                "video_path": "videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4",
+                "features": {
+                    "observation.images.cam_head": {
+                        "dtype": "video",
+                        "shape": [376, 672, 3],
+                        "info": {
+                            "video.fps": 30,
+                            "video.codec": "libx264",
+                            "video.pix_fmt": "yuv420p",
+                        },
+                    },
+                    "observation.state": {"dtype": "float32", "shape": [19]},
+                    "action": {"dtype": "float32", "shape": [19]},
+                },
+            }
+            (root / "meta" / "info.json").write_text(json.dumps(info), encoding="utf-8")
+            (root / "meta" / "tasks.jsonl").write_text(
+                json.dumps({"task_index": 0, "task": "put a block in the orange bin"}) + "\n",
+                encoding="utf-8",
+            )
+            (root / "meta" / "episodes.jsonl").write_text(
+                json.dumps({"episode_index": 0, "tasks": ["put a block in the orange bin"], "length": 30}) + "\n"
+                + json.dumps({"episode_index": 1, "tasks": ["put a block in the orange bin"], "length": 20}) + "\n",
+                encoding="utf-8",
+            )
+
+            store = LanceDatasetStore()
+            record = store.open_dataset(DatasetOpenRequest(uri=str(root), name="ffw"))
+            summary = store.get_summary(record.dataset_id)
+            episodes = store.list_episodes(record.dataset_id, limit=10, offset=0)
+            episode_detail = store.get_episode(record.dataset_id, 0)
+            sa = store.get_state_action_summary(record.dataset_id, 0)
+
+        self.assertEqual(record.status, "indexed")
+        self.assertEqual(summary.episode_count, 2)
+        self.assertEqual(summary.frame_count, 50)
+        self.assertEqual(summary.fps, 30.0)
+        self.assertEqual(summary.camera_names, ["observation_images_cam_head"])
+        self.assertIsNotNone(summary.camera_info)
+        cam = summary.camera_info["observation_images_cam_head"]
+        self.assertEqual(cam["height"], 376)
+        self.assertEqual(cam["width"], 672)
+        self.assertEqual(cam["codec"], "libx264")
+        self.assertEqual(episodes[0].caption, "put a block in the orange bin")
+        self.assertEqual(episodes[0].task_index, 0)
+        self.assertEqual(episodes[0].length, 30)
+        self.assertEqual(episode_detail.duration_seconds, 1.0)
+        self.assertEqual(sa.state_dim, 19)
+        self.assertEqual(sa.action_dim, 19)
 
     def test_episode_page_returns_pagination_metadata(self) -> None:
         store = LanceDatasetStore()

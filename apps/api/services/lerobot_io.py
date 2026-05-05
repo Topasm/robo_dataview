@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import re
 import traceback
 from typing import Any
 
@@ -213,29 +214,81 @@ def read_lerobot_snapshot_episodes(root: Path, dataset_id: str | None = None) ->
         raise FileNotFoundError("LeRobot snapshot must contain meta/info.json")
     info = json.loads(info_path.read_text(encoding="utf-8"))
     resolved_dataset_id = dataset_id or str(info.get("dataset_id") or root.name)
+    info_fps = info.get("fps")
+    info_camera_names = _camera_names_from_info_features(info.get("features"))
+    task_lookup = _read_task_lookup(root)
     rows = _read_episode_rows(root)
-    return [
-        EpisodeDetail(
-            dataset_id=resolved_dataset_id,
-            episode_index=int(row.get("source_episode_index", row["episode_index"])),
-            task_index=row.get("source_task_index", row.get("task_index")),
-            length=row.get("length"),
-            success_label=row.get("success_label"),
-            quality_score=row.get("quality_score"),
-            review_status=row.get("review_status") or "pending",
-            caption=row.get("caption"),
-            split=row.get("split"),
-            fps=row.get("fps"),
-            camera_names=row.get("camera_names") or [],
-            duration_seconds=(
-                row["length"] / row["fps"]
-                if row.get("length") is not None and row.get("fps")
-                else None
-            ),
-            language_instruction=row.get("language_instruction"),
+    episodes: list[EpisodeDetail] = []
+    for row in rows:
+        row_fps = row.get("fps") or info_fps
+        row_length = row.get("length")
+        row_caption = row.get("caption") or _caption_from_tasks(row)
+        row_task_index = row.get("source_task_index", row.get("task_index"))
+        if row_task_index is None:
+            row_task_index = _infer_task_index(row, task_lookup)
+        episodes.append(
+            EpisodeDetail(
+                dataset_id=resolved_dataset_id,
+                episode_index=int(row.get("source_episode_index", row["episode_index"])),
+                task_index=row_task_index,
+                length=row_length,
+                success_label=row.get("success_label"),
+                quality_score=row.get("quality_score"),
+                review_status=row.get("review_status") or "pending",
+                caption=row_caption,
+                split=row.get("split"),
+                fps=row_fps,
+                camera_names=row.get("camera_names") or info_camera_names,
+                duration_seconds=(
+                    row_length / row_fps
+                    if row_length is not None and row_fps
+                    else None
+                ),
+                language_instruction=row.get("language_instruction"),
+            )
         )
-        for row in rows
+    return episodes
+
+
+def _read_task_lookup(root: Path) -> dict[str, int]:
+    tasks_path = root / "meta" / "tasks.jsonl"
+    if not tasks_path.exists():
+        return {}
+    lookup: dict[str, int] = {}
+    for row in _read_jsonl(tasks_path):
+        if "task_index" in row and "task" in row:
+            lookup[str(row["task"])] = int(row["task_index"])
+    return lookup
+
+
+def _camera_names_from_info_features(features: Any) -> list[str]:
+    if not isinstance(features, dict):
+        return []
+    cameras = [
+        re.sub(r"[^0-9A-Za-z_]", "_", key)
+        for key, feature in features.items()
+        if isinstance(feature, dict) and feature.get("dtype") == "video"
     ]
+    return sorted(set(cameras))
+
+
+def _caption_from_tasks(row: dict[str, Any]) -> str | None:
+    tasks = row.get("tasks")
+    if isinstance(tasks, (list, tuple)) and tasks:
+        first = tasks[0]
+        if isinstance(first, str) and first:
+            return first
+    return None
+
+
+def _infer_task_index(row: dict[str, Any], task_lookup: dict[str, int]) -> int | None:
+    tasks = row.get("tasks")
+    if not isinstance(tasks, (list, tuple)) or not tasks:
+        return None
+    first = tasks[0]
+    if not isinstance(first, str):
+        return None
+    return task_lookup.get(first)
 
 
 def validate_lerobot_v3_snapshot(root: Path) -> dict[str, Any]:
@@ -1242,6 +1295,9 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def _read_episode_rows(root: Path) -> list[dict[str, Any]]:
+    """Load episode metadata from v3 sharded Parquet/JSONL or the v2.1
+    ``meta/episodes.jsonl`` compatibility layout."""
+
     parquet_path = root / EPISODES_PARQUET_PATH
     if parquet_path.exists():
         rows = _read_optional_parquet(parquet_path)
@@ -1250,9 +1306,12 @@ def _read_episode_rows(root: Path) -> list[dict[str, Any]]:
     jsonl_path = root / EPISODES_JSONL_PATH
     if jsonl_path.exists():
         return _read_jsonl(jsonl_path)
+    legacy_jsonl = root / "meta" / "episodes.jsonl"
+    if legacy_jsonl.exists():
+        return _read_jsonl(legacy_jsonl)
     raise FileNotFoundError(
-        "LeRobot snapshot must contain meta/episodes/chunk-000/file-000.parquet "
-        "or meta/episodes/chunk-000/file-000.jsonl"
+        "LeRobot snapshot must contain meta/episodes/chunk-000/file-000.parquet, "
+        "meta/episodes/chunk-000/file-000.jsonl, or meta/episodes.jsonl"
     )
 
 

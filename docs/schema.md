@@ -38,6 +38,12 @@ observation_images_cam_right_wrist
 
 The target examples below use shorter camera names for readability. Loader code
 should keep supporting generic camera columns instead of hard-coding names.
+LeRobot metadata-only imports support both v3 sharded
+`meta/episodes/chunk-000/file-000.{parquet,jsonl}` and v2.1
+`meta/episodes.jsonl` episode metadata. When episode arrays are absent, the API
+derives FPS, task captions, task indices, camera names/info, and state/action
+dimensions from `meta/info.json` plus `meta/tasks.jsonl`; norm ranges stay
+unknown until real frame rows or time-series arrays are loaded.
 
 The shared `packages/robot_schema` package currently defines local curation
 schemas for `annotations.lance`, `embeddings.lance`, and `versions.lance`. It

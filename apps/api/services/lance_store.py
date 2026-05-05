@@ -136,19 +136,20 @@ def _fetch_text_uri(uri: str) -> str | None:
     return None
 
 
-def _load_lerobot_camera_info(uri: str) -> dict[str, dict[str, Any]] | None:
-    """Read a sibling LeRobot ``meta/info.json`` (when present) and extract
-    per-camera encoding metadata. Returns ``None`` if no info.json is found
-    or no video features can be parsed. Best-effort: any unexpected error
-    while probing degrades to ``None`` rather than raising."""
-
+def _lerobot_info_candidate_uris(uri: str | None) -> list[str]:
+    if not uri:
+        return []
     base = uri.rstrip("/")
     candidates: list[str] = [_join_uri(base, "meta/info.json")]
     if "/" in base:
         parent = base.rsplit("/", 1)[0]
         if parent and parent != base:
             candidates.append(_join_uri(parent, "meta/info.json"))
-    for candidate in candidates:
+    return candidates
+
+
+def _iter_lerobot_info(uri: str | None) -> Iterator[dict[str, Any]]:
+    for candidate in _lerobot_info_candidate_uris(uri):
         try:
             text = _fetch_text_uri(candidate)
         except Exception:
@@ -159,8 +160,52 @@ def _load_lerobot_camera_info(uri: str) -> dict[str, dict[str, Any]] | None:
             info = json.loads(text)
         except (ValueError, json.JSONDecodeError):
             continue
-        return _camera_info_from_features(info.get("features"))
+        if isinstance(info, dict):
+            yield info
+
+
+def _load_lerobot_camera_info(uri: str) -> dict[str, dict[str, Any]] | None:
+    """Read a sibling LeRobot ``meta/info.json`` (when present) and extract
+    per-camera encoding metadata. Returns ``None`` if no info.json is found
+    or no video features can be parsed. Best-effort: any unexpected error
+    while probing degrades to ``None`` rather than raising."""
+
+    for info in _iter_lerobot_info(uri):
+        camera_info = _camera_info_from_features(info.get("features"))
+        if camera_info is not None:
+            return camera_info
     return None
+
+
+def _state_action_dims_from_info(uri: str | None) -> tuple[int | None, int | None]:
+    """Read ``meta/info.json`` and return ``(state_dim, action_dim)`` derived
+    from the ``observation.state`` and ``action`` feature shapes. Returns
+    ``(None, None)`` when info.json or the features can't be parsed."""
+
+    for info in _iter_lerobot_info(uri):
+        state_dim, action_dim = _state_action_dims_from_features(info.get("features"))
+        if state_dim is not None or action_dim is not None:
+            return state_dim, action_dim
+    return None, None
+
+
+def _state_action_dims_from_features(features: Any) -> tuple[int | None, int | None]:
+    if not isinstance(features, dict):
+        return None, None
+
+    def _dim(key: str) -> int | None:
+        feature = features.get(key)
+        if not isinstance(feature, dict):
+            return None
+        shape = feature.get("shape")
+        if isinstance(shape, (list, tuple)) and shape:
+            try:
+                return int(shape[0])
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    return _dim("observation.state"), _dim("action")
 
 
 def _camera_info_from_features(
@@ -1121,12 +1166,16 @@ class LanceDatasetStore:
                 name=name,
                 uri=payload.uri,
                 status="indexed",
-                message="LeRobot v3 metadata snapshot indexed.",
+                message="LeRobot metadata snapshot indexed.",
             )
             self._datasets[dataset_id] = record
             self._bundles.pop(dataset_id, None)
             self._episodes[dataset_id] = lerobot_episodes
-            self._summaries[dataset_id] = self._summary_from_episodes(record, lerobot_episodes)
+            self._summaries[dataset_id] = self._summary_from_episodes(
+                record,
+                lerobot_episodes,
+                camera_info=_load_lerobot_camera_info(payload.uri),
+            )
             if persist_registry:
                 self._persist_dataset_registry()
             return record
@@ -1350,16 +1399,20 @@ class LanceDatasetStore:
         episode = self.get_episode(dataset_id, episode_index)
         if episode is None:
             return None
+        record = self._datasets.get(dataset_id)
+        state_dim, action_dim = _state_action_dims_from_info(
+            record.uri if record is not None else None
+        )
         return StateActionSummary(
             dataset_id=dataset_id,
             episode_index=episode_index,
             frame_count=episode.length or 0,
-            state_dim=14,
-            action_dim=14,
-            state_norm_min=0.0,
-            state_norm_max=1.0,
-            action_norm_min=0.0,
-            action_norm_max=1.0,
+            state_dim=state_dim if state_dim is not None else 14,
+            action_dim=action_dim if action_dim is not None else 14,
+            state_norm_min=0.0 if state_dim is None else None,
+            state_norm_max=1.0 if state_dim is None else None,
+            action_norm_min=0.0 if action_dim is None else None,
+            action_norm_max=1.0 if action_dim is None else None,
         )
 
     def get_video_blob(
@@ -1572,6 +1625,8 @@ class LanceDatasetStore:
         self,
         record: DatasetRecord,
         episodes: list[EpisodeDetail],
+        *,
+        camera_info: dict[str, dict[str, Any]] | None = None,
     ) -> DatasetSummary:
         fps_values = {episode.fps for episode in episodes if episode.fps is not None}
         return DatasetSummary(
@@ -1583,6 +1638,7 @@ class LanceDatasetStore:
             frame_count=sum(episode.length or 0 for episode in episodes),
             fps=fps_values.pop() if len(fps_values) == 1 else None,
             camera_names=sorted({camera for episode in episodes for camera in episode.camera_names}),
+            camera_info=camera_info,
             reviewed_count=sum(1 for episode in episodes if episode.review_status != "pending"),
             accepted_count=sum(1 for episode in episodes if episode.review_status == "accepted"),
             rejected_count=sum(1 for episode in episodes if episode.review_status == "rejected"),
@@ -1596,6 +1652,11 @@ class LanceDatasetStore:
     ) -> list[EpisodeDetail] | None:
         path = _local_path_from_uri(uri)
         if path is None or not (path / "meta" / "info.json").exists():
+            return None
+        # Lance tables take precedence: a converted bundle copies the source
+        # info.json for camera_info discovery, which would otherwise misroute
+        # this dataset to the metadata-only LeRobot snapshot path.
+        if (path / "episodes.lance").exists():
             return None
         return read_lerobot_snapshot_episodes(path, dataset_id=dataset_id)
 
@@ -1964,9 +2025,14 @@ class LanceDatasetStore:
         }
 
     def _camera_names_for_bundle(self, bundle: LanceBundle) -> list[str]:
-        cameras = set(_camera_names_from_schema(bundle.schemas["episodes"]))
-        cameras.update(self._camera_names_from_videos_table(bundle))
-        return sorted(cameras)
+        # Prefer episode-table cameras (per-camera *_video_blob columns are
+        # the canonical source). Only consult videos.lance when episodes.lance
+        # exposes nothing — some converters mis-populate `camera_angle` with a
+        # path component (e.g. "chunk-000") so unioning would pollute the list.
+        episode_cameras = set(_camera_names_from_schema(bundle.schemas["episodes"]))
+        if episode_cameras:
+            return sorted(episode_cameras)
+        return sorted(self._camera_names_from_videos_table(bundle))
 
     def _camera_names_from_videos_table(self, bundle: LanceBundle) -> list[str]:
         videos = bundle.tables.get("videos")
