@@ -14,6 +14,7 @@ import { useStudioData } from "@/lib/use-studio-data";
 
 export default function Home() {
   const {
+    annotationHistoryRows,
     annotationRows,
     dataStatus,
     episodeRows,
@@ -139,6 +140,7 @@ export default function Home() {
               />
             </div>
             <AnnotationEditor
+              annotationHistory={annotationHistoryRows}
               annotations={annotationRows}
               episode={selectedEpisode}
               frameRows={frameRows}

@@ -1286,6 +1286,60 @@ button:disabled {
   gap: 5px;
 }
 
+.history-list {
+  display: grid;
+  gap: 8px;
+}
+
+.history-row {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 5px;
+  padding: 8px;
+}
+
+.history-row-top {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.history-action {
+  border-radius: 999px;
+  color: var(--surface);
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 800;
+  height: 20px;
+  letter-spacing: 0;
+  line-height: 20px;
+  padding: 0 7px;
+  text-transform: uppercase;
+}
+
+.history-action-create {
+  background: #34815a;
+}
+
+.history-action-update {
+  background: #3a68a8;
+}
+
+.history-action-delete {
+  background: #b45454;
+}
+
+.history-label {
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .segment-save-button {
   grid-column: 1 / -1;
   justify-content: center;

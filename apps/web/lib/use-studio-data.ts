@@ -10,6 +10,7 @@ import {
   createVlmLabelJob,
   deleteAnnotation,
   deleteFilterPreset,
+  fetchAnnotationHistory,
   fetchAnnotations,
   fetchDatasetSummaries,
   fetchEpisodes,
@@ -28,8 +29,9 @@ import {
   updateAnnotationReviewStatus,
   updateFrameRecord
 } from "@/lib/api";
-import { annotations, datasetSummary, episodes } from "@/lib/sample-data";
+import { annotationHistory, annotations, datasetSummary, episodes } from "@/lib/sample-data";
 import type {
+  AnnotationHistoryRecord,
   DatasetSummary,
   Episode,
   ExportRecord,
@@ -114,6 +116,8 @@ export function useStudioData() {
   const [selectedDatasetId, setSelectedDatasetId] = useState(datasetSummary.datasetId);
   const [selectedEpisodeIndex, setSelectedEpisodeIndex] = useState(episodes[0].episodeIndex);
   const [annotationRows, setAnnotationRows] = useState<SegmentAnnotation[]>(annotations);
+  const [annotationHistoryRows, setAnnotationHistoryRows] =
+    useState<AnnotationHistoryRecord[]>(annotationHistory);
   const [rerunSession, setRerunSession] = useState<RerunSession | null>(null);
   const [rerunJob, setRerunJob] = useState<JobRecord | null>(null);
   const [vlmJob, setVlmJob] = useState<JobRecord | null>(null);
@@ -155,6 +159,19 @@ export function useStudioData() {
   const vlmJobStatus = vlmJob?.status ?? null;
   const exportJobId = exportJob?.jobId ?? null;
   const exportJobStatus = exportJob?.status ?? null;
+
+  const refreshAnnotationHistory = useCallback(async (datasetId: string, episodeIndex: number) => {
+    try {
+      const history = await fetchAnnotationHistory(datasetId, episodeIndex);
+      setAnnotationHistoryRows(history);
+    } catch {
+      setAnnotationHistoryRows(
+        annotationHistory.filter(
+          (event) => event.datasetId === datasetId && event.episodeIndex === episodeIndex
+        )
+      );
+    }
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -198,7 +215,7 @@ export function useStudioData() {
   useEffect(() => {
     let isMounted = true;
 
-    async function loadAnnotations() {
+    async function loadAnnotationsAndHistory() {
       try {
         const apiAnnotations = await fetchAnnotations(
           selectedEpisode.datasetId,
@@ -218,9 +235,28 @@ export function useStudioData() {
           );
         }
       }
+      try {
+        const apiHistory = await fetchAnnotationHistory(
+          selectedEpisode.datasetId,
+          selectedEpisode.episodeIndex
+        );
+        if (isMounted) {
+          setAnnotationHistoryRows(apiHistory);
+        }
+      } catch {
+        if (isMounted) {
+          setAnnotationHistoryRows(
+            annotationHistory.filter(
+              (event) =>
+                event.datasetId === selectedEpisode.datasetId &&
+                event.episodeIndex === selectedEpisode.episodeIndex
+            )
+          );
+        }
+      }
     }
 
-    loadAnnotations();
+    loadAnnotationsAndHistory();
     return () => {
       isMounted = false;
     };
@@ -372,6 +408,10 @@ export function useStudioData() {
             .then((apiAnnotations) => {
               if (isActive) {
                 setAnnotationRows(apiAnnotations);
+                void refreshAnnotationHistory(
+                  selectedEpisode.datasetId,
+                  selectedEpisode.episodeIndex
+                );
               }
             })
             .catch(() => undefined);
@@ -397,7 +437,13 @@ export function useStudioData() {
       isActive = false;
       controller.abort();
     };
-  }, [selectedEpisode.datasetId, selectedEpisode.episodeIndex, vlmJobId, vlmJobStatus]);
+  }, [
+    refreshAnnotationHistory,
+    selectedEpisode.datasetId,
+    selectedEpisode.episodeIndex,
+    vlmJobId,
+    vlmJobStatus
+  ]);
 
   useEffect(() => {
     if (!rerunJobId || !rerunJobStatus || TERMINAL_JOB_STATUSES.has(rerunJobStatus)) {
@@ -505,6 +551,7 @@ export function useStudioData() {
     setExportRecord(null);
     setSearchResults([]);
     setFilterPresets([]);
+    setAnnotationHistoryRows([]);
   }
 
   async function handleOpenDataset(uri: string) {
@@ -533,6 +580,7 @@ export function useStudioData() {
     setRerunSession(null);
     setVlmJob(null);
     setExportRecord(null);
+    setAnnotationHistoryRows([]);
   }
 
   const handleSelectFrame = useCallback((frameIndex: number) => {
@@ -595,6 +643,7 @@ export function useStudioData() {
       setAnnotationRows((current) =>
         sortAnnotations(current.map((annotation) => (annotation.id === optimistic.id ? created : annotation)))
       );
+      await refreshAnnotationHistory(created.datasetId, created.episodeIndex);
     } catch (error) {
       setAnnotationRows(previousAnnotations);
       throw error;
@@ -682,6 +731,7 @@ export function useStudioData() {
       setAnnotationRows((current) =>
         sortAnnotations(current.map((annotation) => (annotation.id === annotationId ? updated : annotation)))
       );
+      await refreshAnnotationHistory(updated.datasetId, updated.episodeIndex);
     } catch (error) {
       setAnnotationRows(previousAnnotations);
       throw error;
@@ -748,6 +798,7 @@ export function useStudioData() {
           right
         ])
       );
+      await refreshAnnotationHistory(annotation.datasetId, annotation.episodeIndex);
     } catch (error) {
       setAnnotationRows(previousAnnotations);
       throw error;
@@ -792,6 +843,7 @@ export function useStudioData() {
           merged
         ])
       );
+      await refreshAnnotationHistory(left.datasetId, left.episodeIndex);
     } catch (error) {
       setAnnotationRows(previousAnnotations);
       throw error;
@@ -810,6 +862,7 @@ export function useStudioData() {
       setAnnotationRows((current) =>
         current.map((annotation) => (annotation.id === annotationId ? updated : annotation))
       );
+      await refreshAnnotationHistory(updated.datasetId, updated.episodeIndex);
     } catch (error) {
       setAnnotationRows(previousAnnotations);
       throw error;
@@ -821,6 +874,7 @@ export function useStudioData() {
     setAnnotationRows((current) => current.filter((annotation) => annotation.id !== annotationId));
     try {
       await deleteAnnotation(annotationId);
+      await refreshAnnotationHistory(selectedEpisode.datasetId, selectedEpisode.episodeIndex);
     } catch (error) {
       setAnnotationRows(previousAnnotations);
       throw error;
@@ -842,6 +896,7 @@ export function useStudioData() {
     if (TERMINAL_JOB_STATUSES.has(job.status)) {
       const apiAnnotations = await fetchAnnotations(selectedEpisode.datasetId, selectedEpisode.episodeIndex);
       setAnnotationRows(apiAnnotations);
+      await refreshAnnotationHistory(selectedEpisode.datasetId, selectedEpisode.episodeIndex);
     }
   }
 
@@ -945,9 +1000,11 @@ export function useStudioData() {
     setSelectedFrameStatus("ready");
     const apiAnnotations = await fetchAnnotations(selectedEpisode.datasetId, selectedEpisode.episodeIndex);
     setAnnotationRows(apiAnnotations);
+    await refreshAnnotationHistory(selectedEpisode.datasetId, selectedEpisode.episodeIndex);
   }
 
   return {
+    annotationHistoryRows,
     annotationRows,
     dataStatus,
     episodeRows,

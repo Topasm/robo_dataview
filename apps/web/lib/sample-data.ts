@@ -1,4 +1,4 @@
-import type { DatasetSummary, Episode, SegmentAnnotation } from "./types";
+import type { AnnotationHistoryRecord, DatasetSummary, Episode, SegmentAnnotation } from "./types";
 
 export const datasetSummary: DatasetSummary = {
   datasetId: "sample-xvla-soft-fold",
@@ -121,5 +121,48 @@ export const annotations: SegmentAnnotation[] = [
     reviewStatus: "pending",
     createdBy: "heuristic",
     assignedTo: "local"
+  }
+];
+
+export const annotationHistory: AnnotationHistoryRecord[] = [
+  {
+    eventId: "hist-approach-create",
+    datasetId: datasetSummary.datasetId,
+    annotationId: "seg-approach",
+    episodeIndex: 0,
+    action: "create",
+    actor: "local",
+    before: null,
+    after: {
+      start_frame: 0,
+      end_frame: 38,
+      label_type: "phase",
+      label_value: "approach",
+      review_status: "accepted"
+    },
+    createdAt: "2026-05-05T00:00:00.000Z"
+  },
+  {
+    eventId: "hist-grasp-update",
+    datasetId: datasetSummary.datasetId,
+    annotationId: "seg-grasp",
+    episodeIndex: 0,
+    action: "update",
+    actor: "local",
+    before: {
+      start_frame: 39,
+      end_frame: 88,
+      label_type: "phase",
+      label_value: "grasp",
+      review_status: "pending"
+    },
+    after: {
+      start_frame: 39,
+      end_frame: 88,
+      label_type: "phase",
+      label_value: "cloth_edge_grasp",
+      review_status: "pending"
+    },
+    createdAt: "2026-05-05T00:01:00.000Z"
   }
 ];

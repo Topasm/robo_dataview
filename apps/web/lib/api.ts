@@ -1,4 +1,5 @@
 import type {
+  AnnotationHistoryRecord,
   DatasetSummary,
   Episode,
   EpisodeListPage,
@@ -90,6 +91,18 @@ type AnnotationResponse = {
   review_status: ReviewStatus;
   created_by: string;
   assigned_to: string | null;
+};
+
+type AnnotationHistoryResponse = {
+  event_id: string;
+  dataset_id: string;
+  annotation_id: string;
+  episode_index: number;
+  action: string;
+  actor: string;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  created_at: string;
 };
 
 type UserIdentityResponse = {
@@ -506,6 +519,18 @@ export async function fetchAnnotations(
   });
   const rows = await request<AnnotationResponse[]>(`/annotations?${query}`);
   return rows.map(toSegmentAnnotation);
+}
+
+export async function fetchAnnotationHistory(
+  datasetId: string,
+  episodeIndex: number,
+): Promise<AnnotationHistoryRecord[]> {
+  const query = new URLSearchParams({
+    dataset_id: datasetId,
+    episode_index: String(episodeIndex)
+  });
+  const rows = await request<AnnotationHistoryResponse[]>(`/annotations/history?${query}`);
+  return rows.map(toAnnotationHistoryRecord);
 }
 
 export async function createSegmentAnnotation(
@@ -1028,6 +1053,20 @@ function toSegmentAnnotation(raw: AnnotationResponse): SegmentAnnotation {
     reviewStatus: raw.review_status,
     createdBy: raw.created_by,
     assignedTo: raw.assigned_to
+  };
+}
+
+function toAnnotationHistoryRecord(raw: AnnotationHistoryResponse): AnnotationHistoryRecord {
+  return {
+    eventId: raw.event_id,
+    datasetId: raw.dataset_id,
+    annotationId: raw.annotation_id,
+    episodeIndex: raw.episode_index,
+    action: raw.action,
+    actor: raw.actor,
+    before: raw.before,
+    after: raw.after,
+    createdAt: raw.created_at
   };
 }
 

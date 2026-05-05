@@ -10,6 +10,7 @@ import type {
   FrameRecord,
   JobRecord,
   ReviewStatus,
+  AnnotationHistoryRecord,
   SegmentAnnotation
 } from "@/lib/types";
 
@@ -31,6 +32,7 @@ type EpisodeLabelDraft = {
 
 type AnnotationEditorProps = {
   episode: Episode;
+  annotationHistory: AnnotationHistoryRecord[];
   annotations: SegmentAnnotation[];
   frameBrowserLimit: number;
   frameBrowserStart: number;
@@ -62,6 +64,7 @@ type AnnotationEditorProps = {
 
 export function AnnotationEditor({
   episode,
+  annotationHistory,
   annotations,
   frameBrowserLimit,
   frameBrowserStart,
@@ -106,6 +109,9 @@ export function AnnotationEditor({
     .sort((left, right) => left.startFrame - right.startFrame);
   const isVlmJobActive = vlmJob ? !["succeeded", "failed"].includes(vlmJob.status) : false;
   const vlmProgressPercent = Math.round(Math.max(0, Math.min(1, vlmJob?.progress ?? 0)) * 100);
+  const recentHistory = [...annotationHistory]
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+    .slice(0, 8);
 
   useEffect(() => {
     setEpisodeDraft(toEpisodeDraft(episode));
@@ -540,6 +546,30 @@ export function AnnotationEditor({
           ))}
         </div>
       </section>
+
+      <section className="panel-section">
+        <div className="section-title">History</div>
+        <div className="history-list">
+          {recentHistory.length === 0 ? (
+            <div className="empty-state compact-empty-state">No annotation history.</div>
+          ) : (
+            recentHistory.map((event) => (
+              <div className="history-row" key={event.eventId}>
+                <div className="history-row-top">
+                  <span className={`history-action history-action-${event.action}`}>
+                    {event.action}
+                  </span>
+                  <span className="muted">{formatHistoryTime(event.createdAt)}</span>
+                </div>
+                <div className="history-label">{historyLabel(event)}</div>
+                <div className="muted mono">
+                  {event.actor} / {historyFrameRange(event)}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
     </aside>
   );
 }
@@ -562,4 +592,51 @@ function toDraft(annotation: SegmentAnnotation): AnnotationDraft {
     startFrame: annotation.startFrame,
     endFrame: annotation.endFrame
   };
+}
+
+function historyPayload(event: AnnotationHistoryRecord): Record<string, unknown> | null {
+  return event.after ?? event.before;
+}
+
+function historyLabel(event: AnnotationHistoryRecord): string {
+  const payload = historyPayload(event);
+  const labelType = stringField(payload, "label_type");
+  const labelValue = stringField(payload, "label_value");
+  if (labelType && labelValue) {
+    return `${labelType}: ${labelValue}`;
+  }
+  return event.annotationId;
+}
+
+function historyFrameRange(event: AnnotationHistoryRecord): string {
+  const payload = historyPayload(event);
+  const startFrame = numberField(payload, "start_frame");
+  const endFrame = numberField(payload, "end_frame");
+  if (startFrame === null || endFrame === null) {
+    return `episode ${event.episodeIndex}`;
+  }
+  return `f${startFrame}-${endFrame}`;
+}
+
+function stringField(payload: Record<string, unknown> | null, key: string): string | null {
+  const value = payload?.[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function numberField(payload: Record<string, unknown> | null, key: string): number | null {
+  const value = payload?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function formatHistoryTime(value: string): string {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
+    return value;
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+    day: "numeric"
+  }).format(timestamp);
 }

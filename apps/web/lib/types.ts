@@ -121,6 +121,18 @@ export type SegmentAnnotation = {
   assignedTo: string | null;
 };
 
+export type AnnotationHistoryRecord = {
+  eventId: string;
+  datasetId: string;
+  annotationId: string;
+  episodeIndex: number;
+  action: "create" | "update" | "delete" | string;
+  actor: string;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  createdAt: string;
+};
+
 export type UserIdentity = {
   userId: string;
 };
