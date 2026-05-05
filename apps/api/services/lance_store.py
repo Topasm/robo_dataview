@@ -1077,6 +1077,15 @@ class LanceDatasetStore:
         self._seed_demo_dataset()
         if self.persist_dataset_registry:
             self._load_dataset_registry()
+        default_dataset_uri = os.environ.get("ROBOT_DATA_STUDIO_DEFAULT_DATASET_URI")
+        if default_dataset_uri:
+            self._open_dataset(
+                DatasetOpenRequest(
+                    uri=default_dataset_uri,
+                    name=os.environ.get("ROBOT_DATA_STUDIO_DEFAULT_DATASET_NAME"),
+                ),
+                persist_registry=False,
+            )
 
     def _seed_demo_dataset(self) -> None:
         dataset_id = "sample-xvla-soft-fold"

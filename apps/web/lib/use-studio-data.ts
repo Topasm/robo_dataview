@@ -237,7 +237,12 @@ export function useStudioData() {
         if (!isMounted || apiSummaries.length === 0) {
           return;
         }
-        const datasetId = apiSummaries[0].datasetId;
+        const defaultDatasetUri = process.env.NEXT_PUBLIC_DEFAULT_DATASET_URI ?? "";
+        const preferredSummary =
+          apiSummaries.find((summary) => summary.uri === defaultDatasetUri) ??
+          apiSummaries.find((summary) => !summary.uri.startsWith("sample://")) ??
+          apiSummaries[0];
+        const datasetId = preferredSummary.datasetId;
         const apiEpisodes = await fetchEpisodes(datasetId);
         if (!isMounted) {
           return;

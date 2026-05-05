@@ -19,7 +19,10 @@ export function DatasetBrowser({
   onOpenDataset,
   onSelectEpisode
 }: DatasetBrowserProps) {
-  const [uri, setUri] = useState("hf://datasets/lance-format/lerobot-xvla-soft-fold/data");
+  const defaultDatasetUri =
+    process.env.NEXT_PUBLIC_DEFAULT_DATASET_URI ??
+    "hf://datasets/lance-format/lerobot-xvla-soft-fold/data";
+  const [uri, setUri] = useState(defaultDatasetUri);
   const [isOpening, setIsOpening] = useState(false);
   const reviewedPercent =
     summary.episodeCount === 0 ? 0 : Math.round((summary.reviewedCount / summary.episodeCount) * 100);
