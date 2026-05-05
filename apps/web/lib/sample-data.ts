@@ -29,7 +29,8 @@ export const episodes: Episode[] = [
     hasHumanLabel: false,
     split: "train",
     fps: 20,
-    cameraNames: datasetSummary.cameraNames
+    cameraNames: datasetSummary.cameraNames,
+    languageInstruction: null
   },
   {
     datasetId: datasetSummary.datasetId,
@@ -45,7 +46,8 @@ export const episodes: Episode[] = [
     hasHumanLabel: false,
     split: "train",
     fps: 20,
-    cameraNames: datasetSummary.cameraNames
+    cameraNames: datasetSummary.cameraNames,
+    languageInstruction: null
   },
   {
     datasetId: datasetSummary.datasetId,
@@ -61,7 +63,8 @@ export const episodes: Episode[] = [
     hasHumanLabel: true,
     split: "val",
     fps: 20,
-    cameraNames: datasetSummary.cameraNames
+    cameraNames: datasetSummary.cameraNames,
+    languageInstruction: null
   }
 ];
 

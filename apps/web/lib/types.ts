@@ -31,6 +31,7 @@ export type Episode = {
   split: string | null;
   fps: number;
   cameraNames: string[];
+  languageInstruction: string | null;
 };
 
 export type EpisodeListPage = {
@@ -127,6 +128,17 @@ export type AnnotationHistoryRecord = {
   annotationId: string;
   episodeIndex: number;
   action: "create" | "update" | "delete" | string;
+  actor: string;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  createdAt: string;
+};
+
+export type EpisodeLabelHistoryRecord = {
+  eventId: string;
+  datasetId: string;
+  episodeIndex: number;
+  action: "update" | string;
   actor: string;
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;

@@ -1,3 +1,6 @@
+from datetime import datetime
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from apps.api.schemas.common import ReviewStatus
@@ -71,3 +74,16 @@ class EpisodeLabelUpdate(BaseModel):
     quality_score: float | None = Field(default=None, ge=0.0, le=1.0)
     split: str | None = None
     review_status: ReviewStatus | None = None
+    language_instruction: str | None = None
+    updated_by: str | None = None
+
+
+class EpisodeLabelHistoryRecord(BaseModel):
+    event_id: str
+    dataset_id: str
+    episode_index: int
+    action: str
+    actor: str
+    before: dict[str, Any] | None = None
+    after: dict[str, Any] | None = None
+    created_at: datetime

@@ -13,13 +13,14 @@ import {
   deleteFilterPreset,
   fetchAnnotationHistory,
   fetchAnnotations,
+  fetchCurrentUser,
   fetchDatasetSummaries,
+  fetchEpisodeLabelHistory,
   fetchEpisodes,
   fetchExport,
   fetchFilterPresets,
   fetchFrameRecord,
   fetchFrameWindowPage,
-  fetchCurrentUser,
   fetchRerunSession,
   fetchVlmResponses,
   filterSearch,
@@ -37,6 +38,7 @@ import type {
   AnnotationHistoryRecord,
   DatasetSummary,
   Episode,
+  EpisodeLabelHistoryRecord,
   ExportRecord,
   ExportFormat,
   FilterPreset,
@@ -124,6 +126,9 @@ export function useStudioData() {
   const [annotationRows, setAnnotationRows] = useState<SegmentAnnotation[]>(annotations);
   const [annotationHistoryRows, setAnnotationHistoryRows] =
     useState<AnnotationHistoryRecord[]>(annotationHistory);
+  const [episodeLabelHistoryRows, setEpisodeLabelHistoryRows] = useState<
+    EpisodeLabelHistoryRecord[]
+  >([]);
   const [reviewQueueRows, setReviewQueueRows] = useState<SegmentAnnotation[]>(annotations);
   const [reviewerUserId, setReviewerUserId] = useState("local");
   const [rerunSession, setRerunSession] = useState<RerunSession | null>(null);
@@ -181,6 +186,18 @@ export function useStudioData() {
       );
     }
   }, []);
+
+  const refreshEpisodeLabelHistory = useCallback(
+    async (datasetId: string, episodeIndex: number) => {
+      try {
+        const history = await fetchEpisodeLabelHistory(datasetId, episodeIndex);
+        setEpisodeLabelHistoryRows(history);
+      } catch {
+        setEpisodeLabelHistoryRows([]);
+      }
+    },
+    []
+  );
 
   const refreshReviewQueue = useCallback(async (datasetId: string) => {
     try {
@@ -294,6 +311,19 @@ export function useStudioData() {
                 event.episodeIndex === selectedEpisode.episodeIndex
             )
           );
+        }
+      }
+      try {
+        const labelHistory = await fetchEpisodeLabelHistory(
+          selectedEpisode.datasetId,
+          selectedEpisode.episodeIndex
+        );
+        if (isMounted) {
+          setEpisodeLabelHistoryRows(labelHistory);
+        }
+      } catch {
+        if (isMounted) {
+          setEpisodeLabelHistoryRows([]);
         }
       }
     }
@@ -758,6 +788,7 @@ export function useStudioData() {
             : episode
         )
       );
+      await refreshEpisodeLabelHistory(updated.datasetId, updated.episodeIndex);
     } catch (error) {
       setEpisodeRows((current) =>
         current.map((episode) =>
@@ -1104,6 +1135,7 @@ export function useStudioData() {
 
   return {
     annotationHistoryRows,
+    episodeLabelHistoryRows,
     annotationRows,
     dataStatus,
     episodeRows,

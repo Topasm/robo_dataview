@@ -6,6 +6,7 @@ import { FrameMetadataPanel } from "@/features/episode-viewer/frame-metadata-pan
 import { FrameTablePanel } from "@/features/episode-viewer/frame-table-panel";
 import type {
   Episode,
+  EpisodeLabelHistoryRecord,
   FrameListPage,
   FrameRecord,
   JobRecord,
@@ -34,6 +35,7 @@ type EpisodeLabelDraft = {
 type AnnotationEditorProps = {
   episode: Episode;
   annotationHistory: AnnotationHistoryRecord[];
+  episodeLabelHistory: EpisodeLabelHistoryRecord[];
   annotations: SegmentAnnotation[];
   frameBrowserLimit: number;
   frameBrowserStart: number;
@@ -69,6 +71,7 @@ type AnnotationEditorProps = {
 export function AnnotationEditor({
   episode,
   annotationHistory,
+  episodeLabelHistory,
   annotations,
   frameBrowserLimit,
   frameBrowserStart,
@@ -123,6 +126,9 @@ export function AnnotationEditor({
   const isVlmJobActive = vlmJob ? !["succeeded", "failed"].includes(vlmJob.status) : false;
   const vlmProgressPercent = Math.round(Math.max(0, Math.min(1, vlmJob?.progress ?? 0)) * 100);
   const recentHistory = [...annotationHistory]
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+    .slice(0, 8);
+  const recentLabelHistory = [...episodeLabelHistory]
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
     .slice(0, 8);
   const rationaleRows = vlmResponses.flatMap(responseRationaleRows).slice(0, 6);
@@ -702,8 +708,52 @@ export function AnnotationEditor({
           )}
         </div>
       </section>
+
+      <section className="panel-section">
+        <div className="section-title">Episode label history</div>
+        <div className="history-list">
+          {recentLabelHistory.length === 0 ? (
+            <div className="empty-state compact-empty-state">No label edits yet.</div>
+          ) : (
+            recentLabelHistory.map((event) => (
+              <div className="history-row" key={event.eventId}>
+                <div className="history-row-top">
+                  <span className={`history-action history-action-${event.action}`}>
+                    {event.action}
+                  </span>
+                  <span className="muted">{formatHistoryTime(event.createdAt)}</span>
+                </div>
+                <div className="history-label">{episodeLabelHistorySummary(event)}</div>
+                <div className="muted mono">
+                  {event.actor} / episode {event.episodeIndex}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
     </aside>
   );
+}
+
+function episodeLabelHistorySummary(event: EpisodeLabelHistoryRecord): string {
+  const after = event.after;
+  if (after && Object.keys(after).length > 0) {
+    return Object.entries(after)
+      .map(([key, value]) => `${key}=${formatLabelValue(value)}`)
+      .join(", ");
+  }
+  return `episode ${event.episodeIndex}`;
+}
+
+function formatLabelValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "—";
+  }
+  if (typeof value === "string") {
+    return value.length > 40 ? `${value.slice(0, 37)}…` : value;
+  }
+  return String(value);
 }
 
 function toEpisodeDraft(episode: Episode): EpisodeLabelDraft {

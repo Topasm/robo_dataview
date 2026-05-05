@@ -52,8 +52,20 @@ EPISODE_LABELS_COLUMNS: tuple[ColumnSpec, ...] = (
         "string",
         description="pending | accepted | rejected | edited",
     ),
+    ColumnSpec("language_instruction", "string"),
     ColumnSpec("has_human_label", "bool", nullable=False),
     ColumnSpec("updated_at", "timestamp_us_utc", nullable=False),
+)
+
+EPISODE_LABEL_HISTORY_COLUMNS: tuple[ColumnSpec, ...] = (
+    ColumnSpec("event_id", "string", nullable=False),
+    ColumnSpec("dataset_id", "string", nullable=False),
+    ColumnSpec("episode_index", "int64", nullable=False),
+    ColumnSpec("action", "string", nullable=False, description="update | reset"),
+    ColumnSpec("actor", "string", nullable=False),
+    ColumnSpec("before", "string", description="JSON-serialized snapshot of changed fields"),
+    ColumnSpec("after", "string", description="JSON-serialized snapshot of changed fields"),
+    ColumnSpec("created_at", "timestamp_us_utc", nullable=False),
 )
 
 EMBEDDINGS_COLUMNS: tuple[ColumnSpec, ...] = (
@@ -104,6 +116,10 @@ def episode_labels_column_names() -> list[str]:
     return [column.name for column in EPISODE_LABELS_COLUMNS]
 
 
+def episode_label_history_column_names() -> list[str]:
+    return [column.name for column in EPISODE_LABEL_HISTORY_COLUMNS]
+
+
 def versions_column_names() -> list[str]:
     return [column.name for column in VERSIONS_COLUMNS]
 
@@ -143,6 +159,14 @@ def build_episode_labels_pyarrow_schema() -> Any:
     """Return the PyArrow schema used to create `episode_labels.lance`."""
 
     return _build_pyarrow_schema(EPISODE_LABELS_COLUMNS, "episode_labels.lance")
+
+
+def build_episode_label_history_pyarrow_schema() -> Any:
+    """Return the PyArrow schema used to create `episode_label_history.lance`."""
+
+    return _build_pyarrow_schema(
+        EPISODE_LABEL_HISTORY_COLUMNS, "episode_label_history.lance"
+    )
 
 
 def build_versions_pyarrow_schema() -> Any:

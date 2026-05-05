@@ -1,10 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from apps.api.schemas.episodes import (
     EpisodeDetail,
+    EpisodeLabelHistoryRecord,
     EpisodeLabelUpdate,
     EpisodeListItem,
     EpisodeListPage,
@@ -16,6 +17,8 @@ from apps.api.services.episode_preview_service import (
     EpisodePreviewUnavailable,
     episode_preview_service,
 )
+from apps.api.services.pydantic_compat import model_copy
+from apps.api.services.user_context import current_user_id
 
 
 router = APIRouter(tags=["episodes"])
@@ -78,11 +81,25 @@ def update_episode_labels(
     episode_index: int,
     payload: EpisodeLabelUpdate,
     dataset_id: str = Query(...),
+    user_id: str = Depends(current_user_id),
 ) -> EpisodeDetail:
+    if payload.updated_by is None:
+        payload = model_copy(payload, update={"updated_by": user_id})
     episode = store.update_episode_labels(dataset_id, episode_index, payload)
     if episode is None:
         raise HTTPException(status_code=404, detail="Episode not found")
     return episode
+
+
+@router.get(
+    "/episodes/{episode_index}/labels/history",
+    response_model=list[EpisodeLabelHistoryRecord],
+)
+def list_episode_label_history(
+    episode_index: int,
+    dataset_id: str = Query(...),
+) -> list[EpisodeLabelHistoryRecord]:
+    return store.list_episode_label_history(dataset_id, episode_index=episode_index)
 
 
 @router.get("/episodes/{episode_index}/state-action", response_model=StateActionSummary)

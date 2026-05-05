@@ -1182,10 +1182,10 @@ class LanceDatasetStoreTest(unittest.TestCase):
             self.assertEqual(second.review_status, "accepted")
 
     def test_episode_label_updates_mirror_lance_table_when_available(self) -> None:
-        written: dict[str, object] = {}
+        writes: list[dict[str, object]] = []
         sys.modules["pyarrow"] = FakePyArrowModule()
         sys.modules["lance"] = types.SimpleNamespace(
-            write_dataset=lambda table, path, mode: written.update(
+            write_dataset=lambda table, path, mode: writes.append(
                 {"table": table, "path": path, "mode": mode}
             )
         )
@@ -1207,17 +1207,113 @@ class LanceDatasetStoreTest(unittest.TestCase):
                 ),
             )
 
-        table = written["table"]
-        self.assertEqual(written["mode"], "overwrite")
-        self.assertTrue(str(written["path"]).endswith("episode_labels.lance"))
-        self.assertEqual(table.rows[0]["dataset_id"], "sample-xvla-soft-fold")
-        self.assertEqual(table.rows[0]["episode_index"], 0)
-        self.assertEqual(table.rows[0]["caption"], "Reviewed fold")
-        self.assertIsNone(table.rows[0]["success_label"])
-        self.assertIsNone(table.rows[0]["quality_score"])
-        self.assertIsNone(table.rows[0]["split"])
-        self.assertEqual(table.rows[0]["review_status"], "edited")
-        self.assertTrue(table.rows[0]["has_human_label"])
+        labels_writes = [
+            entry for entry in writes if str(entry["path"]).endswith("episode_labels.lance")
+        ]
+        history_writes = [
+            entry for entry in writes if str(entry["path"]).endswith("episode_label_history.lance")
+        ]
+        self.assertEqual(len(labels_writes), 1)
+        self.assertEqual(len(history_writes), 1)
+        labels_table = labels_writes[0]["table"]
+        self.assertEqual(labels_writes[0]["mode"], "overwrite")
+        self.assertEqual(labels_table.rows[0]["dataset_id"], "sample-xvla-soft-fold")
+        self.assertEqual(labels_table.rows[0]["episode_index"], 0)
+        self.assertEqual(labels_table.rows[0]["caption"], "Reviewed fold")
+        self.assertIsNone(labels_table.rows[0]["success_label"])
+        self.assertIsNone(labels_table.rows[0]["quality_score"])
+        self.assertIsNone(labels_table.rows[0]["split"])
+        self.assertEqual(labels_table.rows[0]["review_status"], "edited")
+        self.assertTrue(labels_table.rows[0]["has_human_label"])
+        history_table = history_writes[0]["table"]
+        self.assertEqual(history_writes[0]["mode"], "overwrite")
+        self.assertEqual(history_table.rows[0]["action"], "update")
+        self.assertEqual(history_table.rows[0]["actor"], "local")
+
+    def test_episode_label_history_records_actor_and_diff(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage_root = Path(tmpdir)
+            store = LanceDatasetStore(
+                label_storage_root=storage_root,
+                persist_episode_labels=True,
+                mirror_episode_labels_lance=False,
+            )
+            store.update_episode_labels(
+                "sample-xvla-soft-fold",
+                0,
+                EpisodeLabelUpdate(
+                    caption="Reviewed fold",
+                    review_status=ReviewStatus.accepted,
+                    updated_by="alice",
+                ),
+            )
+            store.update_episode_labels(
+                "sample-xvla-soft-fold",
+                0,
+                EpisodeLabelUpdate(
+                    caption="Reviewed fold (revised)",
+                    updated_by="bob",
+                ),
+            )
+
+            history = store.list_episode_label_history(
+                "sample-xvla-soft-fold", episode_index=0
+            )
+
+        self.assertEqual([event.actor for event in history], ["alice", "bob"])
+        self.assertEqual([event.action for event in history], ["update", "update"])
+        first_after = history[0].after or {}
+        self.assertEqual(first_after.get("caption"), "Reviewed fold")
+        self.assertEqual(first_after.get("review_status"), "accepted")
+        second_before = history[1].before or {}
+        second_after = history[1].after or {}
+        self.assertEqual(second_before.get("caption"), "Reviewed fold")
+        self.assertEqual(second_after.get("caption"), "Reviewed fold (revised)")
+
+    def test_episode_label_history_round_trips_after_reload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage_root = Path(tmpdir)
+            first = LanceDatasetStore(
+                label_storage_root=storage_root,
+                persist_episode_labels=True,
+                mirror_episode_labels_lance=False,
+            )
+            first.update_episode_labels(
+                "sample-xvla-soft-fold",
+                0,
+                EpisodeLabelUpdate(caption="Round-trip", updated_by="alice"),
+            )
+
+            second = LanceDatasetStore(
+                label_storage_root=storage_root,
+                persist_episode_labels=True,
+                mirror_episode_labels_lance=False,
+            )
+            history = second.list_episode_label_history(
+                "sample-xvla-soft-fold", episode_index=0
+            )
+
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0].actor, "alice")
+        self.assertEqual((history[0].after or {}).get("caption"), "Round-trip")
+
+    def test_episode_label_update_does_not_leak_updated_by_into_episode_detail(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = LanceDatasetStore(
+                label_storage_root=Path(tmpdir),
+                persist_episode_labels=True,
+                mirror_episode_labels_lance=False,
+            )
+            updated = store.update_episode_labels(
+                "sample-xvla-soft-fold",
+                0,
+                EpisodeLabelUpdate(caption="No leak", updated_by="alice"),
+            )
+
+        self.assertIsNotNone(updated)
+        self.assertFalse(hasattr(updated, "updated_by"))
+        overrides = store._episode_label_overrides["sample-xvla-soft-fold"][0]
+        self.assertNotIn("updated_by", overrides)
 
 
 if __name__ == "__main__":

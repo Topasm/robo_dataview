@@ -8,10 +8,13 @@ import unittest
 from unittest.mock import patch
 
 from apps.api.routers import annotations as annotations_router
+from apps.api.routers import episodes as episodes_router
 from apps.api.routers import users as users_router
 from apps.api.schemas.annotations import AnnotationAssignmentUpdate, AnnotationCreate
+from apps.api.schemas.episodes import EpisodeLabelUpdate
 from apps.api.services.annotation_service import AnnotationStore
 from apps.api.services.auth import enforce_api_key
+from apps.api.services.lance_store import LanceDatasetStore
 from apps.api.services.user_context import normalize_user_id
 
 
@@ -53,6 +56,40 @@ class UsersAndAuthTest(unittest.TestCase):
             response = _run_middleware(headers={}, method="OPTIONS")
 
         self.assertEqual(response.status_code, 204)
+
+    def test_episode_label_router_records_actor_and_history(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = LanceDatasetStore(
+                label_storage_root=Path(tmpdir),
+                persist_episode_labels=True,
+                mirror_episode_labels_lance=False,
+            )
+            payload = EpisodeLabelUpdate(
+                caption="Reviewed by alice",
+                quality_score=0.7,
+            )
+
+            with patch.object(episodes_router, "store", store):
+                response = episodes_router.update_episode_labels(
+                    0,
+                    payload,
+                    dataset_id="sample-xvla-soft-fold",
+                    user_id="alice",
+                )
+                history = episodes_router.list_episode_label_history(
+                    0, dataset_id="sample-xvla-soft-fold"
+                )
+
+        self.assertEqual(response.caption, "Reviewed by alice")
+        self.assertEqual(response.quality_score, 0.7)
+        self.assertTrue(response.has_human_label)
+        self.assertEqual(len(history), 1)
+        event = history[0]
+        self.assertEqual(event.action, "update")
+        self.assertEqual(event.actor, "alice")
+        self.assertEqual(event.episode_index, 0)
+        self.assertEqual((event.after or {}).get("caption"), "Reviewed by alice")
+        self.assertEqual((event.after or {}).get("quality_score"), 0.7)
 
     def test_annotation_router_applies_current_user_and_assignment(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

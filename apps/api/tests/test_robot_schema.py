@@ -68,6 +68,7 @@ class RobotSchemaTest(unittest.TestCase):
                 "quality_score",
                 "split",
                 "review_status",
+                "language_instruction",
                 "has_human_label",
                 "updated_at",
             ],

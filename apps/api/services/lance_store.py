@@ -12,10 +12,12 @@ from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from uuid import uuid4
 
 from apps.api.schemas.datasets import DatasetOpenRequest, DatasetRecord, DatasetSummary
 from apps.api.schemas.episodes import (
     EpisodeDetail,
+    EpisodeLabelHistoryRecord,
     EpisodeLabelUpdate,
     EpisodeListItem,
     EpisodeListPage,
@@ -26,7 +28,10 @@ from apps.api.schemas.frames import FrameRecord
 from apps.api.schemas.search import FilterSearchRequest, SearchResult
 from apps.api.services.lerobot_io import read_lerobot_snapshot_episodes
 from apps.api.services.pydantic_compat import model_dump
-from packages.robot_schema import build_episode_labels_pyarrow_schema
+from packages.robot_schema import (
+    build_episode_label_history_pyarrow_schema,
+    build_episode_labels_pyarrow_schema,
+)
 
 NORM_SERIES_MAX_POINTS = 600
 EPISODE_LABEL_STORAGE_ROOT = Path("data/lance/episode_labels")
@@ -895,8 +900,10 @@ class LanceDatasetStore:
         self._episodes: dict[str, list[EpisodeDetail]] = {}
         self._bundles: dict[str, LanceBundle] = {}
         self._episode_label_overrides: dict[str, dict[int, dict[str, Any]]] = {}
+        self._episode_label_history: list[EpisodeLabelHistoryRecord] = []
         if self.persist_episode_labels:
             self._load_episode_label_overrides()
+            self._load_episode_label_history()
         self._seed_demo_dataset()
         if self.persist_dataset_registry:
             self._load_dataset_registry()
@@ -1160,6 +1167,7 @@ class LanceDatasetStore:
             return None
 
         updates = model_dump(payload, exclude_unset=True)
+        actor = str(updates.pop("updated_by", None) or "local")
         if "review_status" in updates and updates["review_status"] is not None:
             updates["review_status"] = getattr(updates["review_status"], "value", updates["review_status"])
         elif "review_status" in updates:
@@ -1167,6 +1175,7 @@ class LanceDatasetStore:
         if not updates:
             return existing
 
+        before_snapshot = {key: getattr(existing, key, None) for key in updates}
         dataset_overrides = self._episode_label_overrides.setdefault(dataset_id, {})
         current = dataset_overrides.get(episode_index, {})
         dataset_overrides[episode_index] = {
@@ -1176,7 +1185,34 @@ class LanceDatasetStore:
         }
         self._persist_episode_label_overrides(dataset_id)
         self._refresh_episode_summary(dataset_id)
-        return self.get_episode(dataset_id, episode_index)
+        updated = self.get_episode(dataset_id, episode_index)
+        after_snapshot = (
+            {key: getattr(updated, key, None) for key in updates}
+            if updated is not None
+            else None
+        )
+        self._append_episode_label_history(
+            dataset_id=dataset_id,
+            episode_index=episode_index,
+            action="update",
+            actor=actor,
+            before=before_snapshot,
+            after=after_snapshot,
+        )
+        return updated
+
+    def list_episode_label_history(
+        self,
+        dataset_id: str,
+        *,
+        episode_index: int | None = None,
+    ) -> list[EpisodeLabelHistoryRecord]:
+        return [
+            event
+            for event in self._episode_label_history
+            if event.dataset_id == dataset_id
+            and (episode_index is None or event.episode_index == episode_index)
+        ]
 
     def get_state_action_summary(
         self,
@@ -2055,6 +2091,20 @@ class LanceDatasetStore:
             if rows:
                 self._episode_label_overrides[dataset_id] = rows
 
+    def _load_episode_label_history(self) -> None:
+        if not self.label_storage_root.exists():
+            return
+        for history_path in self.label_storage_root.glob("*/episode_label_history.jsonl"):
+            for line in history_path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    self._episode_label_history.append(
+                        EpisodeLabelHistoryRecord(**json.loads(line))
+                    )
+                except (ValueError, json.JSONDecodeError):
+                    continue
+
     def _persist_episode_label_overrides(self, dataset_id: str) -> None:
         if not self.persist_episode_labels:
             return
@@ -2103,10 +2153,87 @@ class LanceDatasetStore:
                 "quality_score": row.get("quality_score"),
                 "split": row.get("split"),
                 "review_status": row.get("review_status"),
+                "language_instruction": row.get("language_instruction"),
                 "has_human_label": bool(row.get("has_human_label", True)),
                 "updated_at": updated_at,
             }
             for row in rows
+        ]
+        if lance_rows:
+            table = pa.Table.from_pylist(lance_rows, schema=schema)
+        else:
+            table = pa.Table.from_arrays(
+                [pa.array([], type=field.type) for field in schema],
+                schema=schema,
+            )
+        lance.write_dataset(table, str(lance_path), mode="overwrite")
+
+    def _append_episode_label_history(
+        self,
+        *,
+        dataset_id: str,
+        episode_index: int,
+        action: str,
+        actor: str,
+        before: dict[str, Any] | None,
+        after: dict[str, Any] | None,
+    ) -> None:
+        event = EpisodeLabelHistoryRecord(
+            event_id=str(uuid4()),
+            dataset_id=dataset_id,
+            episode_index=episode_index,
+            action=action,
+            actor=actor,
+            before=before,
+            after=after,
+            created_at=datetime.now(timezone.utc),
+        )
+        self._episode_label_history.append(event)
+        if not self.persist_episode_labels:
+            return
+        dataset_dir = self.label_storage_root / _slug(dataset_id)
+        dataset_dir.mkdir(parents=True, exist_ok=True)
+        history_path = dataset_dir / "episode_label_history.jsonl"
+        row = model_dump(event)
+        if isinstance(row.get("created_at"), datetime):
+            row["created_at"] = row["created_at"].isoformat()
+        with history_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row, sort_keys=True) + "\n")
+        self._mirror_episode_label_history_lance(
+            dataset_dir / "episode_label_history.lance", dataset_id
+        )
+
+    def _mirror_episode_label_history_lance(self, lance_path: Path, dataset_id: str) -> None:
+        if not self.mirror_episode_labels_lance:
+            return
+        try:
+            import pyarrow as pa
+            import lance
+        except ImportError:
+            return
+
+        schema = build_episode_label_history_pyarrow_schema()
+        events = [
+            event
+            for event in self._episode_label_history
+            if event.dataset_id == dataset_id
+        ]
+        lance_rows = [
+            {
+                "event_id": event.event_id,
+                "dataset_id": event.dataset_id,
+                "episode_index": event.episode_index,
+                "action": event.action,
+                "actor": event.actor,
+                "before": json.dumps(event.before, sort_keys=True)
+                if event.before is not None
+                else None,
+                "after": json.dumps(event.after, sort_keys=True)
+                if event.after is not None
+                else None,
+                "created_at": event.created_at,
+            }
+            for event in events
         ]
         if lance_rows:
             table = pa.Table.from_pylist(lance_rows, schema=schema)

@@ -367,7 +367,9 @@ class EpisodeVideoEndpointTest(unittest.TestCase):
         )
 
         with patch.object(episodes, "store", fake_store):
-            updated = episodes.update_episode_labels(3, payload, dataset_id="dataset-a")
+            updated = episodes.update_episode_labels(
+                3, payload, dataset_id="dataset-a", user_id="local"
+            )
 
         self.assertEqual(updated.caption, "Reviewed episode")
         self.assertFalse(updated.success_label)
@@ -375,7 +377,8 @@ class EpisodeVideoEndpointTest(unittest.TestCase):
         self.assertEqual(updated.quality_score, 0.4)
         self.assertEqual(updated.split, "val")
         self.assertEqual(updated.review_status, "edited")
-        self.assertIs(fake_store.payload, payload)
+        self.assertEqual(fake_store.payload.caption, payload.caption)
+        self.assertEqual(fake_store.payload.updated_by, "local")
 
     def test_update_episode_labels_returns_404_for_missing_episode(self) -> None:
         with patch.object(episodes, "store", FakeEpisodeLabelStore()):
@@ -384,6 +387,7 @@ class EpisodeVideoEndpointTest(unittest.TestCase):
                     99,
                     EpisodeLabelUpdate(caption="missing"),
                     dataset_id="dataset-a",
+                    user_id="local",
                 )
 
         self.assertEqual(context.exception.status_code, 404)

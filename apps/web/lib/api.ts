@@ -2,6 +2,7 @@ import type {
   AnnotationHistoryRecord,
   DatasetSummary,
   Episode,
+  EpisodeLabelHistoryRecord,
   EpisodeListPage,
   EpisodeTimeseries,
   ExportFormat,
@@ -64,6 +65,7 @@ type EpisodeResponse = {
   split: string | null;
   fps?: number | null;
   camera_names?: string[];
+  language_instruction?: string | null;
 };
 
 type EpisodeListPageResponse = {
@@ -98,6 +100,17 @@ type AnnotationHistoryResponse = {
   event_id: string;
   dataset_id: string;
   annotation_id: string;
+  episode_index: number;
+  action: string;
+  actor: string;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  created_at: string;
+};
+
+type EpisodeLabelHistoryResponse = {
+  event_id: string;
+  dataset_id: string;
   episode_index: number;
   action: string;
   actor: string;
@@ -304,6 +317,7 @@ export type EpisodeLabelUpdate = {
   qualityScore?: number | null;
   split?: string | null;
   reviewStatus?: ReviewStatus | null;
+  languageInstruction?: string | null;
 };
 
 export type FrameUpdate = {
@@ -512,6 +526,9 @@ export async function updateEpisodeLabels(
   if (payload.reviewStatus !== undefined) {
     body.review_status = payload.reviewStatus;
   }
+  if (payload.languageInstruction !== undefined) {
+    body.language_instruction = payload.languageInstruction;
+  }
   const row = await request<EpisodeResponse>(
     `/episodes/${episodeIndex}/labels?${query}`,
     {
@@ -520,6 +537,17 @@ export async function updateEpisodeLabels(
     }
   );
   return toEpisode(row);
+}
+
+export async function fetchEpisodeLabelHistory(
+  datasetId: string,
+  episodeIndex: number,
+): Promise<EpisodeLabelHistoryRecord[]> {
+  const query = new URLSearchParams({ dataset_id: datasetId });
+  const rows = await request<EpisodeLabelHistoryResponse[]>(
+    `/episodes/${episodeIndex}/labels/history?${query}`
+  );
+  return rows.map(toEpisodeLabelHistoryRecord);
 }
 
 export async function fetchAnnotations(
@@ -986,7 +1014,8 @@ function toEpisode(raw: EpisodeResponse): Episode {
     hasHumanLabel: raw.has_human_label,
     split: raw.split,
     fps: raw.fps ?? 0,
-    cameraNames: raw.camera_names ?? []
+    cameraNames: raw.camera_names ?? [],
+    languageInstruction: raw.language_instruction ?? null
   };
 }
 
@@ -1093,6 +1122,21 @@ function toAnnotationHistoryRecord(raw: AnnotationHistoryResponse): AnnotationHi
     eventId: raw.event_id,
     datasetId: raw.dataset_id,
     annotationId: raw.annotation_id,
+    episodeIndex: raw.episode_index,
+    action: raw.action,
+    actor: raw.actor,
+    before: raw.before,
+    after: raw.after,
+    createdAt: raw.created_at
+  };
+}
+
+function toEpisodeLabelHistoryRecord(
+  raw: EpisodeLabelHistoryResponse
+): EpisodeLabelHistoryRecord {
+  return {
+    eventId: raw.event_id,
+    datasetId: raw.dataset_id,
     episodeIndex: raw.episode_index,
     action: raw.action,
     actor: raw.actor,
