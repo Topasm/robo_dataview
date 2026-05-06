@@ -1,6 +1,14 @@
 export type ReviewStatus = "pending" | "accepted" | "rejected" | "edited";
 export type ExportFormat = "lerobot" | "lance" | "jsonl" | "vla" | "hf_dataset";
 
+export type SkillExportOptions = {
+  clipLabelType?: string;
+  acceptedClipsOnly?: boolean;
+  materializeSkillClips?: boolean;
+  jitterOffsets?: number[];
+  copiesPerClip?: number;
+};
+
 export type DatasetSummary = {
   datasetId: string;
   name: string;
@@ -316,6 +324,10 @@ export type ExportArtifacts = {
       frame_count?: number;
       media_count?: number;
       train_episode_count?: number;
+      skill_count?: number;
+      skill_segment_count?: number;
+      frame_skill_label_count?: number;
+      train_skill_clip_count?: number;
       annotation_count?: number;
       errors?: string[];
       warnings?: string[];
@@ -326,7 +338,13 @@ export type ExportArtifacts = {
       frame_rows?: number;
       media_rows?: number;
       train_episode_rows?: number;
+      skill_rows?: number;
+      skill_segment_rows?: number;
+      frame_skill_label_rows?: number;
+      train_skill_clip_rows?: number;
       annotation_rows?: number;
+      annotation_current_rows?: number;
+      annotation_event_rows?: number;
     };
   };
   jsonl?: JsonlExportArtifact;

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from importlib.resources import files as resource_files
 import json
 import os
 from pathlib import Path
@@ -17,9 +18,12 @@ from packages.robot_schema import (
     build_annotations_pyarrow_schema,
     build_episode_metadata_pyarrow_schema,
     build_episodes_pyarrow_schema,
+    build_frame_skill_labels_pyarrow_schema,
     build_frames_pyarrow_schema,
     build_media_pyarrow_schema,
     build_raw_videos_pyarrow_schema,
+    build_skill_segments_pyarrow_schema,
+    build_skills_pyarrow_schema,
     build_train_skill_clips_pyarrow_schema,
 )
 
@@ -32,7 +36,9 @@ FRAMES_LANCE_PATH = Path("frames.lance")
 MEDIA_LANCE_PATH = Path("media.lance")
 TRAIN_EPISODES_LANCE_PATH = Path("train_episodes.lance")
 TRAIN_SKILL_CLIPS_LANCE_PATH = Path("train_skill_clips.lance")
+SKILLS_LANCE_PATH = Path("skills.lance")
 SKILL_SEGMENTS_LANCE_PATH = Path("skill_segments.lance")
+FRAME_SKILL_LABELS_LANCE_PATH = Path("frame_skill_labels.lance")
 ANNOTATIONS_CURRENT_LANCE_PATH = Path("annotations_current.lance")
 ANNOTATION_EVENTS_LANCE_PATH = Path("annotation_events.lance")
 LEGACY_VIDEOS_LANCE_PATH = Path("videos.lance")
@@ -106,6 +112,12 @@ def write_lance_subset(
         clip_label_type=clip_label_type,
         accepted_only=accepted_only,
     )
+    skill_rows = _skill_vocabulary_rows()
+    frame_skill_label_rows = (
+        _frame_skill_label_rows(skill_segment_rows)
+        if materialize_skill_clips
+        else []
+    )
     train_skill_clip_rows = (
         _train_skill_clip_rows(
             episodes,
@@ -154,7 +166,9 @@ def write_lance_subset(
         "annotation_events": root / ANNOTATION_EVENTS_LANCE_PATH,
     }
     if materialize_skill_clips:
+        canonical_paths["skills"] = root / SKILLS_LANCE_PATH
         canonical_paths["skill_segments"] = root / SKILL_SEGMENTS_LANCE_PATH
+        canonical_paths["frame_skill_labels"] = root / FRAME_SKILL_LABELS_LANCE_PATH
         canonical_paths["train_skill_clips"] = root / TRAIN_SKILL_CLIPS_LANCE_PATH
     legacy_paths: dict[str, Path] = {}
     if write_legacy:
@@ -192,8 +206,22 @@ def write_lance_subset(
     if materialize_skill_clips:
         _write_lance_table(
             lance,
-            _table_from_rows(pa, skill_segment_rows, _skill_segments_schema(pa)),
+            _table_from_rows(pa, skill_rows, build_skills_pyarrow_schema()),
+            table_paths["skills"],
+        )
+        _write_lance_table(
+            lance,
+            _table_from_rows(pa, skill_segment_rows, build_skill_segments_pyarrow_schema()),
             table_paths["skill_segments"],
+        )
+        _write_lance_table(
+            lance,
+            _table_from_rows(
+                pa,
+                frame_skill_label_rows,
+                build_frame_skill_labels_pyarrow_schema(),
+            ),
+            table_paths["frame_skill_labels"],
         )
         _write_lance_table(
             lance,
@@ -235,6 +263,8 @@ def write_lance_subset(
         "total_frames": len(frame_rows),
         "total_media": len(media_rows),
         "total_skill_segments": len(skill_segment_rows),
+        "total_skills": len(skill_rows) if materialize_skill_clips else 0,
+        "total_frame_skill_labels": len(frame_skill_label_rows),
         "total_train_skill_clips": len(train_skill_clip_rows),
         "total_videos": len(legacy_video_rows) if write_legacy else 0,
         "total_annotations": len(annotation_rows),
@@ -247,10 +277,22 @@ def write_lance_subset(
             if train_skill_clip_rows
             else table_paths["train_episodes"].name
         ),
+        "training_row_unit": "skill_clip" if train_skill_clip_rows else "episode",
+        "training_index_column": "episode_index",
+        "source_episode_column": "source_episode_index" if train_skill_clip_rows else None,
+        "video_frame_offset_column": "video_frame_offset" if train_skill_clip_rows else None,
         "training_columns": {
             "state": "observation_state",
             "action": "actions",
         },
+        "skill_vocabulary": (
+            {
+                "table": table_paths["skills"].name,
+                "source": "packages/robot_schema/humanoid_skills.json",
+            }
+            if materialize_skill_clips
+            else None
+        ),
         "camera_keys": camera_feature_keys,
         "frame_table": {
             "index_columns": ["episode_index", "frame_index"],
@@ -275,6 +317,8 @@ def write_lance_subset(
         "clip_export": {
             **clip_export,
             "skill_segments": len(skill_segment_rows),
+            "skills": len(skill_rows) if materialize_skill_clips else 0,
+            "frame_skill_labels": len(frame_skill_label_rows),
             "train_skill_clips": len(train_skill_clip_rows),
         },
         "tables": {name: path.name for name, path in table_paths.items()},
@@ -301,7 +345,9 @@ def write_lance_subset(
         "frame_rows": len(frame_rows),
         "media_rows": len(media_rows),
         "train_episode_rows": len(train_episode_rows),
+        "skill_rows": len(skill_rows) if materialize_skill_clips else 0,
         "skill_segment_rows": len(skill_segment_rows),
+        "frame_skill_label_rows": len(frame_skill_label_rows),
         "train_skill_clip_rows": len(train_skill_clip_rows),
         "annotation_current_rows": len(annotation_rows),
         "annotation_event_rows": len(annotation_event_rows),
@@ -329,7 +375,9 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
         "frames": root / FRAMES_LANCE_PATH,
         "media": root / MEDIA_LANCE_PATH,
         "train_episodes": root / TRAIN_EPISODES_LANCE_PATH,
+        "skills": root / SKILLS_LANCE_PATH,
         "skill_segments": root / SKILL_SEGMENTS_LANCE_PATH,
+        "frame_skill_labels": root / FRAME_SKILL_LABELS_LANCE_PATH,
         "train_skill_clips": root / TRAIN_SKILL_CLIPS_LANCE_PATH,
         "annotations_current": root / ANNOTATIONS_CURRENT_LANCE_PATH,
         "annotation_events": root / ANNOTATION_EVENTS_LANCE_PATH,
@@ -386,7 +434,9 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
                 "frames": int(metadata.get("total_frames") or 0),
                 "media": int(metadata.get("total_media") or metadata.get("total_videos") or 0),
                 "train_episodes": int(metadata.get("total_episodes") or 0),
+                "skills": int(metadata.get("total_skills") or 0),
                 "skill_segments": int(metadata.get("total_skill_segments") or 0),
+                "frame_skill_labels": int(metadata.get("total_frame_skill_labels") or 0),
                 "train_skill_clips": int(metadata.get("total_train_skill_clips") or 0),
                 "annotations_current": int(metadata.get("total_annotations") or 0),
                 "annotation_events": int(metadata.get("total_annotation_events") or 0),
@@ -408,7 +458,9 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
         "frame_count": int(metadata.get("total_frames") or 0),
         "media_count": int(metadata.get("total_media") or metadata.get("total_videos") or 0),
         "train_episode_count": int(metadata.get("total_episodes") or 0),
+        "skill_count": int(metadata.get("total_skills") or 0),
         "skill_segment_count": int(metadata.get("total_skill_segments") or 0),
+        "frame_skill_label_count": int(metadata.get("total_frame_skill_labels") or 0),
         "train_skill_clip_count": int(metadata.get("total_train_skill_clips") or 0),
         "video_count": int(metadata.get("total_videos") or 0),
         "annotation_count": int(metadata.get("total_annotations") or 0),
@@ -431,7 +483,9 @@ def _lance_table_readability(
         "frames": "frames.lance",
         "media": "media.lance",
         "train_episodes": "train_episodes.lance",
+        "skills": "skills.lance",
         "skill_segments": "skill_segments.lance",
+        "frame_skill_labels": "frame_skill_labels.lance",
         "train_skill_clips": "train_skill_clips.lance",
         "annotations_current": "annotations_current.lance",
         "annotation_events": "annotation_events.lance",
@@ -608,9 +662,71 @@ def _skill_segment_rows(
                     "success_label": _bool_or_none(
                         metadata.get("successLabel", metadata.get("success_label"))
                     ),
+                    "failure_reason": _string_or_none(
+                        metadata.get("failureReason", metadata.get("failure_reason"))
+                    ),
                     "review_status": annotation.review_status.value,
                     "split": _string_or_none(metadata.get("split")),
                     "metadata_json": json.dumps(metadata, sort_keys=True),
+                }
+            )
+    return rows
+
+
+def _skill_vocabulary_rows() -> list[dict[str, Any]]:
+    try:
+        raw = json.loads(
+            resource_files("packages.robot_schema")
+            .joinpath("humanoid_skills.json")
+            .read_text(encoding="utf-8")
+        )
+    except Exception:
+        raw = [
+            {"skill_id": 0, "skill_name": "approach", "display_label": "Approach"},
+            {"skill_id": 1, "skill_name": "grasp_part", "display_label": "Grasp Part"},
+            {"skill_id": 2, "skill_name": "grasp_bolt", "display_label": "Grasp Bolt"},
+            {"skill_id": 3, "skill_name": "insert_bolt", "display_label": "Insert Bolt"},
+            {"skill_id": 4, "skill_name": "place", "display_label": "Place"},
+            {"skill_id": 5, "skill_name": "push_button", "display_label": "Push Button"},
+            {"skill_id": 6, "skill_name": "grasp_drill", "display_label": "Grasp Drill"},
+            {"skill_id": 7, "skill_name": "drill_trigger", "display_label": "Drill Trigger"},
+            {"skill_id": 8, "skill_name": "bimanual_grasp", "display_label": "Bimanual Grasp"},
+            {"skill_id": 9, "skill_name": "insert_tire", "display_label": "Insert Tire"},
+        ]
+    rows: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        rows.append(
+            {
+                "skill_id": int(item.get("skill_id", len(rows))),
+                "skill_name": str(item.get("skill_name") or ""),
+                "display_label": str(item.get("display_label") or item.get("skill_name") or ""),
+                "start_condition": _string_or_none(item.get("start_condition")),
+                "end_condition": _string_or_none(item.get("end_condition")),
+                "mission_section": _string_or_none(item.get("mission_section")),
+                "color": _string_or_none(item.get("color")),
+            }
+        )
+    return rows
+
+
+def _frame_skill_label_rows(skill_segment_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for segment in skill_segment_rows:
+        start_frame = int(segment["start_frame"])
+        end_frame = int(segment["end_frame"])
+        denominator = max(1, end_frame - start_frame)
+        for frame_index in range(start_frame, end_frame + 1):
+            rows.append(
+                {
+                    "episode_index": int(segment["source_episode_index"]),
+                    "frame_index": frame_index,
+                    "segment_id": str(segment["clip_id"]),
+                    "skill_id": _int_or_none(segment.get("skill_id")),
+                    "skill_name": str(segment["skill_name"]),
+                    "progress_in_skill": float(frame_index - start_frame) / float(denominator),
+                    "review_status": str(segment["review_status"]),
                 }
             )
     return rows
@@ -782,25 +898,6 @@ def _write_lance_table(lance: Any, table: Any, path: Path) -> None:
 
 def _table_from_rows(pa: Any, rows: list[dict[str, Any]], schema: Any) -> Any:
     return pa.Table.from_pylist(rows, schema=schema)
-
-
-def _skill_segments_schema(pa: Any) -> Any:
-    return pa.schema(
-        [
-            pa.field("clip_id", pa.string(), nullable=False),
-            pa.field("source_episode_index", pa.int64(), nullable=False),
-            pa.field("skill_id", pa.int64()),
-            pa.field("skill_name", pa.string(), nullable=False),
-            pa.field("start_frame", pa.int64(), nullable=False),
-            pa.field("end_frame", pa.int64(), nullable=False),
-            pa.field("length", pa.int64(), nullable=False),
-            pa.field("quality_score", pa.float32()),
-            pa.field("success_label", pa.bool_()),
-            pa.field("review_status", pa.string(), nullable=False),
-            pa.field("split", pa.string()),
-            pa.field("metadata_json", pa.string(), nullable=False),
-        ]
-    )
 
 
 def _safe_path_name(value: str) -> str:

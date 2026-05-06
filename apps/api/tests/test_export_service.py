@@ -51,6 +51,7 @@ class ExportServiceTest(unittest.TestCase):
             "accepted_exact_frame",
             "rejected_exact_frame",
             "jsonl_phase",
+            "approach",
         }
         for annotation in annotation_store.list("sample-xvla-soft-fold", episode_index=0):
             if annotation.label_value in test_values:
@@ -525,16 +526,32 @@ class ExportServiceTest(unittest.TestCase):
         artifact = manifest["artifacts"]["lance_subset"]
         metadata = json.loads(Path(artifact["files"]["manifest"]).read_text(encoding="utf-8"))
         written_tables = getattr(written_paths, "tables", {})
+        vocabulary_rows = written_tables[str(Path(artifact["files"]["skills"]))]["rows"]
         skill_rows = written_tables[str(Path(artifact["files"]["skill_segments"]))]["rows"]
+        frame_skill_rows = written_tables[str(Path(artifact["files"]["frame_skill_labels"]))]["rows"]
         train_clip_rows = written_tables[str(Path(artifact["files"]["train_skill_clips"]))]["rows"]
 
         self.assertEqual(record.status, JobStatus.succeeded)
         self.assertEqual(metadata["primary_training_table"], "train_skill_clips.lance")
+        self.assertEqual(metadata["training_row_unit"], "skill_clip")
+        self.assertEqual(metadata["source_episode_column"], "source_episode_index")
+        self.assertEqual(metadata["video_frame_offset_column"], "video_frame_offset")
+        self.assertEqual(metadata["skill_vocabulary"]["table"], "skills.lance")
+        self.assertEqual(metadata["total_skills"], 10)
         self.assertEqual(metadata["total_skill_segments"], 1)
+        self.assertEqual(metadata["total_frame_skill_labels"], 5)
         self.assertEqual(metadata["total_train_skill_clips"], 1)
+        self.assertEqual(metadata["clip_export"]["skills"], 10)
         self.assertEqual(metadata["clip_export"]["train_skill_clips"], 1)
+        self.assertEqual(artifact["validation"]["skill_count"], 10)
+        self.assertEqual(artifact["validation"]["frame_skill_label_count"], 5)
         self.assertEqual(artifact["validation"]["train_skill_clip_count"], 1)
+        self.assertEqual(vocabulary_rows[0]["skill_name"], "approach")
         self.assertEqual(skill_rows[0]["clip_id"], skill.annotation_id)
+        self.assertEqual(skill_rows[0]["failure_reason"], None)
+        self.assertEqual(frame_skill_rows[0]["segment_id"], skill.annotation_id)
+        self.assertEqual(frame_skill_rows[0]["frame_index"], 3)
+        self.assertEqual(frame_skill_rows[-1]["frame_index"], 7)
         self.assertEqual(train_clip_rows[0]["clip_id"], skill.annotation_id)
         self.assertEqual(train_clip_rows[0]["source_episode_index"], 0)
         self.assertEqual(train_clip_rows[0]["episode_index"], 0)

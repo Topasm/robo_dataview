@@ -1,7 +1,7 @@
 import { Download, PackageCheck } from "lucide-react";
 import { useState } from "react";
 
-import type { ExportFormat, ExportRecord, JobRecord } from "@/lib/types";
+import type { ExportFormat, ExportRecord, JobRecord, SkillExportOptions } from "@/lib/types";
 
 type ExportStripProps = {
   episodeIndex: number;
@@ -10,6 +10,7 @@ type ExportStripProps = {
   onCreateExport: (
     format?: ExportFormat,
     scope?: "episode" | "split",
+    options?: SkillExportOptions,
   ) => Promise<void>;
   split: string | null;
 };
@@ -90,7 +91,11 @@ export function ExportStrip({
             ) : null}
             {lanceArtifact.materialized ? (
               <span>
-                annotations {lanceArtifact.materialized.annotation_rows ?? 0}
+                skill segments {lanceArtifact.materialized.skill_segment_rows ?? 0} / train clips{" "}
+                {lanceArtifact.materialized.train_skill_clip_rows ?? 0} / annotations{" "}
+                {lanceArtifact.materialized.annotation_current_rows ??
+                  lanceArtifact.materialized.annotation_rows ??
+                  0}
               </span>
             ) : null}
           </div>
@@ -128,7 +133,15 @@ export function ExportStrip({
         <button
           className="text-button primary-export-button"
           disabled={exportJobActive}
-          onClick={() => void onCreateExport("lance", scope)}
+          onClick={() =>
+            void onCreateExport("lance", scope, {
+              clipLabelType: "skill",
+              acceptedClipsOnly: true,
+              materializeSkillClips: true,
+              jitterOffsets: [0],
+              copiesPerClip: 1
+            })
+          }
           type="button"
         >
           <Download size={15} />

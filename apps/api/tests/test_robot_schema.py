@@ -11,6 +11,7 @@ from packages.robot_schema import (
     embeddings_column_names,
     episode_metadata_column_names,
     episode_labels_column_names,
+    frame_skill_labels_column_names,
     build_raw_episodes_pyarrow_schema,
     episodes_column_names,
     frames_column_names,
@@ -18,6 +19,8 @@ from packages.robot_schema import (
     raw_episodes_column_names,
     raw_frames_column_names,
     raw_videos_column_names,
+    skill_segments_column_names,
+    skills_column_names,
     splits_column_names,
     tasks_column_names,
     versions_column_names,
@@ -151,6 +154,24 @@ class RobotSchemaTest(unittest.TestCase):
         self.assertIn("camera_id", cameras_column_names())
         self.assertIn("task_id", tasks_column_names())
         self.assertIn("split", splits_column_names())
+
+    def test_skill_clip_contracts_expose_core_columns(self) -> None:
+        self.assertEqual(
+            skills_column_names(),
+            [
+                "skill_id",
+                "skill_name",
+                "display_label",
+                "start_condition",
+                "end_condition",
+                "mission_section",
+                "color",
+            ],
+        )
+        self.assertIn("clip_id", skill_segments_column_names())
+        self.assertIn("failure_reason", skill_segments_column_names())
+        self.assertIn("segment_id", frame_skill_labels_column_names())
+        self.assertIn("progress_in_skill", frame_skill_labels_column_names())
 
     def test_raw_episode_schema_marks_video_blobs_as_lance_blobs(self) -> None:
         schema = build_raw_episodes_pyarrow_schema(["observation.images.cam_head"])

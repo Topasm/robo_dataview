@@ -9,6 +9,7 @@ import type {
   EpisodeTimeseries,
   ExportFormat,
   ExportRecord,
+  SkillExportOptions,
   FilterPreset,
   FrameListPage,
   FrameRecord,
@@ -822,13 +823,7 @@ export async function createExportJob(
   format: ExportFormat = "lance",
   splits: string[] = [],
   publishUri?: string,
-  options?: {
-    clipLabelType?: string;
-    acceptedClipsOnly?: boolean;
-    materializeSkillClips?: boolean;
-    jitterOffsets?: number[];
-    copiesPerClip?: number;
-  },
+  options?: SkillExportOptions,
 ): Promise<JobRecord> {
   const body: Record<string, unknown> = {
     dataset_id: datasetId,
@@ -838,7 +833,7 @@ export async function createExportJob(
     version_description: `web skill clip ${format} export`,
     clip_label_type: options?.clipLabelType ?? "skill",
     accepted_clips_only: options?.acceptedClipsOnly ?? true,
-    materialize_skill_clips: options?.materializeSkillClips ?? false,
+    materialize_skill_clips: options?.materializeSkillClips ?? format === "lance",
     jitter_offsets: options?.jitterOffsets ?? [0],
     copies_per_clip: options?.copiesPerClip ?? 1
   };

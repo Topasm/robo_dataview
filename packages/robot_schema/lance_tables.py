@@ -175,6 +175,42 @@ TRAIN_SKILL_CLIP_COLUMNS: tuple[ColumnSpec, ...] = (
     *RAW_EPISODES_BASE_COLUMNS,
 )
 
+SKILLS_COLUMNS: tuple[ColumnSpec, ...] = (
+    ColumnSpec("skill_id", "int64", nullable=False),
+    ColumnSpec("skill_name", "string", nullable=False),
+    ColumnSpec("display_label", "string", nullable=False),
+    ColumnSpec("start_condition", "string"),
+    ColumnSpec("end_condition", "string"),
+    ColumnSpec("mission_section", "string"),
+    ColumnSpec("color", "string"),
+)
+
+SKILL_SEGMENTS_COLUMNS: tuple[ColumnSpec, ...] = (
+    ColumnSpec("clip_id", "string", nullable=False),
+    ColumnSpec("source_episode_index", "int64", nullable=False),
+    ColumnSpec("skill_id", "int64"),
+    ColumnSpec("skill_name", "string", nullable=False),
+    ColumnSpec("start_frame", "int64", nullable=False),
+    ColumnSpec("end_frame", "int64", nullable=False),
+    ColumnSpec("length", "int64", nullable=False),
+    ColumnSpec("quality_score", "float32"),
+    ColumnSpec("success_label", "bool"),
+    ColumnSpec("failure_reason", "string"),
+    ColumnSpec("review_status", "string", nullable=False),
+    ColumnSpec("split", "string"),
+    ColumnSpec("metadata_json", "string", nullable=False),
+)
+
+FRAME_SKILL_LABELS_COLUMNS: tuple[ColumnSpec, ...] = (
+    ColumnSpec("episode_index", "int64", nullable=False),
+    ColumnSpec("frame_index", "int64", nullable=False),
+    ColumnSpec("segment_id", "string", nullable=False),
+    ColumnSpec("skill_id", "int64"),
+    ColumnSpec("skill_name", "string", nullable=False),
+    ColumnSpec("progress_in_skill", "float32"),
+    ColumnSpec("review_status", "string", nullable=False),
+)
+
 RAW_FRAMES_COLUMNS: tuple[ColumnSpec, ...] = (
     ColumnSpec("episode_id", "string"),
     ColumnSpec("episode_index", "int64", nullable=False),
@@ -301,6 +337,18 @@ def train_skill_clip_column_names(camera_feature_keys: list[str] | None = None) 
         column.name
         for column in _train_skill_clip_columns(camera_feature_keys=camera_feature_keys)
     ]
+
+
+def skills_column_names() -> list[str]:
+    return [column.name for column in SKILLS_COLUMNS]
+
+
+def skill_segments_column_names() -> list[str]:
+    return [column.name for column in SKILL_SEGMENTS_COLUMNS]
+
+
+def frame_skill_labels_column_names() -> list[str]:
+    return [column.name for column in FRAME_SKILL_LABELS_COLUMNS]
 
 
 def raw_frames_column_names() -> list[str]:
@@ -431,6 +479,24 @@ def build_train_skill_clips_pyarrow_schema(
         _train_skill_clip_columns(camera_feature_keys=camera_feature_keys),
         "train_skill_clips.lance",
     )
+
+
+def build_skills_pyarrow_schema() -> Any:
+    """Return the canonical skill vocabulary table schema."""
+
+    return _build_pyarrow_schema(SKILLS_COLUMNS, "skills.lance")
+
+
+def build_skill_segments_pyarrow_schema() -> Any:
+    """Return the accepted skill segment index table schema."""
+
+    return _build_pyarrow_schema(SKILL_SEGMENTS_COLUMNS, "skill_segments.lance")
+
+
+def build_frame_skill_labels_pyarrow_schema() -> Any:
+    """Return the frame-to-skill materialized label table schema."""
+
+    return _build_pyarrow_schema(FRAME_SKILL_LABELS_COLUMNS, "frame_skill_labels.lance")
 
 
 def build_raw_frames_pyarrow_schema() -> Any:

@@ -1,0 +1,92 @@
+[
+  {
+    "skill_id": 0,
+    "skill_name": "approach",
+    "display_label": "Approach",
+    "start_condition": "arbitrary position",
+    "end_condition": "near target object",
+    "mission_section": "A/C/D",
+    "color": "#4A90D9"
+  },
+  {
+    "skill_id": 1,
+    "skill_name": "grasp_part",
+    "display_label": "Grasp Part",
+    "start_condition": "near target part",
+    "end_condition": "part grasped",
+    "mission_section": "A",
+    "color": "#50C878"
+  },
+  {
+    "skill_id": 2,
+    "skill_name": "grasp_bolt",
+    "display_label": "Grasp Bolt",
+    "start_condition": "near bolt",
+    "end_condition": "bolt grasped",
+    "mission_section": "B",
+    "color": "#8B5CF6"
+  },
+  {
+    "skill_id": 3,
+    "skill_name": "insert_bolt",
+    "display_label": "Insert Bolt",
+    "start_condition": "bolt grasped",
+    "end_condition": "bolt inserted",
+    "mission_section": "B",
+    "color": "#F59E0B"
+  },
+  {
+    "skill_id": 4,
+    "skill_name": "place",
+    "display_label": "Place",
+    "start_condition": "object grasped",
+    "end_condition": "object placed",
+    "mission_section": "A/C/D",
+    "color": "#EF4444"
+  },
+  {
+    "skill_id": 5,
+    "skill_name": "push_button",
+    "display_label": "Push Button",
+    "start_condition": "near button",
+    "end_condition": "button pressed",
+    "mission_section": "C",
+    "color": "#EC4899"
+  },
+  {
+    "skill_id": 6,
+    "skill_name": "grasp_drill",
+    "display_label": "Grasp Drill",
+    "start_condition": "near drill",
+    "end_condition": "drill grasped",
+    "mission_section": "C",
+    "color": "#14B8A6"
+  },
+  {
+    "skill_id": 7,
+    "skill_name": "drill_trigger",
+    "display_label": "Drill Trigger",
+    "start_condition": "drill positioned",
+    "end_condition": "trigger pulled",
+    "mission_section": "C",
+    "color": "#F97316"
+  },
+  {
+    "skill_id": 8,
+    "skill_name": "bimanual_grasp",
+    "display_label": "Bimanual Grasp",
+    "start_condition": "both hands near object",
+    "end_condition": "object controlled by both hands",
+    "mission_section": "D",
+    "color": "#6366F1"
+  },
+  {
+    "skill_id": 9,
+    "skill_name": "insert_tire",
+    "display_label": "Insert Tire",
+    "start_condition": "tire grasped",
+    "end_condition": "tire inserted",
+    "mission_section": "D",
+    "color": "#0EA5E9"
+  }
+]

@@ -54,6 +54,7 @@ import type {
   ReviewStatus,
   SearchResult,
   SegmentAnnotation,
+  SkillExportOptions,
   VlmResponseRecord
 } from "@/lib/types";
 
@@ -1170,17 +1171,25 @@ export function useStudioData() {
   async function handleCreateExport(
     format: ExportFormat = "lance",
     scope: "episode" | "split" = "episode",
+    options?: SkillExportOptions,
   ) {
     const split = selectedEpisode.split || null;
     const splits = scope === "split" && split ? [split] : [];
     const episodeIndices = splits.length > 0 ? [] : [selectedEpisode.episodeIndex];
-    const job = await createExportJob(selectedEpisode.datasetId, episodeIndices, format, splits, undefined, {
-      clipLabelType: SKILL_LABEL_TYPE,
-      acceptedClipsOnly: true,
-      materializeSkillClips: true,
-      jitterOffsets: [0],
-      copiesPerClip: 1
-    });
+    const job = await createExportJob(
+      selectedEpisode.datasetId,
+      episodeIndices,
+      format,
+      splits,
+      undefined,
+      options ?? {
+        clipLabelType: SKILL_LABEL_TYPE,
+        acceptedClipsOnly: true,
+        materializeSkillClips: format === "lance",
+        jitterOffsets: [0],
+        copiesPerClip: 1
+      },
+    );
     setExportJob(job);
     if (TERMINAL_JOB_STATUSES.has(job.status) && job.createdExportId) {
       const record = await fetchExport(job.createdExportId);
