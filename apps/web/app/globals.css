@@ -152,7 +152,7 @@ button:disabled {
 
 .center-column {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) 70px;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   min-width: 0;
 }
 
@@ -173,6 +173,51 @@ button:disabled {
 .panel-section {
   border-bottom: 1px solid var(--border);
   padding: 12px;
+}
+
+.sidebar-details {
+  padding: 0;
+}
+
+.sidebar-details summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  font-weight: 700;
+  justify-content: space-between;
+  list-style: none;
+  min-height: 40px;
+  padding: 0 12px;
+  text-transform: uppercase;
+}
+
+.sidebar-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.sidebar-details summary::before {
+  color: var(--muted);
+  content: "+";
+  margin-right: 7px;
+}
+
+.sidebar-details[open] summary::before {
+  content: "-";
+}
+
+.sidebar-details summary span:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-details > :not(summary) {
+  margin-left: 12px;
+  margin-right: 12px;
+}
+
+.sidebar-details > :last-child {
+  margin-bottom: 12px;
 }
 
 .section-title {
@@ -238,6 +283,46 @@ button:disabled {
 .review-action-bar .text-button.active {
   background: #e7f4f5;
   border-color: #8cc9d0;
+}
+
+.bottom-drawer {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -8px 20px rgb(20 33 38 / 0.08);
+  display: grid;
+  grid-template-rows: 42px minmax(0, 1fr);
+  max-height: min(38vh, 360px);
+  min-height: 180px;
+  overflow: hidden;
+}
+
+.bottom-drawer-header {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  padding: 0 12px;
+}
+
+.bottom-drawer-header .section-title {
+  margin-bottom: 0;
+}
+
+.bottom-drawer-body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.bottom-drawer .episode-table-wrap,
+.bottom-drawer .frame-table-panel,
+.bottom-drawer .export-strip,
+.bottom-drawer .rerun-panel {
+  border: 0;
+  min-height: 100%;
+}
+
+.bottom-drawer .episode-table-wrap {
+  border-left: 0;
 }
 
 .section-actions {

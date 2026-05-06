@@ -1,20 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Database, Settings } from "lucide-react";
 
 import { AnnotationEditor } from "@/features/annotation-editor/annotation-editor";
 import { DatasetBrowser } from "@/features/dataset-browser/dataset-browser";
 import { EpisodeList } from "@/features/dataset-browser/episode-list";
 import { EpisodeViewer } from "@/features/episode-viewer/episode-viewer";
+import { FrameTablePanel } from "@/features/episode-viewer/frame-table-panel";
 import { TimelinePanel } from "@/features/episode-viewer/timeline-panel";
 import { ExportStrip } from "@/features/export-manager/export-strip";
 import { RerunPanel } from "@/features/rerun-viewer/rerun-panel";
 import { SearchFilterBar } from "@/features/search-filter/search-filter-bar";
 import { useStudioData } from "@/lib/use-studio-data";
 
+type DrawerTab = "episodes" | "frames" | "rerun" | "export";
+
 export default function Home() {
-  const [showEpisodeDrawer, setShowEpisodeDrawer] = useState(false);
+  const [activeDrawer, setActiveDrawer] = useState<DrawerTab | null>(null);
   const [showSignals, setShowSignals] = useState(false);
   const {
     annotationHistoryRows,
@@ -72,6 +75,51 @@ export default function Home() {
     handleUpdateSegment,
     handleUpdateReviewStatus
   } = useStudioData();
+  const lastFrame = Math.max(0, selectedEpisode.length - 1);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target;
+      const isTyping =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable);
+      if (isTyping) {
+        return;
+      }
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        handleSelectFrame(Math.max(0, selectedFrameIndex - (event.shiftKey ? 10 : 1)));
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        handleSelectFrame(Math.min(lastFrame, selectedFrameIndex + (event.shiftKey ? 10 : 1)));
+      } else if (event.key.toLowerCase() === "m") {
+        event.preventDefault();
+        void handleUpdateSelectedFrameBadFlag(!(selectedFrameRecord?.isBadFrame ?? false));
+      } else if (event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setActiveDrawer((current) => (current === "frames" ? null : "frames"));
+      } else if (event.key.toLowerCase() === "e") {
+        event.preventDefault();
+        setActiveDrawer((current) => (current === "episodes" ? null : "episodes"));
+      } else if (event.key.toLowerCase() === "r") {
+        event.preventDefault();
+        setActiveDrawer((current) => (current === "rerun" ? null : "rerun"));
+      } else if (event.key.toLowerCase() === "x") {
+        event.preventDefault();
+        setActiveDrawer((current) => (current === "export" ? null : "export"));
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    handleSelectFrame,
+    handleUpdateSelectedFrameBadFlag,
+    lastFrame,
+    selectedFrameIndex,
+    selectedFrameRecord?.isBadFrame
+  ]);
 
   return (
     <div className="studio-shell">
@@ -134,11 +182,18 @@ export default function Home() {
           />
           <div className="review-action-bar">
             <button
-              className={`text-button compact-text-button${showEpisodeDrawer ? " active" : ""}`}
-              onClick={() => setShowEpisodeDrawer((current) => !current)}
+              className={`text-button compact-text-button${activeDrawer === "episodes" ? " active" : ""}`}
+              onClick={() => setActiveDrawer((current) => (current === "episodes" ? null : "episodes"))}
               type="button"
             >
               Episodes ({episodeRows.length})
+            </button>
+            <button
+              className={`text-button compact-text-button${activeDrawer === "frames" ? " active" : ""}`}
+              onClick={() => setActiveDrawer((current) => (current === "frames" ? null : "frames"))}
+              type="button"
+            >
+              Frames
             </button>
             <button
               className={`text-button compact-text-button${showSignals ? " active" : ""}`}
@@ -147,15 +202,21 @@ export default function Home() {
             >
               Signals
             </button>
+            <button
+              className={`text-button compact-text-button${activeDrawer === "rerun" ? " active" : ""}`}
+              onClick={() => setActiveDrawer((current) => (current === "rerun" ? null : "rerun"))}
+              type="button"
+            >
+              Rerun
+            </button>
+            <button
+              className={`text-button compact-text-button${activeDrawer === "export" ? " active" : ""}`}
+              onClick={() => setActiveDrawer((current) => (current === "export" ? null : "export"))}
+              type="button"
+            >
+              Export
+            </button>
           </div>
-          {showEpisodeDrawer ? (
-            <EpisodeList
-              compact
-              episodes={episodeRows}
-              onSelectEpisode={handleSelectEpisode}
-              selectedEpisodeIndex={selectedEpisodeIndex}
-            />
-          ) : null}
           <div className="content-split">
             <div className="viewer-column">
               <EpisodeViewer
@@ -177,33 +238,18 @@ export default function Home() {
                 onUpdateSegment={handleUpdateSegment}
                 selectedFrame={selectedFrameIndex}
               />
-              <RerunPanel
-                job={rerunJob}
-                onCreateSession={handleCreateRerunSession}
-                session={rerunSession}
-                viewerUrl={rerunViewerUrl}
-              />
             </div>
             <AnnotationEditor
               annotationHistory={annotationHistoryRows}
               episodeLabelHistory={episodeLabelHistoryRows}
               annotations={annotationRows}
               episode={selectedEpisode}
-              frameRows={frameRows}
-              frameRowsStatus={frameRowsStatus}
-              frameBrowserLimit={frameBrowserLimit}
-              frameBrowserStart={frameBrowserStart}
-              framePage={framePage}
               onCreateSegment={handleCreateSegment}
               onAssignAnnotation={handleAssignAnnotation}
               onDeleteSegment={handleDeleteSegment}
               onRunVlmLabel={handleRunVlmLabel}
-              onSelectFrame={handleSelectFrame}
               onSplitSegment={handleSplitSegment}
               onUpdateEpisodeLabels={handleUpdateEpisodeLabels}
-              onUpdateFrameBadFlag={handleUpdateFrameBadFlag}
-              onSetFrameBrowserLimit={handleSetFrameBrowserLimit}
-              onSetFrameBrowserStart={handleSetFrameBrowserStart}
               onUpdateSelectedFrameLabel={handleUpdateSelectedFrameLabel}
               onUpdateSelectedFrameBadFlag={handleUpdateSelectedFrameBadFlag}
               onUpdateSegment={handleUpdateSegment}
@@ -216,15 +262,90 @@ export default function Home() {
               vlmResponses={vlmResponses}
             />
           </div>
-          <ExportStrip
-            episodeIndex={selectedEpisode.episodeIndex}
-            exportJob={exportJob}
-            exportRecord={exportRecord}
-            onCreateExport={handleCreateExport}
-            split={selectedEpisode.split}
-          />
+          {activeDrawer ? (
+            <BottomDrawer
+              onClose={() => setActiveDrawer(null)}
+              title={drawerTitle(activeDrawer)}
+            >
+              {activeDrawer === "episodes" ? (
+                <EpisodeList
+                  compact
+                  episodes={episodeRows}
+                  onSelectEpisode={handleSelectEpisode}
+                  selectedEpisodeIndex={selectedEpisodeIndex}
+                />
+              ) : null}
+              {activeDrawer === "frames" ? (
+                <FrameTablePanel
+                  frameCount={framePage?.frameCount ?? selectedEpisode.length}
+                  frameLimit={frameBrowserLimit}
+                  frameStart={frameBrowserStart}
+                  frames={frameRows}
+                  onFrameLimitChange={handleSetFrameBrowserLimit}
+                  onFrameStartChange={handleSetFrameBrowserStart}
+                  onSelectFrame={handleSelectFrame}
+                  onSetBadFrame={handleUpdateFrameBadFlag}
+                  returnedCount={framePage?.returnedCount ?? frameRows.length}
+                  selectedFrame={selectedFrameIndex}
+                  status={frameRowsStatus}
+                />
+              ) : null}
+              {activeDrawer === "rerun" ? (
+                <RerunPanel
+                  job={rerunJob}
+                  onCreateSession={handleCreateRerunSession}
+                  session={rerunSession}
+                  viewerUrl={rerunViewerUrl}
+                />
+              ) : null}
+              {activeDrawer === "export" ? (
+                <ExportStrip
+                  episodeIndex={selectedEpisode.episodeIndex}
+                  exportJob={exportJob}
+                  exportRecord={exportRecord}
+                  onCreateExport={handleCreateExport}
+                  split={selectedEpisode.split}
+                />
+              ) : null}
+            </BottomDrawer>
+          ) : null}
         </div>
       </div>
     </div>
   );
+}
+
+function BottomDrawer({
+  children,
+  onClose,
+  title
+}: {
+  children: ReactNode;
+  onClose: () => void;
+  title: string;
+}) {
+  return (
+    <section className="bottom-drawer">
+      <div className="bottom-drawer-header">
+        <div className="section-title">{title}</div>
+        <button className="text-button compact-text-button" onClick={onClose} type="button">
+          Close
+        </button>
+      </div>
+      <div className="bottom-drawer-body">{children}</div>
+    </section>
+  );
+}
+
+function drawerTitle(tab: DrawerTab): string {
+  if (tab === "episodes") {
+    return "Episodes";
+  }
+  if (tab === "frames") {
+    return "Frame Browser";
+  }
+  if (tab === "rerun") {
+    return "Rerun";
+  }
+  return "Export Training Bundle";
 }

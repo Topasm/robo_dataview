@@ -143,8 +143,11 @@ export function DatasetBrowser({
         </section>
       ) : null}
 
-      <section className="panel-section">
-        <div className="section-title">Review</div>
+      <details className="panel-section sidebar-details">
+        <summary>
+          <span>Review</span>
+          <span>{reviewedPercent}%</span>
+        </summary>
         <div className="progress-row">
           <span>{summary.reviewedCount} reviewed</span>
           <span>{reviewedPercent}%</span>
@@ -158,10 +161,13 @@ export function DatasetBrowser({
           <StatusPill status="rejected" />
           <span>{summary.rejectedCount}</span>
         </div>
-      </section>
+      </details>
 
-      <section className="panel-section">
-        <div className="section-title">Reviewer Queue</div>
+      <details className="panel-section sidebar-details">
+        <summary>
+          <span>Reviewer Queue</span>
+          <span>{pendingRows.length}</span>
+        </summary>
         <div className="review-queue-metrics">
           <Metric label="Pending" value={pendingRows.length.toString()} />
           <Metric label="Mine" value={assignedRows.length.toString()} />
@@ -186,10 +192,13 @@ export function DatasetBrowser({
             ))
           )}
         </div>
-      </section>
+      </details>
 
-      <section className="panel-section">
-        <div className="section-title">Cameras</div>
+      <details className="panel-section sidebar-details">
+        <summary>
+          <span>Cameras</span>
+          <span>{summary.cameraNames.length}</span>
+        </summary>
         <div className="camera-list">
           {summary.cameraNames.map((camera) => (
             <span className="camera-chip" key={camera}>
@@ -197,7 +206,7 @@ export function DatasetBrowser({
             </span>
           ))}
         </div>
-      </section>
+      </details>
     </aside>
   );
 }

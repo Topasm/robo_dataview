@@ -3,11 +3,9 @@ import { Bot, Check, GitBranch, Minus, Plus, Save, Trash2, UserCheck, UserX, X }
 
 import { StatusPill } from "@/components/status-pill";
 import { FrameMetadataPanel } from "@/features/episode-viewer/frame-metadata-panel";
-import { FrameTablePanel } from "@/features/episode-viewer/frame-table-panel";
 import type {
   Episode,
   EpisodeLabelHistoryRecord,
-  FrameListPage,
   FrameRecord,
   JobRecord,
   ReviewStatus,
@@ -39,11 +37,6 @@ type AnnotationEditorProps = {
   annotationHistory: AnnotationHistoryRecord[];
   episodeLabelHistory: EpisodeLabelHistoryRecord[];
   annotations: SegmentAnnotation[];
-  frameBrowserLimit: number;
-  frameBrowserStart: number;
-  framePage: FrameListPage | null;
-  frameRows: FrameRecord[];
-  frameRowsStatus: "idle" | "loading" | "ready" | "error";
   selectedFrame: number;
   selectedFrameRecord: FrameRecord | null;
   selectedFrameStatus: "idle" | "loading" | "ready" | "error";
@@ -56,9 +49,6 @@ type AnnotationEditorProps = {
   onRunVlmLabel: () => Promise<void>;
   onSplitSegment: (annotation: SegmentAnnotation) => Promise<void>;
   onUpdateEpisodeLabels: (draft: EpisodeLabelDraft) => Promise<void>;
-  onSetFrameBrowserLimit: (limit: number) => void;
-  onSetFrameBrowserStart: (startFrame: number) => void;
-  onUpdateFrameBadFlag: (frameIndex: number, isBadFrame: boolean) => Promise<void>;
   onUpdateSelectedFrameLabel: (
     labelType: string,
     labelValue: string,
@@ -67,7 +57,6 @@ type AnnotationEditorProps = {
   onUpdateSelectedFrameBadFlag: (isBadFrame: boolean) => Promise<void>;
   onUpdateSegment: (annotationId: string, draft: AnnotationDraft) => Promise<void>;
   onUpdateReviewStatus: (annotationId: string, status: ReviewStatus) => Promise<void>;
-  onSelectFrame: (frameIndex: number) => void;
 };
 
 export function AnnotationEditor({
@@ -75,11 +64,6 @@ export function AnnotationEditor({
   annotationHistory,
   episodeLabelHistory,
   annotations,
-  frameBrowserLimit,
-  frameBrowserStart,
-  framePage,
-  frameRows,
-  frameRowsStatus,
   selectedFrame,
   selectedFrameRecord,
   selectedFrameStatus,
@@ -92,14 +76,10 @@ export function AnnotationEditor({
   onRunVlmLabel,
   onSplitSegment,
   onUpdateEpisodeLabels,
-  onSetFrameBrowserLimit,
-  onSetFrameBrowserStart,
-  onUpdateFrameBadFlag,
   onUpdateSelectedFrameLabel,
   onUpdateSelectedFrameBadFlag,
   onUpdateSegment,
-  onUpdateReviewStatus,
-  onSelectFrame
+  onUpdateReviewStatus
 }: AnnotationEditorProps) {
   const [episodeDraft, setEpisodeDraft] = useState<EpisodeLabelDraft>(() => toEpisodeDraft(episode));
   const [draft, setDraft] = useState<AnnotationDraft>({
@@ -429,27 +409,6 @@ export function AnnotationEditor({
         status={selectedFrameStatus}
       />
 
-      <PanelDisclosure
-        meta={`f${frameBrowserStart}-${Math.min(
-          framePage?.frameCount ? framePage.frameCount - 1 : episode.length - 1,
-          frameBrowserStart + frameBrowserLimit - 1
-        )}`}
-        title="Frame Browser"
-      >
-        <FrameTablePanel
-          frameCount={framePage?.frameCount ?? episode.length}
-          frameLimit={frameBrowserLimit}
-          frameStart={frameBrowserStart}
-          frames={frameRows}
-          onFrameLimitChange={onSetFrameBrowserLimit}
-          onFrameStartChange={onSetFrameBrowserStart}
-          onSelectFrame={onSelectFrame}
-          onSetBadFrame={onUpdateFrameBadFlag}
-          returnedCount={framePage?.returnedCount ?? frameRows.length}
-          selectedFrame={selectedFrame}
-          status={frameRowsStatus}
-        />
-      </PanelDisclosure>
         </>
       ) : null}
 
