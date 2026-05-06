@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Bot, Check, GitBranch, Minus, Plus, Save, Trash2, UserCheck, UserX, X } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
@@ -397,22 +397,32 @@ export function AnnotationEditor({
         status={selectedFrameStatus}
       />
 
-      <FrameTablePanel
-        frameCount={framePage?.frameCount ?? episode.length}
-        frameLimit={frameBrowserLimit}
-        frameStart={frameBrowserStart}
-        frames={frameRows}
-        onFrameLimitChange={onSetFrameBrowserLimit}
-        onFrameStartChange={onSetFrameBrowserStart}
-        onSelectFrame={onSelectFrame}
-        onSetBadFrame={onUpdateFrameBadFlag}
-        returnedCount={framePage?.returnedCount ?? frameRows.length}
-        selectedFrame={selectedFrame}
-        status={frameRowsStatus}
-      />
+      <PanelDisclosure
+        meta={`f${frameBrowserStart}-${Math.min(
+          framePage?.frameCount ? framePage.frameCount - 1 : episode.length - 1,
+          frameBrowserStart + frameBrowserLimit - 1
+        )}`}
+        title="Frame Browser"
+      >
+        <FrameTablePanel
+          frameCount={framePage?.frameCount ?? episode.length}
+          frameLimit={frameBrowserLimit}
+          frameStart={frameBrowserStart}
+          frames={frameRows}
+          onFrameLimitChange={onSetFrameBrowserLimit}
+          onFrameStartChange={onSetFrameBrowserStart}
+          onSelectFrame={onSelectFrame}
+          onSetBadFrame={onUpdateFrameBadFlag}
+          returnedCount={framePage?.returnedCount ?? frameRows.length}
+          selectedFrame={selectedFrame}
+          status={frameRowsStatus}
+        />
+      </PanelDisclosure>
 
-      <section className="panel-section">
-        <div className="section-title">Subtask Coverage</div>
+      <PanelDisclosure
+        meta={`${subtaskSummary.coveragePercent.toFixed(0)}%`}
+        title="Subtask Coverage"
+      >
         <div className="subtask-summary-grid">
           <div className="metric compact-metric">
             <span>Coverage</span>
@@ -451,10 +461,12 @@ export function AnnotationEditor({
             ))
           )}
         </div>
-      </section>
+      </PanelDisclosure>
 
-      <section className="panel-section">
-        <div className="section-title">AI Proposals</div>
+      <PanelDisclosure
+        meta={generatedProposals.length > 0 ? `${generatedProposals.length} pending` : "none"}
+        title="AI Proposals"
+      >
         <button
           className="text-button secondary-text-button vlm-run-button"
           disabled={isRunningVlm || isVlmJobActive}
@@ -572,10 +584,9 @@ export function AnnotationEditor({
             ))
           )}
         </div>
-      </section>
+      </PanelDisclosure>
 
-      <section className="panel-section">
-        <div className="section-title">New Segment</div>
+      <PanelDisclosure title="New Segment">
         <div className="segment-form">
           <label>
             Type
@@ -629,10 +640,13 @@ export function AnnotationEditor({
             Add
           </button>
         </div>
-      </section>
+      </PanelDisclosure>
 
-      <section className="panel-section">
-        <div className="section-title">Segments</div>
+      <PanelDisclosure
+        defaultOpen={annotations.length > 0}
+        meta={annotations.length.toString()}
+        title="Segments"
+      >
         <div className="review-action-grid">
           <button
             className="text-button compact-text-button"
@@ -763,10 +777,9 @@ export function AnnotationEditor({
             </div>
           ))}
         </div>
-      </section>
+      </PanelDisclosure>
 
-      <section className="panel-section">
-        <div className="section-title">History</div>
+      <PanelDisclosure meta={recentHistory.length.toString()} title="History">
         <div className="history-list">
           {recentHistory.length === 0 ? (
             <div className="empty-state compact-empty-state">No annotation history.</div>
@@ -787,10 +800,9 @@ export function AnnotationEditor({
             ))
           )}
         </div>
-      </section>
+      </PanelDisclosure>
 
-      <section className="panel-section">
-        <div className="section-title">Episode label history</div>
+      <PanelDisclosure meta={recentLabelHistory.length.toString()} title="Episode Label History">
         <div className="history-list">
           {recentLabelHistory.length === 0 ? (
             <div className="empty-state compact-empty-state">No label edits yet.</div>
@@ -811,8 +823,30 @@ export function AnnotationEditor({
             ))
           )}
         </div>
-      </section>
+      </PanelDisclosure>
     </aside>
+  );
+}
+
+function PanelDisclosure({
+  children,
+  defaultOpen = false,
+  meta,
+  title
+}: {
+  children: ReactNode;
+  defaultOpen?: boolean;
+  meta?: string;
+  title: string;
+}) {
+  return (
+    <details className="panel-section panel-disclosure" open={defaultOpen}>
+      <summary>
+        <span>{title}</span>
+        {meta ? <span className="disclosure-meta">{meta}</span> : null}
+      </summary>
+      <div className="panel-disclosure-body">{children}</div>
+    </details>
   );
 }
 

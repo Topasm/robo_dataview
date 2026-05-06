@@ -129,6 +129,12 @@ export default function Home() {
             onSemanticSearch={handleSemanticSearch}
             results={searchResults}
           />
+          <EpisodeList
+            compact
+            episodes={episodeRows}
+            onSelectEpisode={handleSelectEpisode}
+            selectedEpisodeIndex={selectedEpisodeIndex}
+          />
           <div className="content-split">
             <div className="viewer-column">
               <EpisodeViewer
@@ -195,11 +201,6 @@ export default function Home() {
             split={selectedEpisode.split}
           />
         </div>
-        <EpisodeList
-          episodes={episodeRows}
-          onSelectEpisode={handleSelectEpisode}
-          selectedEpisodeIndex={selectedEpisodeIndex}
-        />
       </div>
     </div>
   );

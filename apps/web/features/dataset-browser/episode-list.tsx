@@ -9,15 +9,17 @@ type EpisodeListProps = {
   episodes: Episode[];
   selectedEpisodeIndex: number;
   onSelectEpisode: (episodeIndex: number) => void;
+  compact?: boolean;
 };
 
 export function EpisodeList({
   episodes,
   selectedEpisodeIndex,
-  onSelectEpisode
+  onSelectEpisode,
+  compact = false
 }: EpisodeListProps) {
   return (
-    <section className="episode-table-wrap">
+    <section className={`episode-table-wrap${compact ? " episode-table-compact" : ""}`}>
       <div className="table-toolbar">
         <div className="section-title">Episodes</div>
         <button className="icon-button" title="Sort episodes" type="button">

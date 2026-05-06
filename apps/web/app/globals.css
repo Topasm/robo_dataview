@@ -108,7 +108,7 @@ button:disabled {
 
 .workspace {
   display: grid;
-  grid-template-columns: 238px minmax(620px, 1fr) 520px;
+  grid-template-columns: 238px minmax(760px, 1fr);
   min-height: 0;
 }
 
@@ -152,19 +152,19 @@ button:disabled {
 
 .center-column {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) 70px;
+  grid-template-rows: auto auto minmax(0, 1fr) 70px;
   min-width: 0;
 }
 
 .content-split {
   display: grid;
-  grid-template-columns: minmax(480px, 1fr) 330px;
+  grid-template-columns: minmax(560px, 1fr) 390px;
   min-height: 0;
 }
 
 .viewer-column {
   display: grid;
-  grid-template-rows: minmax(440px, 1fr) auto auto;
+  grid-template-rows: minmax(420px, 1fr) auto auto;
   min-height: 0;
   min-width: 0;
   overflow: auto;
@@ -172,7 +172,7 @@ button:disabled {
 
 .panel-section {
   border-bottom: 1px solid var(--border);
-  padding: 14px;
+  padding: 12px;
 }
 
 .section-title {
@@ -526,7 +526,7 @@ button:disabled {
 }
 
 .typed-filter-builder {
-  align-items: start;
+  align-items: flex-start;
   display: grid;
   gap: 10px;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -692,7 +692,8 @@ button:disabled {
 }
 
 .camera-preview.layout-focus {
-  grid-template-columns: minmax(0, 1fr) 220px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
 }
 
 .camera-preview.layout-grid {
@@ -851,11 +852,12 @@ button:disabled {
 }
 
 .camera-selector {
-  align-content: start;
-  display: grid;
+  align-content: flex-start;
+  display: flex;
+  flex-wrap: wrap;
   gap: 7px;
   min-height: 0;
-  overflow: auto;
+  overflow: visible;
 }
 
 .camera-select-button {
@@ -864,9 +866,10 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text);
-  display: grid;
+  display: inline-grid;
   gap: 6px;
   grid-template-columns: minmax(0, 1fr) auto;
+  flex: 1 1 190px;
   min-height: 36px;
   padding: 6px 8px;
   text-align: left;
@@ -1375,6 +1378,77 @@ button:disabled {
 
 .right-panel {
   border-left: 1px solid var(--border);
+}
+
+.panel-disclosure {
+  padding: 0;
+}
+
+.panel-disclosure summary {
+  align-items: center;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 8px;
+  justify-content: space-between;
+  letter-spacing: 0;
+  list-style: none;
+  min-height: 42px;
+  padding: 0 12px;
+  text-transform: uppercase;
+}
+
+.panel-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.panel-disclosure summary::before {
+  color: var(--muted);
+  content: "+";
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 700;
+  width: 12px;
+}
+
+.panel-disclosure[open] summary::before {
+  content: "-";
+}
+
+.panel-disclosure summary span:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.disclosure-meta {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 7px;
+  text-transform: none;
+}
+
+.panel-disclosure-body {
+  border-top: 1px solid var(--border);
+  padding: 12px;
+}
+
+.panel-disclosure .frame-table-panel {
+  border-bottom: 0;
+  padding: 0;
+}
+
+.panel-disclosure .frame-table-panel .section-title {
+  display: none;
 }
 
 .form-grid {
@@ -1916,7 +1990,7 @@ textarea {
   border: 1px solid var(--border);
   border-radius: 7px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-top: 12px;
   padding: 3px;
 }
@@ -1995,6 +2069,28 @@ textarea {
 
 .episode-table {
   display: grid;
+}
+
+.episode-table-compact {
+  border-bottom: 1px solid var(--border);
+  border-left: 0;
+  border-right: 0;
+  max-height: 150px;
+}
+
+.episode-table-compact .table-toolbar {
+  height: 34px;
+  padding: 0 12px;
+}
+
+.episode-table-compact .episode-table {
+  max-height: 116px;
+  overflow: auto;
+}
+
+.episode-table-compact .episode-row {
+  grid-template-columns: 76px 48px 64px 96px 70px 70px;
+  min-height: 34px;
 }
 
 .episode-row {
@@ -2105,10 +2201,6 @@ textarea {
 
   .workspace {
     grid-template-columns: 220px minmax(520px, 1fr);
-  }
-
-  .episode-table-wrap {
-    display: none;
   }
 
   .content-split {
