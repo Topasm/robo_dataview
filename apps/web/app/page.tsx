@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Database, Settings } from "lucide-react";
 
 import { AnnotationEditor } from "@/features/annotation-editor/annotation-editor";
@@ -13,6 +14,8 @@ import { SearchFilterBar } from "@/features/search-filter/search-filter-bar";
 import { useStudioData } from "@/lib/use-studio-data";
 
 export default function Home() {
+  const [showEpisodeDrawer, setShowEpisodeDrawer] = useState(false);
+  const [showSignals, setShowSignals] = useState(false);
   const {
     annotationHistoryRows,
     episodeLabelHistoryRows,
@@ -129,12 +132,30 @@ export default function Home() {
             onSemanticSearch={handleSemanticSearch}
             results={searchResults}
           />
-          <EpisodeList
-            compact
-            episodes={episodeRows}
-            onSelectEpisode={handleSelectEpisode}
-            selectedEpisodeIndex={selectedEpisodeIndex}
-          />
+          <div className="review-action-bar">
+            <button
+              className={`text-button compact-text-button${showEpisodeDrawer ? " active" : ""}`}
+              onClick={() => setShowEpisodeDrawer((current) => !current)}
+              type="button"
+            >
+              Episodes ({episodeRows.length})
+            </button>
+            <button
+              className={`text-button compact-text-button${showSignals ? " active" : ""}`}
+              onClick={() => setShowSignals((current) => !current)}
+              type="button"
+            >
+              Signals
+            </button>
+          </div>
+          {showEpisodeDrawer ? (
+            <EpisodeList
+              compact
+              episodes={episodeRows}
+              onSelectEpisode={handleSelectEpisode}
+              selectedEpisodeIndex={selectedEpisodeIndex}
+            />
+          ) : null}
           <div className="content-split">
             <div className="viewer-column">
               <EpisodeViewer
@@ -142,6 +163,8 @@ export default function Home() {
                 episode={selectedEpisode}
                 onFrameChange={handleSelectFrame}
                 selectedFrame={selectedFrameIndex}
+                onToggleSignals={() => setShowSignals((current) => !current)}
+                showSignals={showSignals}
               />
               <TimelinePanel
                 annotations={annotationRows}

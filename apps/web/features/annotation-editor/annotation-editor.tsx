@@ -32,6 +32,8 @@ type EpisodeLabelDraft = {
   reviewStatus: ReviewStatus;
 };
 
+type InspectorTab = "frame" | "episode" | "segments";
+
 type AnnotationEditorProps = {
   episode: Episode;
   annotationHistory: AnnotationHistoryRecord[];
@@ -111,6 +113,7 @@ export function AnnotationEditor({
   const [isSaving, setIsSaving] = useState(false);
   const [isBulkReviewing, setIsBulkReviewing] = useState(false);
   const [isRunningVlm, setIsRunningVlm] = useState(false);
+  const [activeTab, setActiveTab] = useState<InspectorTab>("frame");
   const generatedProposals = annotations
     .filter(
       (annotation) =>
@@ -276,7 +279,32 @@ export function AnnotationEditor({
   }
 
   return (
-    <aside className="right-panel">
+    <aside className="right-panel inspector-panel">
+      <div className="inspector-tabs" role="tablist" aria-label="Inspector">
+        <button
+          className={activeTab === "frame" ? "active" : ""}
+          onClick={() => setActiveTab("frame")}
+          type="button"
+        >
+          Frame
+        </button>
+        <button
+          className={activeTab === "episode" ? "active" : ""}
+          onClick={() => setActiveTab("episode")}
+          type="button"
+        >
+          Episode
+        </button>
+        <button
+          className={activeTab === "segments" ? "active" : ""}
+          onClick={() => setActiveTab("segments")}
+          type="button"
+        >
+          Segments
+        </button>
+      </div>
+      {activeTab === "episode" ? (
+        <>
       <section className="panel-section">
         <div className="section-title">Episode Labels</div>
         <div className="form-grid">
@@ -388,7 +416,11 @@ export function AnnotationEditor({
           Save labels
         </button>
       </section>
+        </>
+      ) : null}
 
+      {activeTab === "frame" ? (
+        <>
       <FrameMetadataPanel
         frame={selectedFrameRecord}
         onSetBadFrame={onUpdateSelectedFrameBadFlag}
@@ -418,7 +450,11 @@ export function AnnotationEditor({
           status={frameRowsStatus}
         />
       </PanelDisclosure>
+        </>
+      ) : null}
 
+      {activeTab === "segments" ? (
+        <>
       <PanelDisclosure
         meta={`${subtaskSummary.coveragePercent.toFixed(0)}%`}
         title="Subtask Coverage"
@@ -824,6 +860,8 @@ export function AnnotationEditor({
           )}
         </div>
       </PanelDisclosure>
+        </>
+      ) : null}
     </aside>
   );
 }

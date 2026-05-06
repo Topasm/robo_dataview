@@ -9,6 +9,7 @@ import {
   type ReactNode
 } from "react";
 import {
+  Activity,
   AlertTriangle,
   Camera,
   Grid2x2,
@@ -30,6 +31,8 @@ type EpisodeViewerProps = {
   episode: Episode;
   onFrameChange: (frameIndex: number) => void;
   selectedFrame: number;
+  onToggleSignals?: () => void;
+  showSignals?: boolean;
 };
 
 type CameraLayout = "focus" | "grid";
@@ -44,7 +47,9 @@ export function EpisodeViewer({
   annotations,
   episode,
   onFrameChange,
-  selectedFrame
+  selectedFrame,
+  onToggleSignals,
+  showSignals = false
 }: EpisodeViewerProps) {
   const cameraNames = episode.cameraNames;
   const fps = episode.fps > 0 ? episode.fps : 20;
@@ -246,6 +251,16 @@ export function EpisodeViewer({
           </div>
         </div>
         <div className="toolbar-actions">
+          {onToggleSignals ? (
+            <button
+              className={`icon-button${showSignals ? " active" : ""}`}
+              onClick={onToggleSignals}
+              title={showSignals ? "Hide state/action signals" : "Show state/action signals"}
+              type="button"
+            >
+              <Activity size={16} />
+            </button>
+          ) : null}
           <div className="layout-toggle" role="group" aria-label="Camera layout">
             <button
               className={`icon-button${layout === "focus" ? " active" : ""}`}
@@ -364,46 +379,48 @@ export function EpisodeViewer({
         </span>
       </section>
 
-      <section className="state-action-panel">
-        <SignalPlot
-          annotations={annotations}
-          channel={stateChannel}
-          color="var(--accent)"
-          dim={timeseries?.stateDim ?? null}
-          frameCount={frameCount}
-          markerFrame={currentFrame}
-          onChannelChange={setStateChannel}
-          status={timeseriesStatus}
-          title="State"
-          vectorValues={timeseries?.stateValues ?? null}
-          normValues={timeseries?.stateNorms ?? null}
-          valueIndices={timeseries?.sampleIndices ?? null}
-        />
-        <SignalPlot
-          annotations={annotations}
-          channel={actionChannel}
-          color="var(--blue)"
-          dim={timeseries?.actionDim ?? null}
-          frameCount={frameCount}
-          markerFrame={currentFrame}
-          onChannelChange={setActionChannel}
-          status={timeseriesStatus}
-          title="Action"
-          vectorValues={timeseries?.actionValues ?? null}
-          normValues={timeseries?.actionNorms ?? null}
-          valueIndices={timeseries?.sampleIndices ?? null}
-        />
-        <div className="state-action-meta">
-          <span>{frameCount.toLocaleString()} frames</span>
-          <span>
-            {timeseriesStatus === "error"
-              ? "timeseries unavailable"
-              : timeseriesStatus === "loading"
-                ? "loading timeseries"
-                : `${timeseries?.sampleCount ?? 0} samples`}
-          </span>
-        </div>
-      </section>
+      {showSignals ? (
+        <section className="state-action-panel">
+          <SignalPlot
+            annotations={annotations}
+            channel={stateChannel}
+            color="var(--accent)"
+            dim={timeseries?.stateDim ?? null}
+            frameCount={frameCount}
+            markerFrame={currentFrame}
+            onChannelChange={setStateChannel}
+            status={timeseriesStatus}
+            title="State"
+            vectorValues={timeseries?.stateValues ?? null}
+            normValues={timeseries?.stateNorms ?? null}
+            valueIndices={timeseries?.sampleIndices ?? null}
+          />
+          <SignalPlot
+            annotations={annotations}
+            channel={actionChannel}
+            color="var(--blue)"
+            dim={timeseries?.actionDim ?? null}
+            frameCount={frameCount}
+            markerFrame={currentFrame}
+            onChannelChange={setActionChannel}
+            status={timeseriesStatus}
+            title="Action"
+            vectorValues={timeseries?.actionValues ?? null}
+            normValues={timeseries?.actionNorms ?? null}
+            valueIndices={timeseries?.sampleIndices ?? null}
+          />
+          <div className="state-action-meta">
+            <span>{frameCount.toLocaleString()} frames</span>
+            <span>
+              {timeseriesStatus === "error"
+                ? "timeseries unavailable"
+                : timeseriesStatus === "loading"
+                  ? "loading timeseries"
+                  : `${timeseries?.sampleCount ?? 0} samples`}
+            </span>
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }
@@ -452,9 +469,24 @@ function FocusCameras({
     <>
       <div className="active-camera-stage">
         <div className="camera-pane-top">
-          <span className="camera-name" title={activeCamera}>
-            {activeCamera}
-          </span>
+          <div className="camera-tabs" aria-label="Camera selection">
+            {cameraNames.map((camera) => {
+              const isActive = camera === activeCamera;
+              const status = videoStatus[camera] ?? "idle";
+              return (
+                <button
+                  className={`camera-tab${isActive ? " active" : ""}`}
+                  key={camera}
+                  onClick={() => onSelectCamera(camera)}
+                  title={camera}
+                  type="button"
+                >
+                  <span>{shortCameraName(camera)}</span>
+                  <span className={`camera-tab-dot camera-status-${status}`} />
+                </button>
+              );
+            })}
+          </div>
           <span className="camera-count">
             <Camera size={15} />
             {cameraNames.length}
@@ -474,24 +506,6 @@ function FocusCameras({
             />
           ))}
         </div>
-      </div>
-      <div className="camera-selector" aria-label="Camera selection">
-        {cameraNames.map((camera) => {
-          const isActive = camera === activeCamera;
-          const status = videoStatus[camera] ?? "idle";
-          return (
-            <button
-              className={`camera-select-button${isActive ? " active" : ""}`}
-              key={camera}
-              onClick={() => onSelectCamera(camera)}
-              title={camera}
-              type="button"
-            >
-              <span className="camera-select-name">{camera}</span>
-              <span className={`camera-select-status camera-status-${status}`}>{status}</span>
-            </button>
-          );
-        })}
       </div>
     </>
   );
@@ -873,4 +887,11 @@ function formatNumber(value: number) {
 
 function formatMaybeNumber(value: number | null) {
   return value === null ? "—" : formatNumber(value);
+}
+
+function shortCameraName(name: string): string {
+  return name
+    .replace(/^observation\.images\./, "")
+    .replace(/^observation_images_/, "")
+    .replace(/^camera_/, "");
 }

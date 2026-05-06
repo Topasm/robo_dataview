@@ -108,7 +108,7 @@ button:disabled {
 
 .workspace {
   display: grid;
-  grid-template-columns: 238px minmax(760px, 1fr);
+  grid-template-columns: 220px minmax(760px, 1fr);
   min-height: 0;
 }
 
@@ -158,16 +158,16 @@ button:disabled {
 
 .content-split {
   display: grid;
-  grid-template-columns: minmax(560px, 1fr) 390px;
+  grid-template-columns: minmax(560px, 1fr) clamp(320px, 22vw, 370px);
   min-height: 0;
 }
 
 .viewer-column {
   display: grid;
-  grid-template-rows: minmax(420px, 1fr) auto auto;
+  grid-template-rows: minmax(360px, 1fr) auto auto;
   min-height: 0;
   min-width: 0;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .panel-section {
@@ -223,6 +223,21 @@ button:disabled {
 .segment-actions {
   display: flex;
   gap: 6px;
+}
+
+.review-action-bar {
+  align-items: center;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 6px;
+  min-height: 38px;
+  padding: 6px 10px;
+}
+
+.review-action-bar .text-button.active {
+  background: #e7f4f5;
+  border-color: #8cc9d0;
 }
 
 .section-actions {
@@ -670,19 +685,20 @@ button:disabled {
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   display: grid;
-  grid-template-rows: 58px minmax(0, 1fr) 48px 152px;
+  grid-template-rows: auto minmax(300px, 1fr) auto;
   min-height: 0;
-  padding: 12px;
+  padding: 8px 10px;
 }
 
 .viewer-toolbar {
   justify-content: space-between;
+  min-height: 42px;
 }
 
 .viewer-title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .camera-preview {
@@ -693,7 +709,7 @@ button:disabled {
 
 .camera-preview.layout-focus {
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .camera-preview.layout-grid {
@@ -765,6 +781,8 @@ button:disabled {
   border-radius: 8px;
   display: grid;
   grid-template-rows: 34px minmax(0, 1fr);
+  max-height: calc(100vh - 260px);
+  min-height: 320px;
   min-width: 0;
   overflow: hidden;
   box-shadow: var(--shadow);
@@ -777,6 +795,48 @@ button:disabled {
   gap: 8px;
   justify-content: space-between;
   padding: 0 10px;
+}
+
+.camera-tabs {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.camera-tab {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 11px;
+  gap: 6px;
+  height: 24px;
+  max-width: 150px;
+  padding: 0 8px;
+}
+
+.camera-tab span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.camera-tab.active {
+  background: #e7f4f5;
+  border-color: #8cc9d0;
+}
+
+.camera-tab-dot {
+  border-radius: 50%;
+  flex: 0 0 auto;
+  height: 7px;
+  width: 7px;
 }
 
 .camera-name {
@@ -802,7 +862,9 @@ button:disabled {
     #24343a;
   display: flex;
   justify-content: center;
+  aspect-ratio: 16 / 9;
   min-height: 180px;
+  max-height: calc(100vh - 300px);
   overflow: hidden;
   position: relative;
 }
@@ -915,7 +977,8 @@ button:disabled {
 
 .playback-bar {
   gap: 8px;
-  padding-top: 10px;
+  min-height: 44px;
+  padding-top: 8px;
 }
 
 .scrubber-input {
@@ -982,7 +1045,8 @@ button:disabled {
   display: grid;
   gap: 10px;
   grid-template-columns: 1fr 1fr;
-  padding-top: 10px;
+  max-height: 170px;
+  padding-top: 8px;
 }
 
 .plot-panel {
@@ -1378,6 +1442,40 @@ button:disabled {
 
 .right-panel {
   border-left: 1px solid var(--border);
+}
+
+.inspector-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.inspector-tabs {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+
+.inspector-tabs button {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  height: 30px;
+}
+
+.inspector-tabs button.active,
+.inspector-tabs button:hover {
+  background: #e7f4f5;
+  border-color: #8cc9d0;
+  color: var(--text);
 }
 
 .panel-disclosure {
