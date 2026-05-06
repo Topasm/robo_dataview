@@ -9,6 +9,7 @@
     "dev:web": "npm --workspace apps/web run dev",
     "build:web": "npm --workspace apps/web run build",
     "lint:web": "npm --workspace apps/web run lint",
-    "dev:api": "uvicorn apps.api.main:app --reload"
+    "dev:api": "uvicorn apps.api.main:app --reload",
+    "generate:skills": "python3 scripts/generate_skill_vocabulary_ts.py"
   }
 }

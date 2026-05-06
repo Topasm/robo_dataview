@@ -135,11 +135,16 @@ The repository has moved past a pure skeleton. The current MVP path can:
    routing, optional local Ollama-compatible model routing,
    raw-response/keyframe artifact persistence, optional keyframe cache
    artifact publishing, and a generated-label review queue.
-9. Export selected episodes as a LeRobot v3-oriented snapshot with metadata,
+9. Export selected trajectories as a LeRobot v3-oriented snapshot with metadata,
    frame JSONL, optional Parquet, available camera MP4 artifacts, validation,
-   and version lineage, or as a Lance subset when optional `pyarrow` and
-   `lance` dependencies are installed. Lightweight JSONL caption and VLA-style
-   trajectory exports are also available. `format=hf_dataset` writes a
+   and version lineage, or as a Lance Training Bundle when optional `pyarrow`
+   and `lance` dependencies are installed. Lance skill exports materialize
+   `skills.lance`, `skill_segments.lance`, `frame_skill_labels.lance`, and
+   `train_skill_clips.lance`; in `train_skill_clips.lance`, `episode_index` is
+   the skill-clip training row index, `source_episode_index` points back to the
+   original full trajectory, and `video_frame_offset` maps local clip frames to
+   source video frames. Lightweight JSONL caption and VLA-style trajectory
+   exports are also available. `format=hf_dataset` writes a
    frame-level Hugging Face `Dataset.save_to_disk()` artifact when optional
    export dependencies are installed. `publish_uri` can copy the finished export
    directory to a local or `fsspec` destination. The manual official-dependency workflow

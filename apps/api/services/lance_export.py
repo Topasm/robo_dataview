@@ -112,6 +112,10 @@ def write_lance_subset(
         clip_label_type=clip_label_type,
         accepted_only=accepted_only,
     )
+    clip_export_warnings = [
+        *_skill_segment_overlap_warnings(skill_segment_rows),
+        *_unsupported_clip_augmentation_warnings(clip_export),
+    ]
     skill_rows = _skill_vocabulary_rows()
     frame_skill_label_rows = (
         _frame_skill_label_rows(skill_segment_rows)
@@ -320,6 +324,9 @@ def write_lance_subset(
             "skills": len(skill_rows) if materialize_skill_clips else 0,
             "frame_skill_labels": len(frame_skill_label_rows),
             "train_skill_clips": len(train_skill_clip_rows),
+            "jitter_offsets_applied": [0],
+            "copies_per_clip_applied": 1,
+            "warnings": clip_export_warnings,
         },
         "tables": {name: path.name for name, path in table_paths.items()},
         "canonical_tables": {name: path.name for name, path in canonical_paths.items()},
@@ -451,6 +458,13 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
             warnings.append("frame_table observation_state dimensions are not consistent")
         if frame_contract.get("action_dim_consistent") is False:
             warnings.append("frame_table action dimensions are not consistent")
+    clip_export = metadata.get("clip_export") if isinstance(metadata, dict) else None
+    if isinstance(clip_export, dict):
+        warnings.extend(
+            str(warning)
+            for warning in clip_export.get("warnings", [])
+            if warning
+        )
 
     return {
         "metadata_ok": not errors,
@@ -730,6 +744,49 @@ def _frame_skill_label_rows(skill_segment_rows: list[dict[str, Any]]) -> list[di
                 }
             )
     return rows
+
+
+def _skill_segment_overlap_warnings(skill_segment_rows: list[dict[str, Any]]) -> list[str]:
+    warnings: list[str] = []
+    by_episode: dict[int, list[dict[str, Any]]] = {}
+    for segment in skill_segment_rows:
+        by_episode.setdefault(int(segment["source_episode_index"]), []).append(segment)
+    for episode_index, segments in by_episode.items():
+        ordered = sorted(
+            segments,
+            key=lambda row: (int(row["start_frame"]), int(row["end_frame"]), str(row["clip_id"])),
+        )
+        previous: dict[str, Any] | None = None
+        for segment in ordered:
+            if previous is not None and int(segment["start_frame"]) <= int(previous["end_frame"]):
+                warnings.append(
+                    "overlapping accepted skill segments in episode "
+                    f"{episode_index}: {previous['clip_id']} "
+                    f"({previous['start_frame']}-{previous['end_frame']}) overlaps "
+                    f"{segment['clip_id']} ({segment['start_frame']}-{segment['end_frame']})"
+                )
+            if previous is None or int(segment["end_frame"]) > int(previous["end_frame"]):
+                previous = segment
+    return warnings
+
+
+def _unsupported_clip_augmentation_warnings(clip_export: dict[str, Any]) -> list[str]:
+    jitter_offsets = clip_export.get("jitter_offsets") or [0]
+    copies_per_clip = int(clip_export.get("copies_per_clip") or 1)
+    try:
+        offsets = [int(offset) for offset in jitter_offsets]
+    except (TypeError, ValueError):
+        offsets = [0]
+    warnings: list[str] = []
+    if offsets != [0]:
+        warnings.append(
+            "non-zero jitter_offsets are not materialized yet; exported skill clips use [0]"
+        )
+    if copies_per_clip != 1:
+        warnings.append(
+            "copies_per_clip is not materialized yet; exported skill clips use one copy"
+        )
+    return warnings
 
 
 def _train_skill_clip_rows(

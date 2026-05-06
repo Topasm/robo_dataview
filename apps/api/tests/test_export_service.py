@@ -52,6 +52,7 @@ class ExportServiceTest(unittest.TestCase):
             "rejected_exact_frame",
             "jsonl_phase",
             "approach",
+            "grasp_part",
         }
         for annotation in annotation_store.list("sample-xvla-soft-fold", episode_index=0):
             if annotation.label_value in test_values:
@@ -543,6 +544,9 @@ class ExportServiceTest(unittest.TestCase):
         self.assertEqual(metadata["total_train_skill_clips"], 1)
         self.assertEqual(metadata["clip_export"]["skills"], 10)
         self.assertEqual(metadata["clip_export"]["train_skill_clips"], 1)
+        self.assertEqual(metadata["clip_export"]["jitter_offsets_applied"], [0])
+        self.assertEqual(metadata["clip_export"]["copies_per_clip_applied"], 1)
+        self.assertEqual(metadata["clip_export"]["warnings"], [])
         self.assertEqual(artifact["validation"]["skill_count"], 10)
         self.assertEqual(artifact["validation"]["frame_skill_label_count"], 5)
         self.assertEqual(artifact["validation"]["train_skill_clip_count"], 1)
@@ -559,6 +563,67 @@ class ExportServiceTest(unittest.TestCase):
         self.assertEqual(train_clip_rows[0]["video_frame_offset"], 3)
 
         annotation_store.delete(skill.annotation_id)
+
+    def test_lance_export_warns_on_overlapping_skill_clips_and_pending_jitter(self) -> None:
+        first = annotation_store.create(
+            AnnotationCreate(
+                dataset_id="sample-xvla-soft-fold",
+                episode_index=0,
+                start_frame=3,
+                end_frame=8,
+                label_type="skill",
+                label_value="approach",
+                review_status=ReviewStatus.accepted,
+                metadata={"skillId": 0},
+            )
+        )
+        second = annotation_store.create(
+            AnnotationCreate(
+                dataset_id="sample-xvla-soft-fold",
+                episode_index=0,
+                start_frame=7,
+                end_frame=10,
+                label_type="skill",
+                label_value="grasp_part",
+                review_status=ReviewStatus.accepted,
+                metadata={"skillId": 1},
+            )
+        )
+        fake_pyarrow = _fake_pyarrow_module()
+        fake_lance, _written_paths = _fake_lance_module()
+        versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
+        exports = ExportStore(versions=versions)
+
+        with patch.dict(
+            sys.modules,
+            {"pyarrow": fake_pyarrow, "lance": fake_lance},
+        ):
+            record = exports.create(
+                ExportCreateRequest(
+                    dataset_id="sample-xvla-soft-fold",
+                    episode_indices=[0],
+                    format=ExportFormat.lance,
+                    materialize_skill_clips=True,
+                    jitter_offsets=[-5, 0, 5],
+                    copies_per_clip=2,
+                )
+            )
+
+        manifest = json.loads(Path(record.output_uri or "").read_text(encoding="utf-8"))
+        artifact = manifest["artifacts"]["lance_subset"]
+        metadata = json.loads(Path(artifact["files"]["manifest"]).read_text(encoding="utf-8"))
+        warnings = metadata["clip_export"]["warnings"]
+
+        self.assertEqual(record.status, JobStatus.succeeded)
+        self.assertEqual(metadata["clip_export"]["jitter_offsets"], [-5, 0, 5])
+        self.assertEqual(metadata["clip_export"]["jitter_offsets_applied"], [0])
+        self.assertTrue(any("overlapping accepted skill segments" in warning for warning in warnings))
+        self.assertTrue(any("jitter_offsets" in warning for warning in warnings))
+        self.assertTrue(any("copies_per_clip" in warning for warning in warnings))
+        self.assertTrue(any("overlapping accepted skill segments" in warning for warning in artifact["validation"]["warnings"]))
+
+        annotation_store.delete(first.annotation_id)
+        annotation_store.delete(second.annotation_id)
 
     def test_lance_export_fails_when_validation_fails(self) -> None:
         fake_pyarrow = _fake_pyarrow_module()

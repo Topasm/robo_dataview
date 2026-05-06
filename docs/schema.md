@@ -151,6 +151,81 @@ The API keeps raw `episodes.lance` immutable. `PATCH /episodes/{episode}/labels`
 writes JSONL overlays under `data/lance/episode_labels` and mirrors the same
 rows to `episode_labels.lance` when `pyarrow` and `lance` are installed.
 
+## Skill Clip Training Exports
+
+Purpose:
+
+- Human-confirmed full-trajectory skill boundaries
+- Skill DP training clips
+- LeRobot subtask compatibility groundwork
+
+`packages/robot_schema/humanoid_skills.json` is the canonical skill vocabulary.
+The frontend `apps/web/lib/skill-vocabulary.ts` is generated from that JSON via:
+
+```bash
+npm run generate:skills
+```
+
+When `format=lance` is exported with `materialize_skill_clips=true`, the export
+contains these clip-centric tables:
+
+```text
+skills.lance
+skill_segments.lance
+frame_skill_labels.lance
+train_skill_clips.lance
+```
+
+`skill_segments.lance` has one row per accepted skill segment:
+
+```text
+clip_id: string
+source_episode_index: int64
+skill_id: int64
+skill_name: string
+start_frame: int64
+end_frame: int64
+length: int64
+quality_score: float32
+success_label: bool
+failure_reason: string
+review_status: string
+split: string
+metadata_json: string
+```
+
+`frame_skill_labels.lance` expands accepted skill segments to frame rows:
+
+```text
+episode_index: int64
+frame_index: int64
+segment_id: string
+skill_id: int64
+skill_name: string
+progress_in_skill: float32
+review_status: string
+```
+
+`train_skill_clips.lance` is the primary training table for curated exports.
+Its row unit is a skill clip, not a source trajectory:
+
+```text
+episode_index: skill-clip row index used by training
+source_episode_index: original full trajectory episode index
+video_frame_offset: source video frame offset for local clip frame 0
+```
+
+State/action arrays are sliced to the skill interval. Video blobs reuse the
+full source episode MP4 to avoid re-encoding each clip; training code maps local
+clip frame `t` to source video frame `video_frame_offset + t`.
+
+Accepted skill segment overlaps are allowed to export, but validation emits a
+warning because a single frame would materialize to multiple skill labels in
+`frame_skill_labels.lance`. The current MVP only materializes
+`jitter_offsets=[0]` and one copy per clip. Non-zero jitter or extra copies are
+recorded in the manifest as requested options and reported as validation
+warnings until augmentation materialization is implemented.
+
 ## videos.lance
 
 Purpose:
