@@ -568,11 +568,17 @@ If the LeRobot validation report has `metadata_ok=false`, the export request
 returns `status=failed` instead of writing a successful manifest.
 
 For `format=lance`, the response contains `artifacts.lance_subset` when optional
-`pyarrow` and `lance` dependencies are installed. The subset contains
-`episodes.lance`, `frames.lance`, `media.lance`/`videos.lance`, and accepted
-current annotations for selected episodes. Compatibility exports may still write
-deprecated `annotations.lance` for older tooling, but the canonical curation
-view is `annotations_current.lance`; set
+`pyarrow` and `lance` dependencies are installed. The artifact format is
+`robot_data_studio_lance_subset_v2`, and the subset contains
+canonical `episodes.lance`, sorted `frames.lance`, `media.lance`,
+`train_episodes.lance`, `annotations_current.lance`, and an
+`annotation_events.lance` audit table for selected episodes.
+`train_episodes.lance` is the materialized table intended for policy training.
+It also writes legacy `videos.lance` and deprecated
+`annotations.lance` aliases for older tooling. The export metadata records the
+training frame contract (`episode_index`, `frame_index`, state/action columns,
+state/action dimensions, and representative FPS). The canonical curation view
+is `annotations_current.lance`; set
 `ROBOT_DATA_STUDIO_WRITE_LEGACY_ANNOTATIONS_LANCE=0` to stop writing the
 deprecated mirror for live annotation storage. If optional dependencies are
 missing, the export fails with a dependency message instead of returning an

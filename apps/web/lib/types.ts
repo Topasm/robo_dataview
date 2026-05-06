@@ -302,6 +302,8 @@ export type ExportArtifacts = {
       metadata_ok?: boolean;
       episode_count?: number;
       frame_count?: number;
+      media_count?: number;
+      train_episode_count?: number;
       annotation_count?: number;
       errors?: string[];
       warnings?: string[];
@@ -310,6 +312,8 @@ export type ExportArtifacts = {
     materialized?: {
       episode_rows?: number;
       frame_rows?: number;
+      media_rows?: number;
+      train_episode_rows?: number;
       annotation_rows?: number;
     };
   };

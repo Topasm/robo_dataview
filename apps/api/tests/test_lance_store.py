@@ -603,7 +603,16 @@ class LanceDatasetStoreTest(unittest.TestCase):
         self.assertEqual(health.storage_model, "lance")
         self.assertEqual(
             [table.table for table in health.tables],
-            ["episodes", "frames", "media", "videos", "cameras", "tasks", "splits"],
+            [
+                "episodes",
+                "frames",
+                "media",
+                "train_episodes",
+                "videos",
+                "cameras",
+                "tasks",
+                "splits",
+            ],
         )
         self.assertTrue(
             any("non-contiguous" in warning for warning in health.warnings),

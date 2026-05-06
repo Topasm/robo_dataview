@@ -43,7 +43,16 @@ from packages.robot_schema import (
 NORM_SERIES_MAX_POINTS = 600
 EPISODE_LABEL_STORAGE_ROOT = Path("data/lance/episode_labels")
 DATASET_REGISTRY_PATH = Path("data/lance/dataset_registry.jsonl")
-TABLE_NAMES = ("episodes", "frames", "media", "videos", "cameras", "tasks", "splits")
+TABLE_NAMES = (
+    "episodes",
+    "frames",
+    "media",
+    "train_episodes",
+    "videos",
+    "cameras",
+    "tasks",
+    "splits",
+)
 STATE_COLUMNS = ("observation_state", "observation.state", "state")
 ACTION_COLUMNS = ("actions", "action")
 TIMESTAMP_COLUMNS = ("timestamps", "timestamp")
@@ -1231,6 +1240,7 @@ class LanceHealthService:
             "episodes": ["episode_index"],
             "frames": ["episode_index", "frame_index"],
             "media": [],
+            "train_episodes": [],
             "videos": [],
             "cameras": [],
             "tasks": [],
@@ -1244,7 +1254,7 @@ class LanceHealthService:
                 column for column in required.get(table_name, []) if column not in columns
             ]
             table_warnings: list[str] = []
-            if table_name == "episodes":
+            if dataset is not None and table_name in {"episodes", "train_episodes"}:
                 has_state = _first_present_name(columns, STATE_COLUMNS) is not None
                 has_action = _first_present_name(columns, ACTION_COLUMNS) is not None
                 has_video = any(_looks_like_video_blob_column(column) for column in columns)

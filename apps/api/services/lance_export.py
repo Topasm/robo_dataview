@@ -3,21 +3,34 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 from apps.api.schemas.annotations import AnnotationRecord
 from apps.api.schemas.episodes import EpisodeDetail
 from apps.api.schemas.frames import FrameRecord
 from apps.api.services.pydantic_compat import model_dump
-from packages.robot_schema import build_annotations_pyarrow_schema
+from packages.robot_schema import (
+    build_annotation_events_pyarrow_schema,
+    build_annotations_current_pyarrow_schema,
+    build_annotations_pyarrow_schema,
+    build_episodes_pyarrow_schema,
+    build_frames_pyarrow_schema,
+    build_media_pyarrow_schema,
+    build_raw_videos_pyarrow_schema,
+)
 
 
-LANCE_SUBSET_VERSION = "robot_data_studio_lance_subset_v1"
+LANCE_SUBSET_VERSION = "robot_data_studio_lance_subset_v2"
 METADATA_JSON_PATH = Path("metadata.json")
 EPISODES_LANCE_PATH = Path("episodes.lance")
 FRAMES_LANCE_PATH = Path("frames.lance")
-VIDEOS_LANCE_PATH = Path("videos.lance")
-ANNOTATIONS_LANCE_PATH = Path("annotations.lance")
+MEDIA_LANCE_PATH = Path("media.lance")
+TRAIN_EPISODES_LANCE_PATH = Path("train_episodes.lance")
+ANNOTATIONS_CURRENT_LANCE_PATH = Path("annotations_current.lance")
+ANNOTATION_EVENTS_LANCE_PATH = Path("annotation_events.lance")
+LEGACY_VIDEOS_LANCE_PATH = Path("videos.lance")
+LEGACY_ANNOTATIONS_LANCE_PATH = Path("annotations.lance")
 
 
 class LanceExportDependencyError(RuntimeError):
@@ -51,28 +64,83 @@ def write_lance_subset(
     root = export_dir / "lance_subset"
     root.mkdir(parents=True, exist_ok=True)
 
-    episode_rows = _episode_rows(episodes, annotations_by_episode)
-    frame_rows = [
-        _frame_row(frame)
-        for episode in episodes
-        for frame in frames_by_episode.get(episode.episode_index, [])
-    ]
+    frame_rows = sorted(
+        [
+            _frame_row(frame)
+            for episode in episodes
+            for frame in frames_by_episode.get(episode.episode_index, [])
+        ],
+        key=lambda row: (int(row["episode_index"]), int(row["frame_index"])),
+    )
+    episode_rows = _episode_rows(
+        episodes,
+        annotations_by_episode,
+        frames_by_episode,
+        video_blobs_by_episode or {},
+    )
     annotation_rows = [
         _annotation_row(annotation)
         for annotations in annotations_by_episode.values()
         for annotation in annotations
     ]
-    video_rows = _video_rows(episodes, video_blobs_by_episode or {})
+    annotation_event_rows: list[dict[str, Any]] = []
+    media_rows = _media_rows(episodes, video_blobs_by_episode or {})
+    camera_feature_keys = _camera_feature_keys(episodes, video_blobs_by_episode or {})
+    state_dim = _first_vector_dim(
+        row.get("observation_state")
+        for row in frame_rows
+    )
+    action_dim = _first_vector_dim(
+        row.get("action")
+        for row in frame_rows
+    )
+    fps = _representative_fps(episodes)
 
     table_paths = {
         "episodes": root / EPISODES_LANCE_PATH,
         "frames": root / FRAMES_LANCE_PATH,
-        "videos": root / VIDEOS_LANCE_PATH,
-        "annotations": root / ANNOTATIONS_LANCE_PATH,
+        "media": root / MEDIA_LANCE_PATH,
+        "train_episodes": root / TRAIN_EPISODES_LANCE_PATH,
+        "annotations_current": root / ANNOTATIONS_CURRENT_LANCE_PATH,
+        "annotation_events": root / ANNOTATION_EVENTS_LANCE_PATH,
+        "videos": root / LEGACY_VIDEOS_LANCE_PATH,
+        "annotations": root / LEGACY_ANNOTATIONS_LANCE_PATH,
     }
-    _write_lance_table(lance, _table_from_rows(pa, episode_rows, _episodes_schema(pa)), table_paths["episodes"])
-    _write_lance_table(lance, _table_from_rows(pa, frame_rows, _frames_schema(pa)), table_paths["frames"])
-    _write_lance_table(lance, _table_from_rows(pa, video_rows, _videos_schema(pa)), table_paths["videos"])
+    _write_lance_table(
+        lance,
+        _table_from_rows(pa, episode_rows, build_episodes_pyarrow_schema(camera_feature_keys)),
+        table_paths["episodes"],
+    )
+    _write_lance_table(
+        lance,
+        _table_from_rows(pa, frame_rows, build_frames_pyarrow_schema()),
+        table_paths["frames"],
+    )
+    _write_lance_table(
+        lance,
+        _table_from_rows(pa, media_rows, build_media_pyarrow_schema()),
+        table_paths["media"],
+    )
+    _write_lance_table(
+        lance,
+        _table_from_rows(pa, episode_rows, build_episodes_pyarrow_schema(camera_feature_keys)),
+        table_paths["train_episodes"],
+    )
+    _write_lance_table(
+        lance,
+        _table_from_rows(pa, annotation_rows, build_annotations_current_pyarrow_schema()),
+        table_paths["annotations_current"],
+    )
+    _write_lance_table(
+        lance,
+        _table_from_rows(pa, annotation_event_rows, build_annotation_events_pyarrow_schema()),
+        table_paths["annotation_events"],
+    )
+    _write_lance_table(
+        lance,
+        _table_from_rows(pa, media_rows, build_raw_videos_pyarrow_schema()),
+        table_paths["videos"],
+    )
     _write_lance_table(
         lance,
         _table_from_rows(pa, annotation_rows, build_annotations_pyarrow_schema()),
@@ -86,9 +154,45 @@ def write_lance_subset(
         "created_at": datetime.now(timezone.utc).isoformat(),
         "total_episodes": len(episode_rows),
         "total_frames": len(frame_rows),
-        "total_videos": len(video_rows),
+        "total_media": len(media_rows),
+        "total_videos": len(media_rows),
         "total_annotations": len(annotation_rows),
+        "total_annotation_events": len(annotation_event_rows),
+        "state_dim": state_dim,
+        "action_dim": action_dim,
+        "fps": fps,
+        "primary_training_table": table_paths["train_episodes"].name,
+        "training_columns": {
+            "state": "observation_state",
+            "action": "actions",
+        },
+        "frame_table": {
+            "index_columns": ["episode_index", "frame_index"],
+            "state_column": "observation_state",
+            "action_column": "action",
+            "sorted_by": ["episode_index", "frame_index"],
+            "state_dim_consistent": _vectors_have_consistent_dim(
+                row.get("observation_state")
+                for row in frame_rows
+            ),
+            "action_dim_consistent": _vectors_have_consistent_dim(
+                row.get("action")
+                for row in frame_rows
+            ),
+        },
         "tables": {name: path.name for name, path in table_paths.items()},
+        "canonical_tables": {
+            "episodes": table_paths["episodes"].name,
+            "frames": table_paths["frames"].name,
+            "media": table_paths["media"].name,
+            "train_episodes": table_paths["train_episodes"].name,
+            "annotations_current": table_paths["annotations_current"].name,
+            "annotation_events": table_paths["annotation_events"].name,
+        },
+        "legacy_tables": {
+            "videos": table_paths["videos"].name,
+            "annotations": table_paths["annotations"].name,
+        },
     }
     metadata_path = root / METADATA_JSON_PATH
     metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
@@ -105,13 +209,21 @@ def write_lance_subset(
             "validation": str(validation_path),
             "episodes": str(table_paths["episodes"]),
             "frames": str(table_paths["frames"]),
+            "media": str(table_paths["media"]),
+            "train_episodes": str(table_paths["train_episodes"]),
+            "annotations_current": str(table_paths["annotations_current"]),
+            "annotation_events": str(table_paths["annotation_events"]),
             "videos": str(table_paths["videos"]),
             "annotations": str(table_paths["annotations"]),
         },
         "materialized": {
             "episode_rows": len(episode_rows),
             "frame_rows": len(frame_rows),
-            "video_rows": len(video_rows),
+            "media_rows": len(media_rows),
+            "train_episode_rows": len(episode_rows),
+            "video_rows": len(media_rows),
+            "annotation_current_rows": len(annotation_rows),
+            "annotation_event_rows": len(annotation_event_rows),
             "annotation_rows": len(annotation_rows),
         },
     }
@@ -123,8 +235,12 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
         "metadata": metadata_path,
         "episodes": root / EPISODES_LANCE_PATH,
         "frames": root / FRAMES_LANCE_PATH,
-        "videos": root / VIDEOS_LANCE_PATH,
-        "annotations": root / ANNOTATIONS_LANCE_PATH,
+        "media": root / MEDIA_LANCE_PATH,
+        "train_episodes": root / TRAIN_EPISODES_LANCE_PATH,
+        "annotations_current": root / ANNOTATIONS_CURRENT_LANCE_PATH,
+        "annotation_events": root / ANNOTATION_EVENTS_LANCE_PATH,
+        "videos": root / LEGACY_VIDEOS_LANCE_PATH,
+        "annotations": root / LEGACY_ANNOTATIONS_LANCE_PATH,
     }
     present = {name: path.exists() for name, path in paths.items()}
     errors: list[str] = []
@@ -138,7 +254,14 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
         if metadata.get("format") != LANCE_SUBSET_VERSION:
             warnings.append(f"unexpected format {metadata.get('format')!r}")
 
-    for table_name in ("episodes", "frames", "videos", "annotations"):
+    for table_name in (
+        "episodes",
+        "frames",
+        "media",
+        "train_episodes",
+        "annotations_current",
+        "annotation_events",
+    ):
         if not present[table_name]:
             errors.append(f"missing {table_name}.lance")
 
@@ -158,18 +281,32 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
             {
                 "episodes": int(metadata.get("total_episodes") or 0),
                 "frames": int(metadata.get("total_frames") or 0),
-                "videos": int(metadata.get("total_videos") or 0),
+                "media": int(metadata.get("total_media") or metadata.get("total_videos") or 0),
+                "train_episodes": int(metadata.get("total_episodes") or 0),
+                "annotations_current": int(metadata.get("total_annotations") or 0),
+                "annotation_events": int(metadata.get("total_annotation_events") or 0),
+                "videos": int(metadata.get("total_media") or metadata.get("total_videos") or 0),
                 "annotations": int(metadata.get("total_annotations") or 0),
             },
         )
     )
+    frame_contract = metadata.get("frame_table") if isinstance(metadata, dict) else None
+    if isinstance(frame_contract, dict):
+        if frame_contract.get("state_dim_consistent") is False:
+            warnings.append("frame_table observation_state dimensions are not consistent")
+        if frame_contract.get("action_dim_consistent") is False:
+            warnings.append("frame_table action dimensions are not consistent")
 
     return {
         "metadata_ok": not errors,
         "episode_count": int(metadata.get("total_episodes") or 0),
         "frame_count": int(metadata.get("total_frames") or 0),
+        "media_count": int(metadata.get("total_media") or metadata.get("total_videos") or 0),
+        "train_episode_count": int(metadata.get("total_episodes") or 0),
         "video_count": int(metadata.get("total_videos") or 0),
         "annotation_count": int(metadata.get("total_annotations") or 0),
+        "annotation_current_count": int(metadata.get("total_annotations") or 0),
+        "annotation_event_count": int(metadata.get("total_annotation_events") or 0),
         "files": {name: str(path) for name, path in paths.items()},
         "present": present,
         "table_readability": table_readability,
@@ -185,6 +322,10 @@ def _lance_table_readability(
     labels = {
         "episodes": "episodes.lance",
         "frames": "frames.lance",
+        "media": "media.lance",
+        "train_episodes": "train_episodes.lance",
+        "annotations_current": "annotations_current.lance",
+        "annotation_events": "annotation_events.lance",
         "videos": "videos.lance",
         "annotations": "annotations.lance",
     }
@@ -266,45 +407,77 @@ def _lance_table_row_count_errors(
 def _episode_rows(
     episodes: list[EpisodeDetail],
     annotations_by_episode: dict[int, list[AnnotationRecord]],
+    frames_by_episode: dict[int, list[FrameRecord]],
+    video_blobs_by_episode: dict[int, dict[str, bytes]],
 ) -> list[dict[str, Any]]:
-    return [
-        {
-            "dataset_id": episode.dataset_id,
+    rows: list[dict[str, Any]] = []
+    created_at = datetime.now(timezone.utc)
+    for episode in episodes:
+        frames = sorted(
+            frames_by_episode.get(episode.episode_index, []),
+            key=lambda frame: frame.frame_index,
+        )
+        timestamps = [frame.timestamp for frame in frames]
+        timestamp_values = [timestamp for timestamp in timestamps if timestamp is not None]
+        row: dict[str, Any] = {
+            "episode_id": _episode_id(episode.episode_index),
             "episode_index": episode.episode_index,
+            "task_id": _task_id(episode.task_index),
             "task_index": episode.task_index,
-            "length": episode.length,
+            "num_frames": len(frames) or episode.length,
             "fps": episode.fps,
+            "length": episode.length,
+            "start_time": min(timestamp_values) if timestamp_values else None,
+            "end_time": max(timestamp_values) if timestamp_values else None,
+            "timestamps": timestamps,
+            "observation_state": [frame.observation_state for frame in frames],
+            "actions": [frame.action for frame in frames],
+            "language_instruction": episode.language_instruction,
+            "episode_caption": episode.caption,
             "success_label": episode.success_label,
             "failure_reason": episode.failure_reason,
             "quality_score": episode.quality_score,
             "review_status": episode.review_status,
-            "caption": episode.caption,
+            "train_val_test_split": episode.split,
             "split": episode.split,
-            "language_instruction": episode.language_instruction,
-            "camera_names": episode.camera_names,
-            "duration_seconds": episode.duration_seconds,
-            "accepted_annotation_count": len(annotations_by_episode.get(episode.episode_index, [])),
+            "created_at": created_at,
+            "dataset_version": None,
         }
-        for episode in episodes
-    ]
+        if len(annotations_by_episode.get(episode.episode_index, [])) > 0:
+            row["review_status"] = row["review_status"] or "accepted"
+        for camera, blob in sorted(video_blobs_by_episode.get(episode.episode_index, {}).items()):
+            if not blob:
+                continue
+            key = _normalize_feature_key(camera)
+            row[f"{key}_video_blob"] = blob
+            row[f"{key}_from_timestamp"] = row["start_time"]
+            row[f"{key}_to_timestamp"] = row["end_time"]
+        rows.append(row)
+    return rows
 
 
 def _frame_row(frame: FrameRecord) -> dict[str, Any]:
     return {
-        "dataset_id": frame.dataset_id,
+        "episode_id": _episode_id(frame.episode_index),
         "episode_index": frame.episode_index,
         "frame_index": frame.frame_index,
+        "global_frame_index": None,
         "timestamp": frame.timestamp,
+        "task_id": _task_id(frame.task_index),
         "task_index": frame.task_index,
         "observation_state": frame.observation_state,
         "action": frame.action,
+        "is_bad_frame": frame.is_bad_frame,
         "state_norm": frame.state_norm,
         "action_norm": frame.action_norm,
-        "is_bad_frame": frame.is_bad_frame,
+        "phase_label": _first_frame_label(frame, "phase"),
+        "vlm_step_caption": _first_frame_label(frame, "caption", source="vlm"),
+        "human_step_caption": _first_frame_label(frame, "caption", source="human"),
+        "review_status": _first_frame_review_status(frame),
     }
 
 
-def _video_rows(
+def _media_rows(
     episodes: list[EpisodeDetail],
     video_blobs_by_episode: dict[int, dict[str, bytes]],
 ) -> list[dict[str, Any]]:
@@ -317,14 +490,27 @@ def _video_rows(
             filename = f"episode_{int(episode.episode_index):06d}.mp4"
             rows.append(
                 {
-                    "dataset_id": episode.dataset_id,
+                    "media_id": f"{_episode_id(episode.episode_index)}:{video_key}",
+                    "episode_id": _episode_id(episode.episode_index),
                     "episode_index": episode.episode_index,
-                    "camera": camera,
-                    "video_key": video_key,
+                    "camera_id": video_key,
+                    "camera_name": camera,
+                    "media_type": "video",
+                    "uri": None,
                     "relative_path": f"videos/{video_key}/{filename}",
-                    "filename": filename,
-                    "file_size_bytes": len(blob),
                     "video_blob": blob,
+                    "video_path": None,
+                    "from_timestamp": 0.0,
+                    "to_timestamp": episode.duration_seconds,
+                    "num_frames": episode.length,
+                    "chunk_index": None,
+                    "file_index": None,
+                    "sha256": None,
+                    "byte_size": len(blob),
+                    "width_pixels": None,
+                    "height_pixels": None,
+                    "fps": episode.fps,
+                    "codec": None,
                 }
             )
     return rows
@@ -347,60 +533,84 @@ def _table_from_rows(pa: Any, rows: list[dict[str, Any]], schema: Any) -> Any:
     return pa.Table.from_pylist(rows, schema=schema)
 
 
-def _episodes_schema(pa: Any) -> Any:
-    return pa.schema(
-        [
-            pa.field("dataset_id", pa.string(), nullable=False),
-            pa.field("episode_index", pa.int64(), nullable=False),
-            pa.field("task_index", pa.int64()),
-            pa.field("length", pa.int64()),
-            pa.field("fps", pa.float32()),
-            pa.field("success_label", pa.bool_()),
-            pa.field("failure_reason", pa.string()),
-            pa.field("quality_score", pa.float32()),
-            pa.field("review_status", pa.string(), nullable=False),
-            pa.field("caption", pa.string()),
-            pa.field("split", pa.string()),
-            pa.field("language_instruction", pa.string()),
-            pa.field("camera_names", pa.list_(pa.string())),
-            pa.field("duration_seconds", pa.float32()),
-            pa.field("accepted_annotation_count", pa.int64(), nullable=False),
-        ]
-    )
-
-
-def _frames_schema(pa: Any) -> Any:
-    return pa.schema(
-        [
-            pa.field("dataset_id", pa.string(), nullable=False),
-            pa.field("episode_index", pa.int64(), nullable=False),
-            pa.field("frame_index", pa.int64(), nullable=False),
-            pa.field("timestamp", pa.float32()),
-            pa.field("task_index", pa.int64()),
-            pa.field("observation_state", pa.list_(pa.float32())),
-            pa.field("action", pa.list_(pa.float32())),
-            pa.field("state_norm", pa.float32()),
-            pa.field("action_norm", pa.float32()),
-            pa.field("is_bad_frame", pa.bool_(), nullable=False),
-        ]
-    )
-
-
-def _videos_schema(pa: Any) -> Any:
-    return pa.schema(
-        [
-            pa.field("dataset_id", pa.string(), nullable=False),
-            pa.field("episode_index", pa.int64(), nullable=False),
-            pa.field("camera", pa.string(), nullable=False),
-            pa.field("video_key", pa.string(), nullable=False),
-            pa.field("relative_path", pa.string(), nullable=False),
-            pa.field("filename", pa.string(), nullable=False),
-            pa.field("file_size_bytes", pa.int64(), nullable=False),
-            pa.field("video_blob", pa.binary(), nullable=False),
-        ]
-    )
-
-
 def _safe_path_name(value: str) -> str:
     safe = "".join(character if character.isalnum() else "_" for character in value.strip())
     return "_".join(part for part in safe.split("_") if part) or "camera"
+
+
+def _normalize_feature_key(value: str) -> str:
+    return re.sub(r"[^0-9A-Za-z_]", "_", value)
+
+
+def _camera_feature_keys(
+    episodes: list[EpisodeDetail],
+    video_blobs_by_episode: dict[int, dict[str, bytes]],
+) -> list[str]:
+    keys: set[str] = set()
+    for episode in episodes:
+        keys.update(
+            camera
+            for camera, blob in video_blobs_by_episode.get(episode.episode_index, {}).items()
+            if blob
+        )
+    return sorted(keys)
+
+
+def _episode_id(episode_index: int) -> str:
+    return f"episode_{int(episode_index):06d}"
+
+
+def _task_id(task_index: int | None) -> str | None:
+    if task_index is None:
+        return None
+    return f"task_{int(task_index):06d}"
+
+
+def _first_frame_label(
+    frame: FrameRecord,
+    label_type: str,
+    *,
+    source: str | None = None,
+) -> str | None:
+    for label in frame.labels:
+        if label.label_type != label_type:
+            continue
+        if source is not None and label.source.value != source:
+            continue
+        return label.label_value
+    return None
+
+
+def _first_frame_review_status(frame: FrameRecord) -> str | None:
+    if not frame.labels:
+        return None
+    return frame.labels[0].review_status.value
+
+
+def _first_vector_dim(values: Any) -> int | None:
+    for value in values:
+        if isinstance(value, list):
+            return len(value)
+    return None
+
+
+def _vectors_have_consistent_dim(values: Any) -> bool:
+    expected: int | None = None
+    for value in values:
+        if value is None:
+            continue
+        if not isinstance(value, list):
+            return False
+        if expected is None:
+            expected = len(value)
+            continue
+        if len(value) != expected:
+            return False
+    return True
+
+
+def _representative_fps(episodes: list[EpisodeDetail]) -> float | None:
+    for episode in episodes:
+        if episode.fps is not None:
+            return episode.fps
+    return None

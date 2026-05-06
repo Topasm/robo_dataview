@@ -150,7 +150,10 @@ Implemented now:
   artifacts, JSONL-only per-frame video references, official-style tabular
   Parquet rows, and version lineage, including optional official
   LeRobotDataset loader validation.
-- Lance subset export for selected episodes when optional `pyarrow` and `lance`
+- Canonical Lance subset/version export for selected episodes, including
+  `episodes.lance`, sorted `frames.lance`, `media.lance`,
+  materialized `train_episodes.lance`, `annotations_current.lance`, optional
+  audit events, and legacy aliases when optional `pyarrow` and `lance`
   dependencies are installed.
 - JSONL caption export and VLA-style JSONL trajectory export.
 - Optional export artifact publishing to local or `fsspec` destinations.

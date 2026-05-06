@@ -131,7 +131,7 @@ export function ExportStrip({
           type="button"
         >
           <Download size={15} />
-          Export Lance
+          Export Training Bundle
         </button>
         <details className="advanced-menu export-advanced-menu">
           <summary>More formats</summary>

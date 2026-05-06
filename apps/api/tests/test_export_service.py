@@ -374,19 +374,54 @@ class ExportServiceTest(unittest.TestCase):
         self.assertEqual(record.status, JobStatus.succeeded)
         self.assertEqual(artifact["materialized"]["episode_rows"], 1)
         self.assertEqual(artifact["materialized"]["frame_rows"], 180)
+        self.assertEqual(artifact["materialized"]["media_rows"], 0)
+        self.assertEqual(artifact["materialized"]["train_episode_rows"], 1)
         self.assertEqual(artifact["materialized"]["video_rows"], 0)
+        self.assertEqual(artifact["materialized"]["annotation_current_rows"], 1)
+        self.assertEqual(artifact["materialized"]["annotation_event_rows"], 0)
         self.assertEqual(artifact["materialized"]["annotation_rows"], 1)
         self.assertTrue(artifact["validation"]["metadata_ok"])
         self.assertEqual(artifact["validation"]["table_readability"]["episodes"]["row_count"], 1)
         self.assertEqual(artifact["validation"]["table_readability"]["frames"]["row_count"], 180)
+        self.assertEqual(artifact["validation"]["table_readability"]["media"]["row_count"], 0)
+        self.assertEqual(
+            artifact["validation"]["table_readability"]["train_episodes"]["row_count"],
+            1,
+        )
+        self.assertEqual(
+            artifact["validation"]["table_readability"]["annotations_current"]["row_count"],
+            1,
+        )
+        self.assertEqual(
+            artifact["validation"]["table_readability"]["annotation_events"]["row_count"],
+            0,
+        )
         self.assertEqual(artifact["validation"]["table_readability"]["videos"]["row_count"], 0)
         self.assertEqual(artifact["validation"]["table_readability"]["annotations"]["row_count"], 1)
         self.assertTrue(Path(artifact["files"]["episodes"]).exists())
         self.assertTrue(Path(artifact["files"]["frames"]).exists())
+        self.assertTrue(Path(artifact["files"]["media"]).exists())
+        self.assertTrue(Path(artifact["files"]["train_episodes"]).exists())
+        self.assertTrue(Path(artifact["files"]["annotations_current"]).exists())
+        self.assertTrue(Path(artifact["files"]["annotation_events"]).exists())
         self.assertTrue(Path(artifact["files"]["videos"]).exists())
         self.assertTrue(Path(artifact["files"]["annotations"]).exists())
-        self.assertEqual(len(written_paths), 4)
-        self.assertEqual(manifest["episodes"][0]["annotations"][0]["label_value"], "accepted_exact_frame")
+        self.assertEqual(len(written_paths), 8)
+        metadata = json.loads(Path(artifact["files"]["metadata"]).read_text(encoding="utf-8"))
+        self.assertEqual(metadata["primary_training_table"], "train_episodes.lance")
+        self.assertEqual(metadata["training_columns"]["state"], "observation_state")
+        self.assertEqual(metadata["training_columns"]["action"], "actions")
+        self.assertGreater(metadata["state_dim"], 0)
+        self.assertGreater(metadata["action_dim"], 0)
+        self.assertEqual(metadata["frame_table"]["index_columns"], ["episode_index", "frame_index"])
+        self.assertEqual(metadata["frame_table"]["state_column"], "observation_state")
+        self.assertEqual(metadata["frame_table"]["action_column"], "action")
+        self.assertTrue(metadata["frame_table"]["state_dim_consistent"])
+        self.assertTrue(metadata["frame_table"]["action_dim_consistent"])
+        self.assertEqual(
+            manifest["episodes"][0]["annotations"][0]["label_value"],
+            "accepted_exact_frame",
+        )
         version_records = versions.list("sample-xvla-soft-fold")
         self.assertEqual(version_records[0].export_format, "lance")
 
@@ -417,9 +452,13 @@ class ExportServiceTest(unittest.TestCase):
         artifact = manifest["artifacts"]["lance_subset"]
 
         self.assertEqual(record.status, JobStatus.succeeded)
+        self.assertEqual(artifact["materialized"]["media_rows"], 1)
         self.assertEqual(artifact["materialized"]["video_rows"], 1)
+        self.assertEqual(artifact["validation"]["media_count"], 1)
         self.assertEqual(artifact["validation"]["video_count"], 1)
+        self.assertTrue(Path(artifact["files"]["media"]).exists())
         self.assertTrue(Path(artifact["files"]["videos"]).exists())
+        self.assertTrue(any(path.endswith("media.lance") for path in written_paths))
         self.assertTrue(any(path.endswith("videos.lance") for path in written_paths))
 
     def test_lance_export_fails_when_validation_fails(self) -> None:
@@ -588,9 +627,11 @@ def _fake_pyarrow_module() -> ModuleType:
     }
     module.string = lambda: "string"
     module.int64 = lambda: "int64"
+    module.float64 = lambda: "float64"
     module.float32 = lambda: "float32"
     module.bool_ = lambda: "bool"
     module.binary = lambda: "binary"
+    module.large_binary = lambda: "large_binary"
     module.list_ = lambda dtype: f"list<{dtype}>"
     module.timestamp = lambda unit, tz=None: f"timestamp<{unit},{tz}>"
     return module

@@ -429,26 +429,33 @@ itself is structurally invalid, while SHA256 mismatches are validation errors.
 
 ## Lance subset export
 
-`format=lance` exports write a selected subset when optional `pyarrow` and
-`lance` dependencies are installed:
+`format=lance` exports write a `robot_data_studio_lance_subset_v2` selected
+subset when optional `pyarrow` and `lance` dependencies are installed:
 
 ```text
 lance_subset/
 ├─ metadata.json
 ├─ episodes.lance
 ├─ frames.lance
-├─ media.lance / videos.lance
+├─ media.lance
+├─ train_episodes.lance
 ├─ annotations_current.lance
+├─ annotation_events.lance
+├─ videos.lance          # legacy media alias
+├─ annotations.lance     # deprecated annotation alias
 └─ validation.json
 ```
 
 The subset includes selected episode metadata, frame-level state/action samples
 from `frames.lance` or the episode time-series fallback, available camera video
-blobs/provenance rows, and accepted annotations only. Missing optional Lance
-dependencies fail the export explicitly so callers do not mistake a
-manifest-only export for a usable Lance dataset. Validation opens each Lance
-table when the Lance dependency is available and checks table row counts against
-the export metadata.
+blobs/provenance rows, and active accepted annotations only. `metadata.json`
+records the training feature contract, including `state_dim`, `action_dim`,
+representative `fps`, `primary_training_table=train_episodes.lance`, and the
+frame index/state/action column names. Missing optional Lance dependencies fail
+the export explicitly so callers do not
+mistake a manifest-only export for a usable Lance dataset. Validation opens
+each Lance table when the Lance dependency is available and checks table row
+counts against the export metadata.
 
 ## JSONL and VLA exports
 
