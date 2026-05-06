@@ -24,11 +24,15 @@ FastAPI Backend
   Export API
 
 Lance / LanceDB
-  frames.lance
   episodes.lance
-  videos.lance
-  annotations.lance
+  frames.lance
+  media.lance / videos.lance
+  cameras.lance
+  tasks.lance
+  annotations_current.lance
+  annotation_events.lance
   embeddings.lance
+  splits.lance
   versions.lance
 
 Python Workers
@@ -61,12 +65,16 @@ apps/api
   In-memory service registries for datasets and exports; persisted job and
   Rerun session records under `data/app`
   SQLite-backed job metadata registry for restart-safe job lookups
-  JSONL-backed annotation, embedding, version, and VLM response stores
-  Optional Lance mirroring when pyarrow/lance are installed
+  Transitional JSONL-backed annotation, embedding, version, and VLM response
+  debug/restart copies
+  Queryable Lance mirrors for annotation current/events, embeddings, versions,
+  and episode label overlays when pyarrow/lance are installed
 
 packages/robot_schema
-  Lance table column definitions for annotations, embeddings, versions
-  PyArrow schema builders for those local curation tables
+  Lance table column definitions and PyArrow schema builders for raw robot data
+  tables (`episodes`, `frames`, `media`/`videos`, `cameras`, `tasks`) and
+  curation tables (`annotations_current`, `annotation_events`, `embeddings`,
+  `splits`, `versions`)
 
 workers
   Heuristic VLM proposal generator, optional OpenAI-compatible,
@@ -104,8 +112,9 @@ Implemented now:
 - Episode-level label overlay updates for caption, success/failure, failure
   reason, quality, split, and review status, with optional
   `episode_labels.lance` mirroring.
-- Optional `annotations.lance`, `episode_labels.lance`, `embeddings.lance`, and
-  `versions.lance` mirroring.
+- Optional `annotations_current.lance`, `annotation_events.lance`,
+  compatibility `annotations.lance`, `episode_labels.lance`, `embeddings.lance`,
+  and `versions.lance` mirroring.
 - Text-embedding semantic search with deterministic fallback, optional
   OpenAI-compatible text inference, and optional LanceDB table mirror/query when
   `lancedb` is installed.
@@ -210,7 +219,8 @@ Open episode
 Edit annotation
   -> web sends annotation mutation
   -> backend validates frame ranges and label payload
-  -> annotation is stored in annotations.lance
+  -> annotation is stored in annotations_current.lance
+  -> audit event is stored in annotation_events.lance
 
 Export subset
   -> filter query resolves selected episodes

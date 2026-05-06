@@ -956,6 +956,50 @@ def _parse_filter_value(value: str) -> Any:
         return stripped
 
 
+def _lance_filter_expression(
+    filters: list[tuple[str, str, Any]],
+    schema_names: list[str],
+) -> str | None:
+    clauses: list[str] = []
+    schema = set(schema_names)
+    for field, operator, expected in filters:
+        if field not in schema or operator == "contains":
+            return None
+        clause = _lance_filter_clause(field, operator, expected)
+        if clause is None:
+            return None
+        clauses.append(clause)
+    return " AND ".join(clauses) if clauses else None
+
+
+def _lance_filter_clause(field: str, operator: str, expected: Any) -> str | None:
+    if operator not in {"==", "!=", ">", ">=", "<", "<="}:
+        return None
+    if expected is None:
+        if operator == "==":
+            return f"{field} IS NULL"
+        if operator == "!=":
+            return f"{field} IS NOT NULL"
+        return None
+    value = _lance_literal(expected)
+    if value is None:
+        return None
+    sql_operator = "=" if operator == "==" else operator
+    return f"{field} {sql_operator} {value}"
+
+
+def _lance_literal(value: Any) -> str | None:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if isinstance(value, float) and not math.isfinite(value):
+            return None
+        return str(value)
+    if isinstance(value, str):
+        return "'" + value.replace("'", "''") + "'"
+    return None
+
+
 def _matches_filter(
     episode: EpisodeListItem,
     field: str,
@@ -1288,7 +1332,9 @@ class LanceDatasetStore:
             return {}
         return None
 
-    def get_health(self, dataset_id: str) -> DatasetHealth | None:
+    def get_health(self, dataset_id: str, *, level: str = "shallow") -> DatasetHealth | None:
+        if level not in {"shallow", "deep"}:
+            raise ValueError("health level must be 'shallow' or 'deep'")
         record = self._datasets.get(dataset_id)
         if record is None:
             return None
@@ -1324,7 +1370,7 @@ class LanceDatasetStore:
         if not camera_names:
             warnings.append("dataset has no detected cameras")
 
-        if bundle is not None and episode_count > 0:
+        if level == "deep" and bundle is not None and episode_count > 0:
             index_cache = self._build_episode_row_offsets(bundle)
             if len(index_cache) != episode_count:
                 warnings.append(
@@ -1348,11 +1394,24 @@ class LanceDatasetStore:
                     + ", ".join(str(index) for index in missing_timeseries[:10])
                 )
 
+            sample_video_missing: list[str] = []
+            for episode in sample_page.items:
+                for camera in episode.camera_names[:3]:
+                    source = self.get_video_source(dataset_id, episode.episode_index, camera)
+                    if source is None or source.size <= 0:
+                        sample_video_missing.append(f"ep{episode.episode_index}:{camera}")
+            if sample_video_missing:
+                warnings.append(
+                    "sample camera streams without readable video source: "
+                    + ", ".join(sample_video_missing[:10])
+                )
+
         return DatasetHealth(
             dataset_id=dataset_id,
             ok=not errors,
             status=record.status,
             storage_model=storage_model,
+            level=level,
             episode_count=episode_count,
             frame_count=frame_count,
             camera_count=len(camera_names),
@@ -1739,6 +1798,12 @@ class LanceDatasetStore:
             filters = _parse_filter_query(query)
         except ValueError:
             return []
+        bundle = self._bundles.get(dataset_id)
+        if bundle is not None:
+            pushed = self._filter_lance_episode_items(dataset_id, bundle, filters, limit=limit)
+            if pushed is not None:
+                return pushed
+
         matched: list[EpisodeListItem] = []
         offset = 0
         batch_size = 1000
@@ -1758,6 +1823,46 @@ class LanceDatasetStore:
                 break
             offset += len(episodes)
         return matched if limit is None else matched[:limit]
+
+    def _filter_lance_episode_items(
+        self,
+        dataset_id: str,
+        bundle: LanceBundle,
+        filters: list[tuple[str, str, Any]],
+        *,
+        limit: int | None,
+    ) -> list[EpisodeListItem] | None:
+        expression = _lance_filter_expression(filters, bundle.schemas["episodes"])
+        if expression is None:
+            return None
+        dataset = bundle.tables["episodes"]
+        if not hasattr(dataset, "scanner"):
+            return None
+        columns = _metadata_columns(bundle.schemas["episodes"], include_arrays=False)
+        try:
+            scanner = dataset.scanner(
+                columns=columns,
+                filter=expression,
+                limit=_count_rows(dataset),
+            )
+            rows = _rows_from_table(scanner.to_table())
+        except Exception:
+            return None
+        camera_names = self._camera_names_for_bundle(bundle)
+        items: list[EpisodeListItem] = []
+        for row in rows:
+            payload = self._apply_episode_overrides(
+                dataset_id,
+                self._episode_payload(dataset_id, row, bundle.schemas["episodes"]),
+            )
+            payload["camera_names"] = camera_names
+            item = EpisodeListItem(**payload)
+            if all(
+                _matches_filter(item, field, operator, expected)
+                for field, operator, expected in filters
+            ):
+                items.append(item)
+        return items if limit is None else items[:limit]
 
     def _name_from_uri(self, uri: str) -> str:
         if uri.startswith("hf://datasets/"):

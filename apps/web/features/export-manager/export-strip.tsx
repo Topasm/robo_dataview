@@ -40,7 +40,7 @@ export function ExportStrip({
           <span>Export</span>
         </div>
         <div className="muted">
-          Episode #{episodeIndex} / LeRobot target / accepted labels only
+          Episode #{episodeIndex} / Lance subset / accepted labels only
         </div>
         {exportRecord ? (
           <div className="muted">
@@ -125,50 +125,51 @@ export function ExportStrip({
           </button>
         </div>
         <button
-          className="text-button"
-          disabled={exportJobActive}
-          onClick={() => void onCreateExport("lerobot", scope)}
-          type="button"
-        >
-          <Download size={15} />
-          LeRobot
-        </button>
-        <button
-          className="text-button"
+          className="text-button primary-export-button"
           disabled={exportJobActive}
           onClick={() => void onCreateExport("lance", scope)}
           type="button"
         >
           <Download size={15} />
-          Lance
+          Export Lance
         </button>
-        <button
-          className="text-button"
-          disabled={exportJobActive}
-          onClick={() => void onCreateExport("jsonl", scope)}
-          type="button"
-        >
-          <Download size={15} />
-          JSONL
-        </button>
-        <button
-          className="text-button"
-          disabled={exportJobActive}
-          onClick={() => void onCreateExport("vla", scope)}
-          type="button"
-        >
-          <Download size={15} />
-          VLA
-        </button>
-        <button
-          className="text-button"
-          disabled={exportJobActive}
-          onClick={() => void onCreateExport("hf_dataset", scope)}
-          type="button"
-        >
-          <Download size={15} />
-          HF Dataset
-        </button>
+        <details className="advanced-menu export-advanced-menu">
+          <summary>More formats</summary>
+          <div className="advanced-menu-content">
+            <button
+              className="text-button secondary-text-button"
+              disabled={exportJobActive}
+              onClick={() => void onCreateExport("lerobot", scope)}
+              type="button"
+            >
+              LeRobot
+            </button>
+            <button
+              className="text-button secondary-text-button"
+              disabled={exportJobActive}
+              onClick={() => void onCreateExport("jsonl", scope)}
+              type="button"
+            >
+              JSONL
+            </button>
+            <button
+              className="text-button secondary-text-button"
+              disabled={exportJobActive}
+              onClick={() => void onCreateExport("vla", scope)}
+              type="button"
+            >
+              VLA
+            </button>
+            <button
+              className="text-button secondary-text-button"
+              disabled={exportJobActive}
+              onClick={() => void onCreateExport("hf_dataset", scope)}
+              type="button"
+            >
+              HF Dataset
+            </button>
+          </div>
+        </details>
       </div>
     </section>
   );

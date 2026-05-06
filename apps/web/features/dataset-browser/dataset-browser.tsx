@@ -48,7 +48,15 @@ export function DatasetBrowser({
       ]
     ) ?? [];
   const healthIssues = [...(health?.errors ?? []), ...(health?.warnings ?? []), ...tableIssues];
-  const healthStatus = health?.ok ? "ready" : (health?.errors.length ?? 0) > 0 ? "error" : "warning";
+  const healthErrorCount = health?.errors.length ?? 0;
+  const hasHealthErrors = healthErrorCount > 0;
+  const hasHealthWarnings = healthIssues.length > 0;
+  const healthStatus = hasHealthErrors ? "error" : hasHealthWarnings ? "warning" : "ready";
+  const healthHeadline = hasHealthErrors
+    ? `${healthErrorCount.toLocaleString()} error${healthErrorCount === 1 ? "" : "s"}`
+    : hasHealthWarnings
+      ? `${healthIssues.length.toLocaleString()} warning${healthIssues.length === 1 ? "" : "s"}`
+      : "OK";
 
   async function handleOpenDataset() {
     if (!uri.trim()) {
@@ -110,9 +118,7 @@ export function DatasetBrowser({
           <div className="section-title">Health</div>
           <div className="health-status-row">
             <StatusPill status={healthStatus} />
-            <span className="muted">
-              {health.ok ? "OK" : `${healthIssues.length.toLocaleString()} issue${healthIssues.length === 1 ? "" : "s"}`}
-            </span>
+            <span className="muted">{healthHeadline}</span>
           </div>
           <div className="health-details">
             <HealthFact label="Storage" value={health.storageModel} />

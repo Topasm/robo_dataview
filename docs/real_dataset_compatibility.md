@@ -18,6 +18,10 @@ blobs or paths:
 ./.venv/bin/python scripts/check_dataset_compat.py --require-video /path/to/dataset
 ```
 
+The script defaults to `--health-level deep` so it can sample episode indices,
+frame/timeseries access, and camera video source readability. The web UI calls
+`GET /datasets/{id}/health?level=shallow` for cheaper table/schema checks.
+
 The script checks:
 
 - dataset open/index

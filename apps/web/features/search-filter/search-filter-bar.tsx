@@ -56,7 +56,7 @@ export function SearchFilterBar({
   onSelectResult,
   onSemanticSearch
 }: SearchFilterBarProps) {
-  const [semanticText, setSemanticText] = useState("cloth edge grasp");
+  const [semanticText, setSemanticText] = useState("");
   const [filterRows, setFilterRows] = useState<FilterRow[]>([
     {
       id: "filter-1",
@@ -183,8 +183,9 @@ export function SearchFilterBar({
         <div className="search-box">
           <Search size={16} />
           <input
-            aria-label="Semantic search text"
+            aria-label="Search episodes, labels, captions"
             onChange={(event) => setSemanticText(event.target.value)}
+            placeholder="Search episodes, labels, captions..."
             value={semanticText}
           />
         </div>
@@ -197,135 +198,140 @@ export function SearchFilterBar({
         >
           <Search size={16} />
         </button>
-        <button
-          className="icon-button"
-          disabled={isSearching || !semanticText.trim() || !filterQuery}
-          onClick={() => handleSearch(true)}
-          title="Semantic search within filter"
-          type="button"
-        >
-          <SlidersHorizontal size={16} />
-        </button>
-        <button
-          className="icon-button"
-          disabled={isSearching || !semanticText.trim()}
-          onClick={handleFullTextSearch}
-          title="Full-text search"
-          type="button"
-        >
-          <FileText size={16} />
-        </button>
       </div>
 
-      <div className="typed-filter-builder">
-        <div className="filter-rows">
-          {filterRows.map((row) => {
-            const field = fieldByKey(row.field);
-            return (
-              <div className="filter-row" key={row.id}>
-                <select
-                  aria-label="Filter field"
-                  onChange={(event) =>
-                    updateFilterRow(row.id, {
-                      field: event.target.value,
-                      operator: fieldByKey(event.target.value).operators[0]
-                    })
-                  }
-                  value={row.field}
-                >
-                  {FILTER_FIELDS.map((option) => (
-                    <option key={option.key} value={option.key}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  aria-label="Filter operator"
-                  onChange={(event) =>
-                    updateFilterRow(row.id, { operator: event.target.value as FilterOperator })
-                  }
-                  value={row.operator}
-                >
-                  {field.operators.map((operator) => (
-                    <option key={operator} value={operator}>
-                      {operator}
-                    </option>
-                  ))}
-                </select>
-                <FilterValueInput
-                  onChange={(value) => updateFilterRow(row.id, { value })}
-                  type={field.valueType}
-                  value={row.value}
-                />
-                <button
-                  className="icon-button"
-                  disabled={filterRows.length === 1}
-                  onClick={() => removeFilterRow(row.id)}
-                  title="Remove filter"
-                  type="button"
-                >
-                  <Trash2 size={15} />
-                </button>
-              </div>
-            );
-          })}
+      <details className="advanced-menu search-advanced-menu">
+        <summary>Filters</summary>
+        <div className="advanced-menu-content search-advanced-content">
+          <div className="typed-filter-builder">
+            <div className="filter-rows">
+              {filterRows.map((row) => {
+                const field = fieldByKey(row.field);
+                return (
+                  <div className="filter-row" key={row.id}>
+                    <select
+                      aria-label="Filter field"
+                      onChange={(event) =>
+                        updateFilterRow(row.id, {
+                          field: event.target.value,
+                          operator: fieldByKey(event.target.value).operators[0]
+                        })
+                      }
+                      value={row.field}
+                    >
+                      {FILTER_FIELDS.map((option) => (
+                        <option key={option.key} value={option.key}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      aria-label="Filter operator"
+                      onChange={(event) =>
+                        updateFilterRow(row.id, { operator: event.target.value as FilterOperator })
+                      }
+                      value={row.operator}
+                    >
+                      {field.operators.map((operator) => (
+                        <option key={operator} value={operator}>
+                          {operator}
+                        </option>
+                      ))}
+                    </select>
+                    <FilterValueInput
+                      onChange={(value) => updateFilterRow(row.id, { value })}
+                      type={field.valueType}
+                      value={row.value}
+                    />
+                    <button
+                      className="icon-button"
+                      disabled={filterRows.length === 1}
+                      onClick={() => removeFilterRow(row.id)}
+                      title="Remove filter"
+                      type="button"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="filter-actions">
+              <button className="icon-button" onClick={addFilterRow} title="Add filter" type="button">
+                <Plus size={15} />
+              </button>
+              <button
+                className="icon-button"
+                disabled={isSearching || !filterQuery}
+                onClick={handleFilter}
+                title="Episode filter"
+                type="button"
+              >
+                <SlidersHorizontal size={16} />
+              </button>
+              <button
+                className="icon-button"
+                disabled={isSearching || !semanticText.trim() || !filterQuery}
+                onClick={() => handleSearch(true)}
+                title="Search within filter"
+                type="button"
+              >
+                <Search size={16} />
+              </button>
+              <button
+                className="icon-button"
+                disabled={isSearching || !semanticText.trim()}
+                onClick={handleFullTextSearch}
+                title="Full-text search"
+                type="button"
+              >
+                <FileText size={16} />
+              </button>
+            </div>
+          </div>
+
+          {filterQuery ? <div className="filter-query-preview mono">{filterQuery}</div> : null}
+
+          <div className="filter-preset-row">
+            <select
+              aria-label="Saved filter presets"
+              onChange={(event) => applyPreset(event.target.value)}
+              value={selectedPresetId}
+            >
+              <option value="">Saved filters</option>
+              {filterPresets.map((preset) => (
+                <option key={preset.presetId} value={preset.presetId}>
+                  {preset.name}
+                </option>
+              ))}
+            </select>
+            <input
+              aria-label="Filter preset name"
+              onChange={(event) => setPresetName(event.target.value)}
+              placeholder="Preset name"
+              value={presetName}
+            />
+            <button
+              className="icon-button"
+              disabled={isSearching || !presetName.trim() || !filterQuery}
+              onClick={savePreset}
+              title="Save filter preset"
+              type="button"
+            >
+              <Save size={15} />
+            </button>
+            <button
+              className="icon-button"
+              disabled={isSearching || !selectedPresetId}
+              onClick={deleteSelectedPreset}
+              title="Delete filter preset"
+              type="button"
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
         </div>
-        <div className="filter-actions">
-          <button className="icon-button" onClick={addFilterRow} title="Add filter" type="button">
-            <Plus size={15} />
-          </button>
-          <button
-            className="icon-button"
-            disabled={isSearching || !filterQuery}
-            onClick={handleFilter}
-            title="Episode filter"
-            type="button"
-          >
-            <SlidersHorizontal size={16} />
-          </button>
-        </div>
-      </div>
-
-      {filterQuery ? <div className="filter-query-preview mono">{filterQuery}</div> : null}
-
-      <div className="filter-preset-row">
-        <select
-          aria-label="Saved filter presets"
-          onChange={(event) => applyPreset(event.target.value)}
-          value={selectedPresetId}
-        >
-          <option value="">Saved filters</option>
-          {filterPresets.map((preset) => (
-            <option key={preset.presetId} value={preset.presetId}>
-              {preset.name}
-            </option>
-          ))}
-        </select>
-        <input
-          aria-label="Filter preset name"
-          onChange={(event) => setPresetName(event.target.value)}
-          placeholder="Preset name"
-          value={presetName}
-        />
-        <button
-          className="icon-button"
-          disabled={isSearching || !presetName.trim() || !filterQuery}
-          onClick={savePreset}
-          title="Save filter preset"
-          type="button"
-        >
-          <Save size={15} />
-        </button>
-        <button
-          className="icon-button"
-          disabled={isSearching || !selectedPresetId}
-          onClick={deleteSelectedPreset}
-          title="Delete filter preset"
-          type="button"
-        >
-          <Trash2 size={15} />
-        </button>
-      </div>
+      </details>
 
       {results.length > 0 ? (
         <div className="search-results">

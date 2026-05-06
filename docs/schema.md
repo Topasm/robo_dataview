@@ -14,9 +14,9 @@ state is mirrored into queryable Lance current/events tables.
 
 ```text
 data/lance/annotations/<dataset>/annotations.jsonl
-data/lance/annotations/<dataset>/annotations.lance
 data/lance/annotations/<dataset>/annotations_current.lance
 data/lance/annotations/<dataset>/annotation_events.lance
+data/lance/annotations/<dataset>/annotations.lance  # compatibility current-view mirror
 
 data/lance/embeddings/<dataset>/embeddings.jsonl
 data/lance/embeddings/<dataset>/embeddings.lance
@@ -184,7 +184,7 @@ object-store paths use optional `fsspec`. Exported LeRobot video indexes include
 SHA256 digests, and validation rejects materialized MP4 files whose digest no
 longer matches the video index.
 
-## annotations.lance
+## annotations_current.lance
 
 Purpose:
 
@@ -206,26 +206,35 @@ source: string
 confidence: float32
 review_status: string
 created_by: string
+updated_by: string
 assigned_to: string | null
+revision: int64
+deleted_at: timestamp | null
+lock_owner: string | null
+lock_expires_at: timestamp | null
 created_at: timestamp
 updated_at: timestamp
 ```
 
 The source-of-truth code definition lives in
-`packages/robot_schema/lance_tables.py` as `ANNOTATIONS_COLUMNS`. In an
-environment with PyArrow installed, `build_annotations_pyarrow_schema()` returns
-the schema used to create `annotations.lance`.
+`packages/robot_schema/lance_tables.py` as `ANNOTATIONS_CURRENT_COLUMNS`. In an
+environment with PyArrow installed,
+`build_annotations_current_pyarrow_schema()` returns the schema used to create
+`annotations_current.lance`. `ANNOTATIONS_COLUMNS` and `annotations.lance`
+remain compatibility aliases for older tools that still expect a single current
+annotation table.
 
 The API stores annotations under `data/lance/annotations/<dataset>/`. It always
-writes `annotations.jsonl` for restart-safe local development. When `pyarrow`
-and `lance` are installed, the same records are mirrored to
-`annotations.lance` with the schema above.
+writes `annotations.jsonl` as a restart/debug copy during the transition. When
+`pyarrow` and `lance` are installed, the same current records are mirrored to
+`annotations_current.lance` and compatibility `annotations.lance` with the
+schema above.
 
 Every create, update, and delete also appends an immutable event to
-`history.jsonl` in the same dataset directory. History events include the
-annotation id, episode index, action, actor, timestamp, and before/after
-annotation snapshots so review changes can be audited without mutating raw Lance
-tables.
+`history.jsonl` and mirrors dataset history to `annotation_events.lance` in the
+same dataset directory. History events include the annotation id, episode index,
+action, actor, timestamp, and before/after annotation snapshots so review
+changes can be audited without mutating raw Lance tables.
 
 Allowed `source` values:
 
@@ -424,8 +433,8 @@ lance_subset/
 ├─ metadata.json
 ├─ episodes.lance
 ├─ frames.lance
-├─ videos.lance
-├─ annotations.lance
+├─ media.lance / videos.lance
+├─ annotations_current.lance
 └─ validation.json
 ```
 

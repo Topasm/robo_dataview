@@ -1,5 +1,6 @@
 import dynamic from "next/dynamic";
 import { Box, ExternalLink } from "lucide-react";
+import { useState } from "react";
 
 import type { JobRecord, RerunSession } from "@/lib/types";
 
@@ -16,20 +17,35 @@ type RerunPanelProps = {
 };
 
 export function RerunPanel({ job, session, viewerUrl, onCreateSession }: RerunPanelProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const effectiveViewerUrl = session?.viewerUrl ?? viewerUrl;
   const jobActive = job ? !["succeeded", "failed"].includes(job.status) : false;
   const progressPercent = Math.round(Math.max(0, Math.min(1, job?.progress ?? 0)) * 100);
+  const shouldShowViewer = isExpanded || session !== null || job !== null;
 
   return (
-    <section className="rerun-panel">
-      <div className="section-title">
-        <Box size={16} />
-        <span>Rerun</span>
+    <section className={`rerun-panel ${shouldShowViewer ? "rerun-panel-expanded" : ""}`}>
+      <div className="rerun-panel-header">
+        <div className="section-title">
+          <Box size={16} />
+          <span>Advanced Inspect</span>
+        </div>
+        <button
+          className="text-button secondary-text-button"
+          disabled={jobActive}
+          onClick={() => setIsExpanded((current) => !current)}
+          type="button"
+        >
+          <ExternalLink size={15} />
+          {shouldShowViewer ? "Hide Rerun" : "Inspect with Rerun"}
+        </button>
       </div>
-      <button className="text-button" disabled={jobActive} onClick={onCreateSession} type="button">
-        <ExternalLink size={15} />
-        Generate cached recording
-      </button>
+      {shouldShowViewer ? (
+        <button className="text-button" disabled={jobActive} onClick={onCreateSession} type="button">
+          <ExternalLink size={15} />
+          Generate cached recording
+        </button>
+      ) : null}
       {job ? (
         <div className="rerun-session-status">
           <span className={`status-pill status-${job.status}`}>{job.status}</span>
@@ -58,11 +74,11 @@ export function RerunPanel({ job, session, viewerUrl, onCreateSession }: RerunPa
           {session.cacheKey ? <span className="muted mono">{session.cacheKey}</span> : null}
         </div>
       ) : null}
-      {session?.rrdUrl && session.status === "ready" ? (
+      {shouldShowViewer && session?.rrdUrl && session.status === "ready" ? (
         <div className="rerun-viewer-shell">
           <WebViewer height="100%" hide_welcome_screen rrd={session.rrdUrl} width="100%" />
         </div>
-      ) : effectiveViewerUrl ? (
+      ) : shouldShowViewer && effectiveViewerUrl ? (
         <iframe
           className="rerun-frame"
           referrerPolicy="no-referrer"

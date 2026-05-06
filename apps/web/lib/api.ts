@@ -67,6 +67,7 @@ type DatasetHealthResponse = {
   ok: boolean;
   status: string;
   storage_model: string;
+  level?: string;
   episode_count: number;
   frame_count: number;
   camera_count: number;
@@ -363,8 +364,12 @@ export async function fetchDatasetSummary(datasetId: string): Promise<DatasetSum
   return request<DatasetSummaryResponse>(`/datasets/${datasetId}/summary`).then(toDatasetSummary);
 }
 
-export async function fetchDatasetHealth(datasetId: string): Promise<DatasetHealth> {
-  return request<DatasetHealthResponse>(`/datasets/${datasetId}/health`).then(toDatasetHealth);
+export async function fetchDatasetHealth(
+  datasetId: string,
+  level: "shallow" | "deep" = "shallow",
+): Promise<DatasetHealth> {
+  const query = new URLSearchParams({ level });
+  return request<DatasetHealthResponse>(`/datasets/${datasetId}/health?${query}`).then(toDatasetHealth);
 }
 
 export type EpisodeListOptions = {
@@ -770,7 +775,7 @@ export async function createVisualEmbeddingJob(
 export async function createExportJob(
   datasetId: string,
   episodeIndices: number[],
-  format: ExportFormat = "lerobot",
+  format: ExportFormat = "lance",
   splits: string[] = [],
   publishUri?: string,
 ): Promise<JobRecord> {
@@ -843,7 +848,7 @@ export async function fetchCurrentUser(): Promise<UserIdentity> {
 export async function createExport(
   datasetId: string,
   episodeIndices: number[],
-  format: ExportFormat = "lerobot",
+  format: ExportFormat = "lance",
   splits: string[] = [],
   publishUri?: string,
 ): Promise<ExportRecord> {
@@ -1037,6 +1042,7 @@ function toDatasetHealth(raw: DatasetHealthResponse): DatasetHealth {
     ok: raw.ok,
     status: raw.status,
     storageModel: raw.storage_model,
+    level: raw.level ?? "shallow",
     episodeCount: raw.episode_count,
     frameCount: raw.frame_count,
     cameraCount: raw.camera_count,

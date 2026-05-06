@@ -52,7 +52,7 @@ class FakeDatasetStore:
             status="indexed",
         )
 
-    def get_health(self, dataset_id: str) -> DatasetHealth | None:
+    def get_health(self, dataset_id: str, *, level: str = "shallow") -> DatasetHealth | None:
         if dataset_id != "dataset-a":
             return None
         return DatasetHealth(
@@ -60,6 +60,7 @@ class FakeDatasetStore:
             ok=True,
             status="indexed",
             storage_model="lance",
+            level=level,
         )
 
 
@@ -93,6 +94,7 @@ class DatasetRouterTest(unittest.TestCase):
 
         self.assertTrue(health.ok)
         self.assertEqual(health.storage_model, "lance")
+        self.assertEqual(health.level, "shallow")
 
     def test_health_route_returns_404_for_missing_dataset(self) -> None:
         with patch.object(datasets, "store", FakeDatasetStore()):

@@ -23,6 +23,12 @@ def main() -> int:
     parser.add_argument("--name-prefix", default="compat", help="Dataset name prefix")
     parser.add_argument("--episode-limit", type=int, default=3, help="Episodes to inspect per dataset")
     parser.add_argument("--require-video", action="store_true", help="Fail when no camera has readable video bytes/source")
+    parser.add_argument(
+        "--health-level",
+        choices=("shallow", "deep"),
+        default="deep",
+        help="Dataset health depth. Smoke tests use deep by default; the web UI uses shallow.",
+    )
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON")
     args = parser.parse_args()
 
@@ -32,6 +38,7 @@ def main() -> int:
             name=f"{args.name_prefix}-{idx}",
             episode_limit=args.episode_limit,
             require_video=args.require_video,
+            health_level=args.health_level,
         )
         for idx, uri in enumerate(args.uris)
     ]
@@ -55,6 +62,7 @@ def check_dataset(
     name: str,
     episode_limit: int,
     require_video: bool,
+    health_level: str,
 ) -> dict[str, Any]:
     store = LanceDatasetStore()
     result: dict[str, Any] = {
@@ -75,7 +83,7 @@ def check_dataset(
         if summary is None:
             result["errors"].append("missing dataset summary")
             return result
-        health = store.get_health(record.dataset_id)
+        health = store.get_health(record.dataset_id, level=health_level)
         if health is not None:
             result["health"] = health.model_dump()
             result["warnings"].extend(health.warnings)

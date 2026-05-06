@@ -55,6 +55,8 @@ class AnnotationStore:
             annotation_id=str(uuid4()),
             created_at=now,
             updated_at=now,
+            updated_by=payload.created_by,
+            revision=1,
             **model_dump(payload),
         )
         self._records[record.annotation_id] = record
@@ -81,6 +83,8 @@ class AnnotationStore:
         if merged["end_frame"] < merged["start_frame"]:
             raise ValueError("end_frame must be greater than or equal to start_frame")
         merged["updated_at"] = datetime.now(timezone.utc)
+        merged["updated_by"] = actor
+        merged["revision"] = int(merged.get("revision") or 1) + 1
         record = AnnotationRecord(**merged)
         self._records[annotation_id] = record
         self._append_history(
@@ -274,6 +278,10 @@ class AnnotationStore:
             "review_status": record.review_status.value,
             "created_at": record.created_at.isoformat(),
             "updated_at": record.updated_at.isoformat(),
+            "deleted_at": record.deleted_at.isoformat() if record.deleted_at else None,
+            "lock_expires_at": (
+                record.lock_expires_at.isoformat() if record.lock_expires_at else None
+            ),
         }
 
     @staticmethod

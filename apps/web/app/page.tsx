@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Database, Download, Settings } from "lucide-react";
+import { Database, Settings } from "lucide-react";
 
 import { AnnotationEditor } from "@/features/annotation-editor/annotation-editor";
 import { DatasetBrowser } from "@/features/dataset-browser/dataset-browser";
@@ -80,21 +80,13 @@ export default function Home() {
             Dataset
           </button>
           <button className="nav-button" type="button">
-            Task
+            Episodes
           </button>
           <button className="nav-button" type="button">
-            Search
-          </button>
-          <button className="nav-button" type="button">
-            <Bot size={15} />
-            VLM Jobs
-          </button>
-          <button className="nav-button" type="button">
-            <Download size={15} />
-            Export
+            Review
           </button>
         </nav>
-        <button className="icon-button" title="Settings" type="button">
+        <button className="icon-button" title="Advanced settings" type="button">
           <Settings size={17} />
         </button>
       </header>

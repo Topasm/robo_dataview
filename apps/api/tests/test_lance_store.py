@@ -585,11 +585,20 @@ class LanceDatasetStoreTest(unittest.TestCase):
 
         store = LanceDatasetStore()
         record = store.open_dataset(DatasetOpenRequest(uri="/datasets/health", name="health"))
-        health = store.get_health(record.dataset_id)
+        shallow = store.get_health(record.dataset_id)
+        health = store.get_health(record.dataset_id, level="deep")
 
+        self.assertIsNotNone(shallow)
+        assert shallow is not None
+        self.assertEqual(shallow.level, "shallow")
+        self.assertFalse(
+            any("non-contiguous" in warning for warning in shallow.warnings),
+            shallow.warnings,
+        )
         self.assertIsNotNone(health)
         assert health is not None
         self.assertTrue(health.ok)
+        self.assertEqual(health.level, "deep")
         self.assertEqual(health.storage_model, "lance")
         self.assertEqual([table.table for table in health.tables], ["frames", "episodes", "videos"])
         self.assertTrue(

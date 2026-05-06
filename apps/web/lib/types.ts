@@ -31,6 +31,7 @@ export type DatasetHealth = {
   ok: boolean;
   status: string;
   storageModel: string;
+  level: string;
   episodeCount: number;
   frameCount: number;
   cameraCount: number;

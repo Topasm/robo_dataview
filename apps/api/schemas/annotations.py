@@ -73,7 +73,12 @@ class AnnotationRecord(BaseModel):
     confidence: float
     review_status: ReviewStatus
     created_by: str
+    updated_by: str = "local"
     assigned_to: str | None = None
+    revision: int = 1
+    deleted_at: datetime | None = None
+    lock_owner: str | None = None
+    lock_expires_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

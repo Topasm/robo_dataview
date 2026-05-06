@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Robot Data Studio",
-  description: "Lance-native LeRobot dataset curation platform"
+  description: "Lance-native robot dataset operations platform"
 };
 
 export default function RootLayout({

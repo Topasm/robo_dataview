@@ -59,10 +59,13 @@ Response:
 }
 ```
 
-`GET /datasets/{dataset_id}/health` returns Lance-first dataset checks for the
-operator sidebar and compatibility smoke tests. It reports canonical table
-presence, row counts when cheaply available, missing required columns, and
-dataset-level warnings/errors.
+`GET /datasets/{dataset_id}/health?level=shallow|deep` returns Lance-first
+dataset checks for the operator sidebar and compatibility smoke tests. The
+default `shallow` level reports canonical table presence, row counts when
+cheaply available, missing required columns, and dataset-level warnings/errors.
+The `deep` level additionally samples episode indices, frame/timeseries access,
+and camera video source readability. The web UI uses `shallow`; smoke scripts
+use `deep` by default.
 
 Response:
 
@@ -72,6 +75,7 @@ Response:
   "ok": true,
   "status": "indexed",
   "storage_model": "lance",
+  "level": "shallow",
   "episode_count": 8,
   "frame_count": 1200,
   "camera_count": 3,
@@ -557,12 +561,14 @@ returns `status=failed` instead of writing a successful manifest.
 
 For `format=lance`, the response contains `artifacts.lance_subset` when optional
 `pyarrow` and `lance` dependencies are installed. The subset contains
-`episodes.lance`, `frames.lance`, `videos.lance`, and `annotations.lance`
-tables for selected episodes, available camera video blobs, and accepted
-annotations only. If those optional dependencies are missing, the export fails
-with a dependency message instead of returning an empty successful artifact. The
-validation report opens each Lance table when possible and checks table row
-counts against the export metadata; failed validation returns `status=failed`.
+`episodes.lance`, `frames.lance`, `media.lance`/`videos.lance`, and accepted
+current annotations for selected episodes. Compatibility exports may still write
+`annotations.lance` for older tooling, but the canonical curation view is
+`annotations_current.lance`. If optional dependencies are missing, the export
+fails with a dependency message instead of returning an empty successful
+artifact. The validation report opens each Lance table when possible and checks
+table row counts against the export metadata; failed validation returns
+`status=failed`.
 
 For `format=jsonl`, the response contains `artifacts.jsonl` with
 `episodes.jsonl`, `captions.jsonl`, and accepted `annotations.jsonl`. For

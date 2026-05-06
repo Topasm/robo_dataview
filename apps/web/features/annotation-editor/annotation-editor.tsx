@@ -454,9 +454,9 @@ export function AnnotationEditor({
       </section>
 
       <section className="panel-section">
-        <div className="section-title">VLM Proposals</div>
+        <div className="section-title">AI Proposals</div>
         <button
-          className="text-button vlm-run-button"
+          className="text-button secondary-text-button vlm-run-button"
           disabled={isRunningVlm || isVlmJobActive}
           onClick={handleRunVlmLabel}
           type="button"
@@ -468,21 +468,26 @@ export function AnnotationEditor({
           <div className="vlm-job-status">
             <StatusPill status={vlmJob.status} />
             <span className="muted">{vlmJob.message}</span>
-            <span className="mono">
-              {vlmJob.promptTemplate}
-              {vlmJob.promptVersion ? `@${vlmJob.promptVersion}` : ""}
-            </span>
-            {vlmJob.provider ? <span className="mono">{vlmJob.provider}</span> : null}
-            {vlmJob.rawResponseIds.length > 0 ? (
-              <span className="mono">{vlmJob.rawResponseIds.length} raw</span>
-            ) : null}
-            {vlmJob.queueJobId ? <span className="mono">queue {vlmJob.queueJobId}</span> : null}
             <div className="vlm-progress">
               <div className="progress-track compact-progress-track">
                 <div className="progress-fill" style={{ width: `${vlmProgressPercent}%` }} />
               </div>
               <span className="mono">{vlmProgressPercent}%</span>
             </div>
+            <details className="advanced-menu compact-advanced-menu">
+              <summary>Job details</summary>
+              <div className="advanced-menu-content">
+                <span className="mono">
+                  {vlmJob.promptTemplate}
+                  {vlmJob.promptVersion ? `@${vlmJob.promptVersion}` : ""}
+                </span>
+                {vlmJob.provider ? <span className="mono">{vlmJob.provider}</span> : null}
+                {vlmJob.rawResponseIds.length > 0 ? (
+                  <span className="mono">{vlmJob.rawResponseIds.length} raw</span>
+                ) : null}
+                {vlmJob.queueJobId ? <span className="mono">queue {vlmJob.queueJobId}</span> : null}
+              </div>
+            </details>
           </div>
         ) : null}
         {rationaleRows.length > 0 ? (

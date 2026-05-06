@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from apps.api.schemas.datasets import (
@@ -80,8 +80,17 @@ def dataset_schema(dataset_id: str) -> dict[str, list[str]]:
 
 
 @router.get("/datasets/{dataset_id}/health", response_model=DatasetHealth)
-def dataset_health(dataset_id: str) -> DatasetHealth:
-    health = store.get_health(dataset_id)
+def dataset_health(
+    dataset_id: str,
+    level: str = Query(
+        default="shallow",
+        pattern="^(shallow|deep)$",
+        description="Use shallow for schema/table checks; deep also samples frames, timeseries, and video sources.",
+    ),
+) -> DatasetHealth:
+    if not isinstance(level, str):
+        level = "shallow"
+    health = store.get_health(dataset_id, level=level)
     if health is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return health

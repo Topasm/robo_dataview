@@ -6,8 +6,9 @@ local MVP scaffold to a useful robot dataset operations tool.
 ## Product Target
 
 Robot Data Studio should be a Lance-native web platform for exploring,
-auto-labeling, reviewing, filtering, editing, and exporting LeRobot datasets for
-VLA and robot policy training.
+auto-labeling, reviewing, filtering, editing, versioning, and exporting robot
+datasets for VLA and robot policy training. LeRobot is an import/export
+compatibility target, not the internal data model.
 
 Architecture target:
 
@@ -29,6 +30,24 @@ VLM = proposal generator
 Human = final reviewer
 ```
 
+Default user flow:
+
+```text
+Open Lance dataset
+-> Health check
+-> Browse episodes
+-> Play synchronized videos
+-> Inspect frame/state/action
+-> Annotate or review
+-> Search/filter
+-> Export Lance subset/version
+```
+
+Features outside that path should stay behind Advanced or plugin entry points:
+Rerun deep inspection, VLM provider details, embedding model settings, schema
+inspection, raw job logs, object storage publishing, and LeRobot/HF/JSONL/VLA
+compatibility exports.
+
 ## Current Baseline
 
 Working:
@@ -44,14 +63,23 @@ Working:
   [`lerobot2lance`](https://github.com/Topasm/lerobot2lance) package and is
   surfaced via `POST /datasets/convert-lerobot` when the package is installed.
 - Dataset schema endpoint.
+- Dataset health endpoint with shallow schema/table checks for the web UI and
+  deep sample checks for smoke tests.
 - Episode detail, video blob, and state/action summary endpoints.
 - MP4 video blob serving with `HEAD` and byte-range support.
 - `videos.lance` fallback for episode-indexed video blobs, LeRobot-style video
   shard references, local files, HTTP(S), `hf://`, and optional `fsspec`
   object-store paths.
-- Annotation CRUD with JSONL persistence and optional Lance mirroring.
+- Annotation CRUD with transitional JSONL debug/restart copies and optional
+  Lance current/events mirroring.
+- Current annotation schema includes `revision`, `updated_by`, `deleted_at`,
+  `lock_owner`, and `lock_expires_at` fields so the next write-path refactor can
+  move toward optimistic concurrency and explicit locks.
 - Segment edit and midpoint split actions in the web UI.
 - Search filter endpoint.
+- Simple raw episode predicates are translated to Lance scanner filters when
+  every predicate targets an `episodes.lance` column; overlay and unsupported
+  predicates fall back to Python filtering.
 - Full-text search endpoint and web action.
 - Typed filter builder UI for common episode fields.
 - Text-embedding semantic search endpoint with deterministic fallback, optional

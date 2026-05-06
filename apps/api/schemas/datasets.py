@@ -53,6 +53,7 @@ class DatasetHealth(BaseModel):
     ok: bool
     status: str
     storage_model: str
+    level: str = "shallow"
     episode_count: int = 0
     frame_count: int = 0
     camera_count: int = 0

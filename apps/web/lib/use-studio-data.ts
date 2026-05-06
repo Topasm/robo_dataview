@@ -1091,7 +1091,7 @@ export function useStudioData() {
   }
 
   async function handleCreateExport(
-    format: ExportFormat = "lerobot",
+    format: ExportFormat = "lance",
     scope: "episode" | "split" = "episode",
   ) {
     const split = selectedEpisode.split || null;
