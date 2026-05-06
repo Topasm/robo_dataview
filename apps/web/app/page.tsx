@@ -149,7 +149,7 @@ export default function Home() {
             onClick={() => setViewMode("annotation")}
             type="button"
           >
-            Review
+            Annotation
           </button>
         </nav>
         <button className="icon-button" title="Advanced settings" type="button">
