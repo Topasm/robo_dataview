@@ -162,6 +162,10 @@ button:disabled {
   min-height: 0;
 }
 
+.content-split.dataset-mode {
+  grid-template-columns: 1fr;
+}
+
 .viewer-column {
   display: grid;
   grid-template-rows: minmax(360px, 1fr) auto auto;

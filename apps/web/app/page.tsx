@@ -17,6 +17,7 @@ import { useStudioData } from "@/lib/use-studio-data";
 type DrawerTab = "episodes" | "frames" | "rerun" | "export";
 
 export default function Home() {
+  const [viewMode, setViewMode] = useState<"dataset" | "annotation">("dataset");
   const [activeDrawer, setActiveDrawer] = useState<DrawerTab | null>(null);
   const [showSignals, setShowSignals] = useState(false);
   const {
@@ -136,13 +137,18 @@ export default function Home() {
           <span>Robot Data Studio</span>
         </div>
         <nav className="top-nav">
-          <button className="nav-button active" type="button">
+          <button
+            className={`nav-button ${viewMode === "dataset" ? "active" : ""}`}
+            onClick={() => setViewMode("dataset")}
+            type="button"
+          >
             Dataset
           </button>
-          <button className="nav-button" type="button">
-            Episodes
-          </button>
-          <button className="nav-button" type="button">
+          <button
+            className={`nav-button ${viewMode === "annotation" ? "active" : ""}`}
+            onClick={() => setViewMode("annotation")}
+            type="button"
+          >
             Review
           </button>
         </nav>
@@ -226,7 +232,7 @@ export default function Home() {
               Export Training Bundle
             </button>
           </div>
-          <div className="content-split">
+          <div className={`content-split ${viewMode === "dataset" ? "dataset-mode" : ""}`}>
             <div className="viewer-column">
               <EpisodeViewer
                 annotations={annotationRows}
@@ -248,29 +254,30 @@ export default function Home() {
                 selectedFrame={selectedFrameIndex}
               />
             </div>
-            <AnnotationEditor
-              annotationHistory={annotationHistoryRows}
-              onNextPendingEpisode={handleSelectNextPendingEpisode}
-              episodeLabelHistory={episodeLabelHistoryRows}
-              annotations={annotationRows}
-              episode={selectedEpisode}
-              onCreateSegment={handleCreateSegment}
-              onAssignAnnotation={handleAssignAnnotation}
-              onDeleteSegment={handleDeleteSegment}
-              onRunVlmLabel={handleRunVlmLabel}
-              onSplitSegment={handleSplitSegment}
-              onUpdateEpisodeLabels={handleUpdateEpisodeLabels}
-              onUpdateSelectedFrameLabel={handleUpdateSelectedFrameLabel}
-              onUpdateSelectedFrameBadFlag={handleUpdateSelectedFrameBadFlag}
-              onUpdateSegment={handleUpdateSegment}
-              onUpdateReviewStatus={handleUpdateReviewStatus}
-              selectedFrame={selectedFrameIndex}
-              selectedFrameRecord={selectedFrameRecord}
-              selectedFrameStatus={selectedFrameStatus}
-              reviewerUserId={reviewerUserId}
-              vlmJob={vlmJob}
-              vlmResponses={vlmResponses}
-            />
+            {viewMode === "annotation" ? (
+              <AnnotationEditor
+                annotationHistory={annotationHistoryRows}
+                onNextPendingEpisode={handleSelectNextPendingEpisode}
+                episodeLabelHistory={episodeLabelHistoryRows}
+                annotations={annotationRows}
+                episode={selectedEpisode}
+                onCreateSegment={handleCreateSegment}
+                onAssignAnnotation={handleAssignAnnotation}
+                onDeleteSegment={handleDeleteSegment}
+                onRunVlmLabel={handleRunVlmLabel}
+                onUpdateEpisodeLabels={handleUpdateEpisodeLabels}
+                onUpdateSelectedFrameLabel={handleUpdateSelectedFrameLabel}
+                onUpdateSelectedFrameBadFlag={handleUpdateSelectedFrameBadFlag}
+                onUpdateSegment={handleUpdateSegment}
+                onUpdateReviewStatus={handleUpdateReviewStatus}
+                selectedFrame={selectedFrameIndex}
+                selectedFrameRecord={selectedFrameRecord}
+                selectedFrameStatus={selectedFrameStatus}
+                reviewerUserId={reviewerUserId}
+                vlmJob={vlmJob}
+                vlmResponses={vlmResponses}
+              />
+            ) : null}
           </div>
           {activeDrawer ? (
             <BottomDrawer

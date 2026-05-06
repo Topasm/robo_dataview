@@ -47,7 +47,6 @@ type AnnotationEditorProps = {
   onCreateSegment: (draft: AnnotationDraft) => Promise<void>;
   onDeleteSegment: (annotationId: string) => Promise<void>;
   onRunVlmLabel: () => Promise<void>;
-  onSplitSegment: (annotation: SegmentAnnotation) => Promise<void>;
   onUpdateEpisodeLabels: (draft: EpisodeLabelDraft) => Promise<void>;
   onUpdateSelectedFrameLabel: (
     labelType: string,
@@ -75,7 +74,6 @@ export function AnnotationEditor({
   onCreateSegment,
   onDeleteSegment,
   onRunVlmLabel,
-  onSplitSegment,
   onUpdateEpisodeLabels,
   onUpdateSelectedFrameLabel,
   onUpdateSelectedFrameBadFlag,
