@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -36,7 +37,7 @@ from apps.api.services.version_service import (
 )
 
 
-EXPORT_ROOT = Path("data/exports")
+EXPORT_ROOT = Path(os.getenv("ROBOT_DATA_STUDIO_EXPORT_ROOT", "data/exports"))
 
 
 class ExportStore:

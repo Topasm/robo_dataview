@@ -22,6 +22,7 @@ from packages.robot_schema import (
 
 
 LANCE_SUBSET_VERSION = "robot_data_studio_lance_subset_v2"
+MANIFEST_JSON_PATH = Path("manifest.json")
 METADATA_JSON_PATH = Path("metadata.json")
 EPISODES_LANCE_PATH = Path("episodes.lance")
 FRAMES_LANCE_PATH = Path("frames.lance")
@@ -194,7 +195,9 @@ def write_lance_subset(
             "annotations": table_paths["annotations"].name,
         },
     }
+    manifest_path = root / MANIFEST_JSON_PATH
     metadata_path = root / METADATA_JSON_PATH
+    manifest_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
     metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
     validation = validate_lance_subset(root)
     validation_path = root / "validation.json"
@@ -205,6 +208,7 @@ def write_lance_subset(
         "root": str(root),
         "validation": validation,
         "files": {
+            "manifest": str(manifest_path),
             "metadata": str(metadata_path),
             "validation": str(validation_path),
             "episodes": str(table_paths["episodes"]),
@@ -230,8 +234,10 @@ def write_lance_subset(
 
 
 def validate_lance_subset(root: Path) -> dict[str, Any]:
+    manifest_path = root / MANIFEST_JSON_PATH
     metadata_path = root / METADATA_JSON_PATH
     paths = {
+        "manifest": manifest_path,
         "metadata": metadata_path,
         "episodes": root / EPISODES_LANCE_PATH,
         "frames": root / FRAMES_LANCE_PATH,
@@ -247,12 +253,21 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
     warnings: list[str] = []
     metadata: dict[str, Any] = {}
 
-    if not present["metadata"]:
-        errors.append("missing metadata.json")
+    metadata_source_path = (
+        metadata_path
+        if present["metadata"]
+        else manifest_path
+        if present["manifest"]
+        else None
+    )
+    if metadata_source_path is None:
+        errors.append("missing manifest.json or metadata.json")
     else:
-        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata = json.loads(metadata_source_path.read_text(encoding="utf-8"))
         if metadata.get("format") != LANCE_SUBSET_VERSION:
             warnings.append(f"unexpected format {metadata.get('format')!r}")
+        if not present["manifest"]:
+            warnings.append("manifest.json is missing; metadata.json was used as a legacy fallback")
 
     for table_name in (
         "episodes",
