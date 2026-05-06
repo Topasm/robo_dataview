@@ -1,6 +1,8 @@
 import type {
   AnnotationHistoryRecord,
+  DatasetHealth,
   DatasetSummary,
+  DatasetTableHealth,
   Episode,
   EpisodeLabelHistoryRecord,
   EpisodeListPage,
@@ -49,6 +51,28 @@ type DatasetSummaryResponse = DatasetRecordResponse & {
   reviewed_count: number;
   accepted_count: number;
   rejected_count: number;
+};
+
+type DatasetTableHealthResponse = {
+  table: string;
+  present: boolean;
+  row_count: number | null;
+  columns: string[];
+  missing_required_columns: string[];
+  warnings: string[];
+};
+
+type DatasetHealthResponse = {
+  dataset_id: string;
+  ok: boolean;
+  status: string;
+  storage_model: string;
+  episode_count: number;
+  frame_count: number;
+  camera_count: number;
+  tables: DatasetTableHealthResponse[];
+  warnings: string[];
+  errors: string[];
 };
 
 type EpisodeResponse = {
@@ -337,6 +361,10 @@ export async function fetchDatasetSummaries(): Promise<DatasetSummary[]> {
 
 export async function fetchDatasetSummary(datasetId: string): Promise<DatasetSummary> {
   return request<DatasetSummaryResponse>(`/datasets/${datasetId}/summary`).then(toDatasetSummary);
+}
+
+export async function fetchDatasetHealth(datasetId: string): Promise<DatasetHealth> {
+  return request<DatasetHealthResponse>(`/datasets/${datasetId}/health`).then(toDatasetHealth);
 }
 
 export type EpisodeListOptions = {
@@ -1000,6 +1028,32 @@ function toDatasetSummary(raw: DatasetSummaryResponse): DatasetSummary {
     acceptedCount: raw.accepted_count,
     rejectedCount: raw.rejected_count,
     message: raw.message
+  };
+}
+
+function toDatasetHealth(raw: DatasetHealthResponse): DatasetHealth {
+  return {
+    datasetId: raw.dataset_id,
+    ok: raw.ok,
+    status: raw.status,
+    storageModel: raw.storage_model,
+    episodeCount: raw.episode_count,
+    frameCount: raw.frame_count,
+    cameraCount: raw.camera_count,
+    tables: raw.tables.map(toDatasetTableHealth),
+    warnings: raw.warnings,
+    errors: raw.errors
+  };
+}
+
+function toDatasetTableHealth(raw: DatasetTableHealthResponse): DatasetTableHealth {
+  return {
+    table: raw.table,
+    present: raw.present,
+    rowCount: raw.row_count,
+    columns: raw.columns,
+    missingRequiredColumns: raw.missing_required_columns,
+    warnings: raw.warnings
   };
 }
 

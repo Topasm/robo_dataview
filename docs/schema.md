@@ -1,18 +1,22 @@
 # Data Schema
 
-This schema targets Lance-native LeRobot datasets with separate tables for
-frame-level sampling, episode-level replay, raw videos, annotations, embeddings,
-and curated versions.
+This schema targets Lance-native robot datasets with separate tables for
+frame-level sampling, episode-level replay, media provenance, cameras, tasks,
+annotations, embeddings, splits, and curated versions. LeRobot is a supported
+import/export compatibility target, not the internal data model.
 
 ## Current Storage Contract
 
-The target source of truth is Lance-compatible storage. The current local MVP
-uses JSONL as the mandatory durable fallback and mirrors to `.lance` datasets
-when optional `pyarrow` and `lance` packages are available.
+The target source of truth is Lance-compatible storage. During the MVP
+transition, JSONL remains as a local debug/readability copy and restart-safe
+fallback. When optional `pyarrow` and `lance` packages are available, curation
+state is mirrored into queryable Lance current/events tables.
 
 ```text
 data/lance/annotations/<dataset>/annotations.jsonl
 data/lance/annotations/<dataset>/annotations.lance
+data/lance/annotations/<dataset>/annotations_current.lance
+data/lance/annotations/<dataset>/annotation_events.lance
 
 data/lance/embeddings/<dataset>/embeddings.jsonl
 data/lance/embeddings/<dataset>/embeddings.lance
@@ -45,10 +49,14 @@ derives FPS, task captions, task indices, camera names/info, and state/action
 dimensions from `meta/info.json` plus `meta/tasks.jsonl`; norm ranges stay
 unknown until real frame rows or time-series arrays are loaded.
 
-The shared `packages/robot_schema` package currently defines local curation
-schemas for `annotations.lance`, `embeddings.lance`, and `versions.lance`. It
-does not yet define the full raw `frames.lance`, `episodes.lance`, or
-`videos.lance` schemas as code.
+The shared `packages/robot_schema` package defines local curation schemas for
+`annotations_current.lance`, `annotation_events.lance`, `embeddings.lance`,
+`splits.lance`, and `versions.lance`, plus canonical raw schema builders for
+`episodes.lance`, `frames.lance`, `media.lance`/`videos.lance`,
+`cameras.lance`, and `tasks.lance`. `episodes.lance` camera columns are
+dynamic: pass LeRobot-style feature keys such as `observation.images.cam_head`
+to generate normalized `observation_images_cam_head_video_blob` and timestamp
+range columns.
 
 ## frames.lance
 
@@ -82,8 +90,9 @@ available and falls back to episode-level state/action time series. It returns
 state/action vectors, computed norms, overlapping annotation labels, and
 bad-frame flags. `PATCH /frames/{frame_index}` can add, accept, or reject
 annotation-backed exact-frame labels such as `bad_frame`, `important_frame`,
-`occlusion`, and `gripper_contact`. Full raw-frame mutation and durable
-raw-frame schema helpers are not implemented yet.
+`occlusion`, and `gripper_contact`. Raw-frame schema helpers are available in
+`packages.robot_schema`; full destructive raw-frame mutation is still kept out
+of the MVP path so curation labels remain non-destructive overlays.
 
 ## episodes.lance
 

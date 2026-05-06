@@ -1,8 +1,10 @@
 # Robot Data Studio
 
-Robot Data Studio is a web-based operating tool for Lance-native LeRobot
-datasets. Its goal is not only to preview robot data, but to help curate
-high-quality datasets for VLA and robot policy training.
+Robot Data Studio is a Lance-native robot dataset operations platform. It can
+import from LeRobot and export LeRobot-compatible snapshots, but its canonical
+storage, search, annotation, versioning, and training subset layer is Lance.
+Its goal is not only to preview robot data, but to help curate high-quality
+datasets for VLA and robot policy training.
 
 ## Product Direction
 
@@ -12,6 +14,9 @@ high-quality datasets for VLA and robot policy training.
   visualization.
 - **Lance / LanceDB**: source of truth for raw data, annotations, embeddings,
   versions, and searchable subsets.
+- **LeRobot compatibility**: import/export and optional official-loader
+  validation. LeRobot is an interoperability target, not the internal data
+  model.
 - **Python Workers**: VLM auto-labeling, embedding generation, thumbnails,
   validation, Rerun cache generation, export jobs.
 
@@ -34,6 +39,14 @@ docs/         Architecture, schema, API, UI, roadmap, deployment, and plan
 workers/      Python worker helpers
 packages/     Shared schema and prompts
 data/         Local Lance data, cache, and exports
+```
+
+Real dataset compatibility smoke checks live in
+[`docs/real_dataset_compatibility.md`](docs/real_dataset_compatibility.md) and
+can be run with:
+
+```bash
+./.venv/bin/python scripts/check_dataset_compat.py /path/to/dataset
 ```
 
 ## Local Development
@@ -104,8 +117,9 @@ The repository has moved past a pure skeleton. The current MVP path can:
    and falling back to episode time-series arrays with annotation labels and
    bad-frame flags, and show/edit selected-frame labels in the web metadata
    panel.
-4. Store human and generated annotations as JSONL and mirror them to Lance when
-   optional Lance dependencies are installed.
+4. Store human and generated annotations as durable JSONL debug copies plus
+   Lance-compatible current/events tables when optional Lance dependencies are
+   installed.
 5. Generate Rerun `.rrd` cache files for state/action timeline inspection and
    load them through the Rerun React web viewer.
 6. Run basic filter search through a typed builder with saved presets, plus

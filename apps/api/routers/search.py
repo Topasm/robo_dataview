@@ -13,6 +13,7 @@ from apps.api.services.embedding_service import embedding_index
 from apps.api.services.filter_preset_service import filter_preset_store
 from apps.api.services.full_text_search_service import full_text_search as run_full_text_search
 from apps.api.services.lance_store import store
+from apps.api.services.pagination import list_all_episodes
 
 
 router = APIRouter(tags=["search"])
@@ -25,18 +26,14 @@ def filter_search(payload: FilterSearchRequest) -> list[SearchResult]:
 
 @router.post("/search/semantic", response_model=list[SearchResult])
 def semantic_search(payload: SemanticSearchRequest) -> list[SearchResult]:
-    episodes = store.list_episodes(payload.dataset_id, limit=1000, offset=0)
+    episodes = list_all_episodes(store, payload.dataset_id)
     annotations = annotation_store.list(payload.dataset_id, episode_index=None)
     persist_records = True
     if payload.filter_query and payload.filter_query.strip():
-        filter_results = store.filter_search(
-            FilterSearchRequest(
-                dataset_id=payload.dataset_id,
-                query=payload.filter_query,
-                limit=1000,
-            )
-        )
-        episode_indices = {result.episode_index for result in filter_results}
+        episode_indices = {
+            episode.episode_index
+            for episode in store.filter_episode_items(payload.dataset_id, payload.filter_query)
+        }
         if not episode_indices:
             return []
         episodes = [
@@ -60,7 +57,7 @@ def semantic_search(payload: SemanticSearchRequest) -> list[SearchResult]:
 
 @router.post("/search/full-text", response_model=list[SearchResult])
 def full_text_search(payload: FullTextSearchRequest) -> list[SearchResult]:
-    episodes = store.list_episodes(payload.dataset_id, limit=1000, offset=0)
+    episodes = list_all_episodes(store, payload.dataset_id)
     annotations = annotation_store.list(payload.dataset_id, episode_index=None)
     return run_full_text_search(payload, episodes=episodes, annotations=annotations)
 

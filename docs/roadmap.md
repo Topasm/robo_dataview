@@ -48,7 +48,7 @@ Deliverables:
 
 Goal:
 
-- Open a Lance-native LeRobot dataset.
+- Open a Lance-native robot dataset, including LeRobot-compatible imports.
 - Show dataset summary and episode list.
 - Load one episode's metadata, state/action arrays, and video preview handles.
 

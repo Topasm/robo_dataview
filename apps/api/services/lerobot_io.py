@@ -607,7 +607,7 @@ def _video_file_status(path: Path, video_row: dict[str, Any]) -> dict[str, Any]:
         return {**base, "error": "file is not present"}
     try:
         import cv2
-    except ImportError as exc:
+    except Exception as exc:
         return {**base, "readable": None, "error": f"opencv is unavailable: {exc}"}
 
     capture = None

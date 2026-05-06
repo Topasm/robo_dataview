@@ -135,6 +135,15 @@ class _FakeSearchStore:
             for episode_index in self.filtered_episode_indices
         ]
 
+    def filter_episode_items(self, dataset_id: str, query: str):
+        self.filter_query = query
+        return [
+            episode
+            for episode in self.episodes
+            if episode.dataset_id == dataset_id
+            and episode.episode_index in self.filtered_episode_indices
+        ]
+
 
 class _FakeAnnotationStore:
     def __init__(self, annotations: list[AnnotationRecord]) -> None:

@@ -159,14 +159,14 @@ Not implemented yet:
 
 ## Design Principles
 
-1. Lance owns durable data: raw episodes, annotations, embeddings, versions, and
-   export records.
+1. Lance owns durable data: raw episodes, media, annotations, embeddings,
+   versions, and export records.
 2. Rerun is a visualization engine. It should be regenerated or streamed from
    Lance-backed state.
 3. VLM outputs are proposals. They should be stored with `source = "vlm"` and
    `review_status = "pending"` until reviewed by a human.
-4. LeRobot compatibility is a first-class constraint, so curated subsets must
-   be exportable for training pipelines.
+4. LeRobot compatibility is an interoperability target, not the internal data
+   model. Curated subsets must remain exportable for training pipelines.
 
 ## Service Boundaries
 
@@ -179,8 +179,9 @@ FastAPI services
   both synchronous development execution and queue-backed job dispatch.
 
 Lance-compatible stores
-  Own annotation, embedding, and version records. JSONL is the mandatory local
-  fallback; Lance mirroring is optional.
+  Own annotation, embedding, and version records. The target write path is
+  Lance current/events tables; JSONL remains as a local debug/readability copy
+  during the MVP transition.
 
 Workers
   Own expensive or asynchronous compute. VLM labeling, visual embedding,

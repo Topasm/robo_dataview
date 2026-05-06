@@ -14,7 +14,11 @@ from apps.api.schemas.annotations import (
     AnnotationUpdate,
 )
 from apps.api.services.pydantic_compat import model_dump
-from packages.robot_schema import build_annotations_pyarrow_schema
+from packages.robot_schema import (
+    build_annotation_events_pyarrow_schema,
+    build_annotations_current_pyarrow_schema,
+    build_annotations_pyarrow_schema,
+)
 
 
 ANNOTATION_STORAGE_ROOT = Path("data/lance/annotations")
@@ -127,6 +131,8 @@ class AnnotationStore:
         return {
             "jsonl": str(dataset_dir / "annotations.jsonl"),
             "lance": str(dataset_dir / "annotations.lance"),
+            "current_lance": str(dataset_dir / "annotations_current.lance"),
+            "events_lance": str(dataset_dir / "annotation_events.lance"),
             "history": str(dataset_dir / "history.jsonl"),
         }
 
@@ -153,7 +159,10 @@ class AnnotationStore:
         records = self.list(dataset_id=dataset_id, episode_index=None)
         jsonl_path = dataset_dir / "annotations.jsonl"
         lines = [json.dumps(self._json_row(record), sort_keys=True) for record in records]
-        jsonl_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+        _atomic_write_text(jsonl_path, "\n".join(lines) + ("\n" if lines else ""))
+        self._mirror_current_lance(dataset_dir / "annotations_current.lance", records)
+        # Keep the original path during the transition so older tools/tests that
+        # expect annotations.lance still see the current view.
         self._mirror_lance(dataset_dir / "annotations.lance", records)
 
     def _append_history(
@@ -186,6 +195,51 @@ class AnnotationStore:
         history_path = dataset_dir / "history.jsonl"
         with history_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(self._history_json_row(event), sort_keys=True) + "\n")
+        self._mirror_events_lance(dataset_dir / "annotation_events.lance", dataset_id)
+
+    def _mirror_current_lance(self, lance_path: Path, records: list[AnnotationRecord]) -> None:
+        if not self.mirror_lance:
+            return
+        try:
+            import pyarrow as pa
+            import lance
+        except ImportError:
+            return
+
+        schema = build_annotations_current_pyarrow_schema()
+        rows = [self._lance_row(record) for record in records]
+        if rows:
+            table = pa.Table.from_pylist(rows, schema=schema)
+        else:
+            table = pa.Table.from_arrays(
+                [pa.array([], type=field.type) for field in schema],
+                schema=schema,
+            )
+        lance.write_dataset(table, str(lance_path), mode="overwrite")
+
+    def _mirror_events_lance(self, lance_path: Path, dataset_id: str) -> None:
+        if not self.mirror_lance:
+            return
+        try:
+            import pyarrow as pa
+            import lance
+        except ImportError:
+            return
+
+        schema = build_annotation_events_pyarrow_schema()
+        rows = [
+            self._history_lance_row(event)
+            for event in self._history
+            if event.dataset_id == dataset_id
+        ]
+        if rows:
+            table = pa.Table.from_pylist(rows, schema=schema)
+        else:
+            table = pa.Table.from_arrays(
+                [pa.array([], type=field.type) for field in schema],
+                schema=schema,
+            )
+        lance.write_dataset(table, str(lance_path), mode="overwrite")
 
     def _mirror_lance(self, lance_path: Path, records: list[AnnotationRecord]) -> None:
         if not self.mirror_lance:
@@ -230,6 +284,28 @@ class AnnotationStore:
         }
 
     @staticmethod
+    def _history_lance_row(record: AnnotationHistoryRecord) -> dict[str, object]:
+        return {
+            "event_id": record.event_id,
+            "annotation_id": record.annotation_id,
+            "dataset_id": record.dataset_id,
+            "episode_index": record.episode_index,
+            "action": record.action,
+            "actor": record.actor,
+            "before_json": (
+                json.dumps(record.before, sort_keys=True)
+                if record.before is not None
+                else None
+            ),
+            "after_json": (
+                json.dumps(record.after, sort_keys=True)
+                if record.after is not None
+                else None
+            ),
+            "created_at": record.created_at,
+        }
+
+    @staticmethod
     def _lance_row(record: AnnotationRecord) -> dict[str, object]:
         return {
             **model_dump(record),
@@ -239,3 +315,9 @@ class AnnotationStore:
 
 
 annotation_store = AnnotationStore()
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    tmp_path.write_text(text, encoding="utf-8")
+    tmp_path.replace(path)

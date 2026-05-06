@@ -35,6 +35,7 @@ export default function Home() {
     searchResults,
     selectedEpisode,
     selectedEpisodeIndex,
+    selectedDatasetHealth,
     selectedFrameIndex,
     selectedFrameRecord,
     selectedFrameStatus,
@@ -112,6 +113,7 @@ export default function Home() {
           onSelectEpisode={handleSelectEpisode}
           reviewQueueRows={reviewQueueRows}
           reviewerUserId={reviewerUserId}
+          health={selectedDatasetHealth}
           summary={selectedSummary}
         />
         <div className="center-column">

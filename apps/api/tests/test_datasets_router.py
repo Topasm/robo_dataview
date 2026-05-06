@@ -6,7 +6,7 @@ from unittest.mock import patch
 from fastapi import HTTPException
 
 from apps.api.routers import datasets
-from apps.api.schemas.datasets import DatasetOpenRequest, DatasetRecord
+from apps.api.schemas.datasets import DatasetHealth, DatasetOpenRequest, DatasetRecord
 
 
 class FakeDatasetStore:
@@ -52,6 +52,16 @@ class FakeDatasetStore:
             status="indexed",
         )
 
+    def get_health(self, dataset_id: str) -> DatasetHealth | None:
+        if dataset_id != "dataset-a":
+            return None
+        return DatasetHealth(
+            dataset_id="dataset-a",
+            ok=True,
+            status="indexed",
+            storage_model="lance",
+        )
+
 
 class DatasetRouterTest(unittest.TestCase):
     def test_open_reload_and_close_routes_delegate_to_store(self) -> None:
@@ -76,6 +86,20 @@ class DatasetRouterTest(unittest.TestCase):
 
         self.assertEqual(reload_context.exception.status_code, 404)
         self.assertEqual(close_context.exception.status_code, 404)
+
+    def test_health_route_delegates_to_store(self) -> None:
+        with patch.object(datasets, "store", FakeDatasetStore()):
+            health = datasets.dataset_health("dataset-a")
+
+        self.assertTrue(health.ok)
+        self.assertEqual(health.storage_model, "lance")
+
+    def test_health_route_returns_404_for_missing_dataset(self) -> None:
+        with patch.object(datasets, "store", FakeDatasetStore()):
+            with self.assertRaises(HTTPException) as context:
+                datasets.dataset_health("missing")
+
+        self.assertEqual(context.exception.status_code, 404)
 
 
 if __name__ == "__main__":

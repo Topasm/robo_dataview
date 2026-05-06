@@ -565,6 +565,38 @@ class LanceDatasetStoreTest(unittest.TestCase):
         self.assertIsNotNone(summary)
         self.assertEqual(summary.episode_count, 2)
 
+    def test_dataset_health_reports_lance_tables_and_non_contiguous_episode_warning(self) -> None:
+        episode_rows = [
+            {"episode_index": 0, "timestamps": [0.0], "actions": [[0.0]], "observation_state": [[0.0]]},
+            {"episode_index": 2, "timestamps": [0.0], "actions": [[0.0]], "observation_state": [[0.0]]},
+        ]
+        fake_tables = {
+            "/datasets/health/episodes.lance": FakeDataset(
+                episode_rows,
+                list(episode_rows[0].keys()),
+            ),
+            "/datasets/health/frames.lance": FakeDataset(
+                [{"episode_index": 0, "frame_index": 0}],
+                ["episode_index", "frame_index"],
+            ),
+            "/datasets/health/videos.lance": FakeDataset([], ["camera_name", "video_path"]),
+        }
+        sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+
+        store = LanceDatasetStore()
+        record = store.open_dataset(DatasetOpenRequest(uri="/datasets/health", name="health"))
+        health = store.get_health(record.dataset_id)
+
+        self.assertIsNotNone(health)
+        assert health is not None
+        self.assertTrue(health.ok)
+        self.assertEqual(health.storage_model, "lance")
+        self.assertEqual([table.table for table in health.tables], ["frames", "episodes", "videos"])
+        self.assertTrue(
+            any("non-contiguous" in warning for warning in health.warnings),
+            health.warnings,
+        )
+
     def test_reload_keeps_builtin_sample_dataset_available(self) -> None:
         store = LanceDatasetStore()
         reloaded = store.reload_dataset("sample-xvla-soft-fold")

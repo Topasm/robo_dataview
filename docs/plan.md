@@ -139,25 +139,35 @@ Known limits:
 Milestone name:
 
 ```text
-M2: Real-Data Compatibility Hardening
+M2: Lance-Native Core Hardening
 ```
 
 Goal:
 
 ```text
-Robot Data Studio can reliably open representative local and remote LeRobot /
-Lance datasets, preserve camera/video metadata, validate exports with official
-loaders where available, and surface clear degradation when optional ML/storage
-providers are not configured.
+Robot Data Studio uses Lance as the canonical robot data operations layer.
+LeRobot remains an import/export compatibility plugin, while dataset storage,
+schema validation, annotation, search, versioning, and training subset
+selection are Lance-native.
 ```
 
 Definition of done:
 
-- Real local LeRobot v2.1 and v3 metadata snapshots index with correct episode
-  count, FPS, task captions, task indices, camera names, camera info, and
-  state/action dimensions.
-- A representative `hf://` Lance dataset can be opened and sampled without
-  loading whole video artifacts when range-readable paths are available.
+- Canonical raw/curation tables are defined in code: episodes, frames, media,
+  cameras, tasks, annotations current/events, embeddings, splits, and versions.
+- JSONL is a debug/export/readability copy; Lance current/events tables are the
+  primary target for queryable curation state.
+- Episode, frame, and media queries prefer scanner/filter/projection paths and
+  avoid whole-table Python filtering on the normal path.
+- 10k+ episode and 1M+ frame smoke datasets keep episode list/search/frame
+  range interactions responsive.
+- LeRobot import/export code is isolated as compatibility logic, not the core
+  backend abstraction.
+- Preview/cache workers can build thumbnails, low-resolution previews,
+  keyframes, and state/action norm downsample artifacts.
+- Real local LeRobot v2.1/v3 and representative `hf://` Lance datasets can be
+  opened and sampled without loading whole video artifacts when range-readable
+  paths are available.
 - Export smoke tests cover metadata-only, frame JSONL, Parquet, no-video, and
   video-backed snapshots.
 - Official loader validation passes when optional dependencies are installed,

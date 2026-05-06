@@ -21,6 +21,7 @@ from apps.api.services.job_queue import (
     build_job_queue_from_env,
 )
 from apps.api.services.lance_store import store
+from apps.api.services.pagination import list_all_episodes
 from apps.api.services.pydantic_compat import model_copy, model_dump
 from apps.api.services.rerun_service import rerun_sessions
 from apps.api.services.vlm_response_service import vlm_response_store
@@ -253,7 +254,7 @@ class JobStore:
         if not episode_indices:
             episode_indices = [
                 episode.episode_index
-                for episode in store.list_episodes(payload.dataset_id, limit=1000, offset=0)
+                for episode in list_all_episodes(store, payload.dataset_id)
             ]
         if not episode_indices:
             return model_copy(

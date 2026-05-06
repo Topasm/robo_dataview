@@ -26,6 +26,7 @@ from apps.api.services.hf_dataset_export import (
 from apps.api.services.lance_export import LanceExportDependencyError, write_lance_subset
 from apps.api.services.lance_store import store
 from apps.api.services.lerobot_io import write_lerobot_v3_snapshot
+from apps.api.services.pagination import list_all_episodes
 from apps.api.services.pydantic_compat import model_copy, model_dump
 from apps.api.services.training_export import write_jsonl_export, write_vla_jsonl_export
 from apps.api.services.version_service import (
@@ -374,7 +375,7 @@ class ExportStore:
 
     @staticmethod
     def _episode_indices_for_splits(payload: ExportCreateRequest) -> list[int]:
-        episodes = store.list_episodes(payload.dataset_id, limit=1000, offset=0)
+        episodes = list_all_episodes(store, payload.dataset_id)
         if not payload.splits:
             return [episode.episode_index for episode in episodes]
         wanted = {split for split in payload.splits if split}

@@ -4,7 +4,12 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from apps.api.schemas.datasets import DatasetOpenRequest, DatasetRecord, DatasetSummary
+from apps.api.schemas.datasets import (
+    DatasetHealth,
+    DatasetOpenRequest,
+    DatasetRecord,
+    DatasetSummary,
+)
 from apps.api.services.lance_store import store
 
 try:
@@ -72,6 +77,14 @@ def dataset_schema(dataset_id: str) -> dict[str, list[str]]:
     if schema is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return schema
+
+
+@router.get("/datasets/{dataset_id}/health", response_model=DatasetHealth)
+def dataset_health(dataset_id: str) -> DatasetHealth:
+    health = store.get_health(dataset_id)
+    if health is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return health
 
 
 @router.post("/datasets/convert-lerobot", response_model=LerobotConversionResponse)

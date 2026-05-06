@@ -71,9 +71,9 @@ class VersionStore:
     def _persist(self) -> None:
         self.storage_root.mkdir(parents=True, exist_ok=True)
         rows = [self._json_row(record) for record in self._records]
-        (self.storage_root / "versions.jsonl").write_text(
+        _atomic_write_text(
+            self.storage_root / "versions.jsonl",
             "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
-            encoding="utf-8",
         )
         self._mirror_lance(self.storage_root / "versions.lance", self._records)
 
@@ -137,3 +137,9 @@ def create_export_version_record(
 
 
 version_store = VersionStore()
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    tmp_path.write_text(text, encoding="utf-8")
+    tmp_path.replace(path)

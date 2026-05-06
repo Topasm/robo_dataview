@@ -24,6 +24,7 @@ from apps.api.services.embedding_service import (
     create_embedding_id,
 )
 from apps.api.services.lance_store import LanceDatasetStore, VideoSource
+from apps.api.services.pagination import list_all_episodes
 from workers.keyframe_extractor import (
     KeyframeArtifact,
     KeyframeExtractionUnavailable,
@@ -203,7 +204,7 @@ def _target_episodes(
     if not episode_indices:
         episode_indices = [
             episode.episode_index
-            for episode in dataset_store.list_episodes(dataset_id, limit=1000, offset=0)
+            for episode in list_all_episodes(dataset_store, dataset_id)
         ]
     episodes: list[EpisodeDetail] = []
     for episode_index in episode_indices:

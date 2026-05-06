@@ -17,6 +17,28 @@ export type DatasetSummary = {
   message?: string | null;
 };
 
+export type DatasetTableHealth = {
+  table: string;
+  present: boolean;
+  rowCount: number | null;
+  columns: string[];
+  missingRequiredColumns: string[];
+  warnings: string[];
+};
+
+export type DatasetHealth = {
+  datasetId: string;
+  ok: boolean;
+  status: string;
+  storageModel: string;
+  episodeCount: number;
+  frameCount: number;
+  cameraCount: number;
+  tables: DatasetTableHealth[];
+  warnings: string[];
+  errors: string[];
+};
+
 export type Episode = {
   datasetId: string;
   episodeIndex: number;

@@ -36,6 +36,7 @@ POST /datasets/{dataset_id}/reload
 DELETE /datasets/{dataset_id}
 GET  /datasets/{dataset_id}/summary
 GET  /datasets/{dataset_id}/schema
+GET  /datasets/{dataset_id}/health
 ```
 
 `POST /datasets/open`
@@ -55,6 +56,37 @@ Response:
   "name": "xvla-soft-fold",
   "uri": "/data/lance/xvla-soft-fold",
   "status": "indexed"
+}
+```
+
+`GET /datasets/{dataset_id}/health` returns Lance-first dataset checks for the
+operator sidebar and compatibility smoke tests. It reports canonical table
+presence, row counts when cheaply available, missing required columns, and
+dataset-level warnings/errors.
+
+Response:
+
+```json
+{
+  "dataset_id": "raw-lance",
+  "ok": true,
+  "status": "indexed",
+  "storage_model": "lance",
+  "episode_count": 8,
+  "frame_count": 1200,
+  "camera_count": 3,
+  "tables": [
+    {
+      "table": "episodes",
+      "present": true,
+      "row_count": 8,
+      "columns": ["episode_index", "length"],
+      "missing_required_columns": [],
+      "warnings": []
+    }
+  ],
+  "warnings": [],
+  "errors": []
 }
 ```
 

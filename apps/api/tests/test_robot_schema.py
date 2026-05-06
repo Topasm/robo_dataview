@@ -5,8 +5,20 @@ import unittest
 from packages.robot_schema import (
     ANNOTATIONS_COLUMNS,
     annotations_column_names,
+    annotation_events_column_names,
+    annotations_current_column_names,
+    cameras_column_names,
     embeddings_column_names,
     episode_labels_column_names,
+    build_raw_episodes_pyarrow_schema,
+    episodes_column_names,
+    frames_column_names,
+    media_column_names,
+    raw_episodes_column_names,
+    raw_frames_column_names,
+    raw_videos_column_names,
+    splits_column_names,
+    tasks_column_names,
     versions_column_names,
 )
 
@@ -35,6 +47,15 @@ class RobotSchemaTest(unittest.TestCase):
         non_nullable = {column.name for column in ANNOTATIONS_COLUMNS if not column.nullable}
         self.assertIn("annotation_id", non_nullable)
         self.assertIn("review_status", non_nullable)
+        self.assertEqual(annotations_current_column_names(), annotations_column_names())
+
+    def test_annotation_events_schema_contains_audit_columns(self) -> None:
+        columns = annotation_events_column_names()
+
+        self.assertIn("event_id", columns)
+        self.assertIn("annotation_id", columns)
+        self.assertIn("before_json", columns)
+        self.assertIn("after_json", columns)
 
     def test_embeddings_schema_contains_required_columns_in_order(self) -> None:
         self.assertEqual(
@@ -91,6 +112,35 @@ class RobotSchemaTest(unittest.TestCase):
                 "created_by",
             ],
         )
+
+    def test_raw_episode_schema_normalizes_camera_feature_columns(self) -> None:
+        columns = raw_episodes_column_names(["observation.images.cam_head"])
+
+        self.assertIn("episode_index", columns)
+        self.assertIn("observation_images_cam_head_video_blob", columns)
+        self.assertIn("observation_images_cam_head_from_timestamp", columns)
+        self.assertIn("observation_images_cam_head_to_timestamp", columns)
+        self.assertEqual(columns, episodes_column_names(["observation.images.cam_head"]))
+
+    def test_raw_frame_and_video_contracts_expose_core_columns(self) -> None:
+        self.assertIn("frame_index", raw_frames_column_names())
+        self.assertIn("global_frame_index", raw_frames_column_names())
+        self.assertIn("observation_state", raw_frames_column_names())
+        self.assertEqual(raw_frames_column_names(), frames_column_names())
+        self.assertIn("camera_name", raw_videos_column_names())
+        self.assertIn("video_blob", raw_videos_column_names())
+        self.assertEqual(raw_videos_column_names(), media_column_names())
+
+    def test_auxiliary_lance_contracts_expose_core_columns(self) -> None:
+        self.assertIn("camera_id", cameras_column_names())
+        self.assertIn("task_id", tasks_column_names())
+        self.assertIn("split", splits_column_names())
+
+    def test_raw_episode_schema_marks_video_blobs_as_lance_blobs(self) -> None:
+        schema = build_raw_episodes_pyarrow_schema(["observation.images.cam_head"])
+        field = schema.field("observation_images_cam_head_video_blob")
+
+        self.assertEqual(field.metadata[b"lance-encoding:blob"], b"true")
 
 
 if __name__ == "__main__":

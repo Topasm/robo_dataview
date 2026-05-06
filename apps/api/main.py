@@ -19,7 +19,7 @@ from apps.api.services.auth import enforce_api_key
 app = FastAPI(
     title="Robot Data Studio API",
     version="0.1.0",
-    description="API for Lance-native LeRobot dataset curation.",
+    description="API for Lance-native robot dataset operations and LeRobot-compatible import/export.",
 )
 
 app.add_middleware(

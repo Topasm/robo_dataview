@@ -2,10 +2,11 @@ import { useState } from "react";
 import { Database, FolderOpen, SlidersHorizontal } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
-import type { DatasetSummary, SegmentAnnotation } from "@/lib/types";
+import type { DatasetHealth, DatasetSummary, SegmentAnnotation } from "@/lib/types";
 
 type DatasetBrowserProps = {
   summary: DatasetSummary;
+  health: DatasetHealth | null;
   reviewQueueRows: SegmentAnnotation[];
   reviewerUserId: string;
   onOpenDataset: (uri: string) => Promise<void>;
@@ -14,6 +15,7 @@ type DatasetBrowserProps = {
 
 export function DatasetBrowser({
   summary,
+  health,
   reviewQueueRows,
   reviewerUserId,
   onOpenDataset,
@@ -35,6 +37,18 @@ export function DatasetBrowser({
     ...assignedRows,
     ...pendingRows.filter((annotation) => annotation.assignedTo !== reviewerUserId)
   ].slice(0, 4);
+  const coreTables =
+    health?.tables.filter((table) => table.table === "episodes" || table.table === "frames") ?? [];
+  const presentCoreTableCount = coreTables.filter((table) => table.present).length;
+  const tableIssues =
+    health?.tables.flatMap((table) =>
+      [
+        ...table.missingRequiredColumns.map((column) => `${table.table}: missing ${column}`),
+        ...table.warnings.map((warning) => `${table.table}: ${warning}`)
+      ]
+    ) ?? [];
+  const healthIssues = [...(health?.errors ?? []), ...(health?.warnings ?? []), ...tableIssues];
+  const healthStatus = health?.ok ? "ready" : (health?.errors.length ?? 0) > 0 ? "error" : "warning";
 
   async function handleOpenDataset() {
     if (!uri.trim()) {
@@ -90,6 +104,31 @@ export function DatasetBrowser({
         <Metric label="FPS" value={summary.fps.toString()} />
         <Metric label="Cameras" value={summary.cameraNames.length.toString()} />
       </section>
+
+      {health ? (
+        <section className="panel-section dataset-health">
+          <div className="section-title">Health</div>
+          <div className="health-status-row">
+            <StatusPill status={healthStatus} />
+            <span className="muted">
+              {health.ok ? "OK" : `${healthIssues.length.toLocaleString()} issue${healthIssues.length === 1 ? "" : "s"}`}
+            </span>
+          </div>
+          <div className="health-details">
+            <HealthFact label="Storage" value={health.storageModel} />
+            <HealthFact label="Core" value={`${presentCoreTableCount}/${coreTables.length}`} />
+          </div>
+          {healthIssues.length > 0 ? (
+            <div className="health-issues">
+              {healthIssues.slice(0, 3).map((issue) => (
+                <div className="health-issue" key={issue}>
+                  {issue}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="panel-section">
         <div className="section-title">Review</div>
@@ -153,6 +192,15 @@ export function DatasetBrowser({
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="metric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function HealthFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="health-fact">
       <span>{label}</span>
       <strong>{value}</strong>
     </div>

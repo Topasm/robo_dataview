@@ -14,7 +14,13 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
-from apps.api.schemas.datasets import DatasetOpenRequest, DatasetRecord, DatasetSummary
+from apps.api.schemas.datasets import (
+    DatasetHealth,
+    DatasetOpenRequest,
+    DatasetRecord,
+    DatasetSummary,
+    DatasetTableHealth,
+)
 from apps.api.schemas.episodes import (
     EpisodeDetail,
     EpisodeLabelHistoryRecord,
@@ -1098,6 +1104,7 @@ class LanceDatasetStore:
         self._summaries: dict[str, DatasetSummary] = {}
         self._episodes: dict[str, list[EpisodeDetail]] = {}
         self._bundles: dict[str, LanceBundle] = {}
+        self._episode_row_offsets: dict[str, dict[int, int]] = {}
         self._episode_label_overrides: dict[str, dict[int, dict[str, Any]]] = {}
         self._episode_label_history: list[EpisodeLabelHistoryRecord] = []
         if self.persist_episode_labels:
@@ -1208,6 +1215,7 @@ class LanceDatasetStore:
             )
             self._datasets[dataset_id] = record
             self._bundles.pop(dataset_id, None)
+            self._episode_row_offsets.pop(dataset_id, None)
             self._episodes[dataset_id] = lerobot_episodes
             self._summaries[dataset_id] = self._summary_from_episodes(
                 record,
@@ -1230,6 +1238,7 @@ class LanceDatasetStore:
             )
             self._datasets[dataset_id] = record
             self._bundles.pop(dataset_id, None)
+            self._episode_row_offsets.pop(dataset_id, None)
             self._episodes[dataset_id] = []
             self._summaries[dataset_id] = self._empty_summary(record)
             if persist_registry:
@@ -1245,6 +1254,7 @@ class LanceDatasetStore:
             )
             self._datasets[dataset_id] = record
             self._bundles.pop(dataset_id, None)
+            self._episode_row_offsets.pop(dataset_id, None)
             self._episodes[dataset_id] = []
             self._summaries[dataset_id] = self._empty_summary(record)
             if persist_registry:
@@ -1260,6 +1270,7 @@ class LanceDatasetStore:
         )
         self._datasets[dataset_id] = record
         self._bundles[dataset_id] = bundle
+        self._episode_row_offsets.pop(dataset_id, None)
         self._episodes.pop(dataset_id, None)
         self._summaries[dataset_id] = self._build_summary(record, bundle)
         if persist_registry:
@@ -1276,6 +1287,79 @@ class LanceDatasetStore:
         if dataset_id in self._datasets:
             return {}
         return None
+
+    def get_health(self, dataset_id: str) -> DatasetHealth | None:
+        record = self._datasets.get(dataset_id)
+        if record is None:
+            return None
+        summary = self._summaries.get(dataset_id)
+        bundle = self._bundles.get(dataset_id)
+        warnings: list[str] = []
+        errors: list[str] = []
+        tables: list[DatasetTableHealth] = []
+
+        if record.status != "indexed" and record.status != "sample":
+            errors.append(record.message or f"dataset status is {record.status}")
+        if summary is None:
+            errors.append("dataset summary is missing")
+
+        if bundle is None:
+            storage_model = "sample_or_metadata"
+            if record.status == "indexed":
+                warnings.append("dataset is metadata-backed; Lance raw tables are not open")
+        else:
+            storage_model = "lance"
+            tables = self._table_health(bundle)
+            for table in tables:
+                for missing in table.missing_required_columns:
+                    errors.append(f"{table.table}.lance missing required column: {missing}")
+            if "episodes" not in bundle.tables:
+                errors.append("episodes.lance is missing")
+
+        episode_count = summary.episode_count if summary is not None else 0
+        frame_count = summary.frame_count if summary is not None else 0
+        camera_names = summary.camera_names if summary is not None else []
+        if episode_count <= 0:
+            errors.append("dataset has no episodes")
+        if not camera_names:
+            warnings.append("dataset has no detected cameras")
+
+        if bundle is not None and episode_count > 0:
+            index_cache = self._build_episode_row_offsets(bundle)
+            if len(index_cache) != episode_count:
+                warnings.append(
+                    "episode_index values are duplicated or unavailable for some rows"
+                )
+            if index_cache:
+                sorted_indices = sorted(index_cache)
+                expected = list(range(sorted_indices[0], sorted_indices[0] + len(sorted_indices)))
+                if sorted_indices != expected:
+                    warnings.append("episode_index is non-contiguous; row-offset cache is active")
+
+            sample_page = self.list_episode_page(dataset_id, limit=min(10, episode_count), offset=0)
+            missing_timeseries = [
+                episode.episode_index
+                for episode in sample_page.items
+                if self.get_episode_timeseries(dataset_id, episode.episode_index) is None
+            ]
+            if missing_timeseries:
+                warnings.append(
+                    "sample episodes without state/action timeseries: "
+                    + ", ".join(str(index) for index in missing_timeseries[:10])
+                )
+
+        return DatasetHealth(
+            dataset_id=dataset_id,
+            ok=not errors,
+            status=record.status,
+            storage_model=storage_model,
+            episode_count=episode_count,
+            frame_count=frame_count,
+            camera_count=len(camera_names),
+            tables=tables,
+            warnings=warnings,
+            errors=errors,
+        )
 
     def list_episodes(
         self,
@@ -1477,19 +1561,25 @@ class LanceDatasetStore:
         column = _video_column_for_camera(schema, camera)
         dataset = bundle.tables["episodes"]
 
-        episode_row = _read_episode_row_by_index(
-            dataset,
+        episode_row = self._read_lance_episode_row_by_index(
+            dataset_id,
+            bundle,
             episode_index,
             columns=_metadata_columns(schema, include_arrays=False),
         )
         if column is not None and hasattr(dataset, "take_blobs"):
-            source = self._get_episode_blob_source_by_offset(dataset, episode_index, column)
+            source = self._get_episode_blob_source_by_offset(
+                dataset,
+                column,
+                self._episode_row_offset(dataset_id, bundle, episode_index),
+            )
             if source is not None:
                 return source
 
         if column is not None:
-            row = _read_episode_row_by_index(
-                dataset,
+            row = self._read_lance_episode_row_by_index(
+                dataset_id,
+                bundle,
                 episode_index,
                 columns=["episode_index", column],
             )
@@ -1622,16 +1712,11 @@ class LanceDatasetStore:
         )
 
     def filter_search(self, payload: FilterSearchRequest) -> list[SearchResult]:
-        episodes = self.list_episodes(payload.dataset_id, limit=payload.limit, offset=0)
-        try:
-            filters = _parse_filter_query(payload.query)
-        except ValueError:
-            return []
-        matched = [
-            episode
-            for episode in episodes
-            if all(_matches_filter(episode, field, operator, expected) for field, operator, expected in filters)
-        ]
+        matched = self.filter_episode_items(
+            payload.dataset_id,
+            payload.query,
+            limit=payload.limit,
+        )
         return [
             SearchResult(
                 dataset_id=payload.dataset_id,
@@ -1642,6 +1727,37 @@ class LanceDatasetStore:
             )
             for episode in matched
         ]
+
+    def filter_episode_items(
+        self,
+        dataset_id: str,
+        query: str,
+        *,
+        limit: int | None = None,
+    ) -> list[EpisodeListItem]:
+        try:
+            filters = _parse_filter_query(query)
+        except ValueError:
+            return []
+        matched: list[EpisodeListItem] = []
+        offset = 0
+        batch_size = 1000
+        while limit is None or len(matched) < limit:
+            episodes = self.list_episodes(dataset_id, limit=batch_size, offset=offset)
+            if not episodes:
+                break
+            matched.extend(
+                episode
+                for episode in episodes
+                if all(
+                    _matches_filter(episode, field, operator, expected)
+                    for field, operator, expected in filters
+                )
+            )
+            if len(episodes) < batch_size:
+                break
+            offset += len(episodes)
+        return matched if limit is None else matched[:limit]
 
     def _name_from_uri(self, uri: str) -> str:
         if uri.startswith("hf://datasets/"):
@@ -1728,6 +1844,49 @@ class LanceDatasetStore:
             camera_info=_load_lerobot_camera_info(uri),
         )
 
+    def _table_health(self, bundle: LanceBundle) -> list[DatasetTableHealth]:
+        required = {
+            "episodes": ["episode_index"],
+            "frames": ["episode_index", "frame_index"],
+            "videos": [],
+        }
+        health: list[DatasetTableHealth] = []
+        for table_name in TABLE_NAMES:
+            dataset = bundle.tables.get(table_name)
+            columns = bundle.schemas.get(table_name, [])
+            missing_required = [
+                column for column in required.get(table_name, []) if column not in columns
+            ]
+            table_warnings: list[str] = []
+            if table_name == "episodes":
+                has_state = _first_present_name(columns, STATE_COLUMNS) is not None
+                has_action = _first_present_name(columns, ACTION_COLUMNS) is not None
+                has_video = any(_looks_like_video_blob_column(column) for column in columns)
+                if not has_state:
+                    table_warnings.append("no episode-level state array column")
+                if not has_action:
+                    table_warnings.append("no episode-level action array column")
+                if not has_video:
+                    table_warnings.append("no episode-level video blob columns")
+            if table_name == "videos":
+                has_media_ref = (
+                    _first_present_name(columns, VIDEO_BLOB_COLUMNS) is not None
+                    or _first_present_name(columns, VIDEO_PATH_COLUMNS) is not None
+                )
+                if dataset is not None and not has_media_ref:
+                    table_warnings.append("no video blob/path column detected")
+            health.append(
+                DatasetTableHealth(
+                    table=table_name,
+                    present=dataset is not None,
+                    row_count=_count_rows(dataset) if dataset is not None else None,
+                    columns=columns,
+                    missing_required_columns=missing_required,
+                    warnings=table_warnings,
+                )
+            )
+        return health
+
     def _build_summary(self, record: DatasetRecord, bundle: LanceBundle) -> DatasetSummary:
         episodes = bundle.tables["episodes"]
         episode_count = _count_rows(episodes)
@@ -1737,7 +1896,10 @@ class LanceDatasetStore:
         camera_names = self._camera_names_for_bundle(bundle)
         sample = self._get_lance_episode(record.dataset_id, bundle, 0)
         if frame_count == 0 and sample is not None and sample.length is not None:
-            frame_count = sum(episode.length or 0 for episode in self._list_lance_episodes(record.dataset_id, bundle, 10000, 0))
+            frame_count = sum(
+                episode.length or 0
+                for episode in self._all_episode_items(record.dataset_id)
+            )
         return DatasetSummary(
             dataset_id=record.dataset_id,
             name=record.name,
@@ -1775,6 +1937,69 @@ class LanceDatasetStore:
             items.append(EpisodeListItem(**payload))
         return items
 
+    def _read_lance_episode_row_by_index(
+        self,
+        dataset_id: str,
+        bundle: LanceBundle,
+        episode_index: int,
+        columns: list[str] | None = None,
+    ) -> dict[str, Any] | None:
+        dataset = bundle.tables["episodes"]
+        if hasattr(dataset, "scanner"):
+            try:
+                scanner = dataset.scanner(
+                    columns=columns,
+                    filter=f"episode_index = {episode_index}",
+                    limit=1,
+                )
+                rows = _rows_from_table(scanner.to_table())
+                if rows:
+                    return rows[0]
+            except Exception:
+                pass
+
+        row_offset = self._episode_row_offset(dataset_id, bundle, episode_index)
+        if row_offset is None:
+            return None
+        try:
+            rows = _read_rows(dataset, columns=columns, limit=1, offset=row_offset)
+        except Exception:
+            return None
+        if rows and int(rows[0].get("episode_index", episode_index)) == episode_index:
+            return rows[0]
+        return None
+
+    def _episode_row_offset(
+        self,
+        dataset_id: str,
+        bundle: LanceBundle,
+        episode_index: int,
+    ) -> int | None:
+        cache = self._episode_row_offsets.get(dataset_id)
+        if cache is None:
+            cache = self._build_episode_row_offsets(bundle)
+            self._episode_row_offsets[dataset_id] = cache
+        return cache.get(int(episode_index))
+
+    @staticmethod
+    def _build_episode_row_offsets(bundle: LanceBundle) -> dict[int, int]:
+        dataset = bundle.tables["episodes"]
+        try:
+            rows = _read_rows(
+                dataset,
+                columns=["episode_index"],
+                limit=_count_rows(dataset),
+                offset=0,
+            )
+        except Exception:
+            return {}
+        offsets: dict[int, int] = {}
+        for offset, row in enumerate(rows):
+            episode_index = _int_or_none(row.get("episode_index"))
+            if episode_index is not None:
+                offsets[episode_index] = offset
+        return offsets
+
     def _get_lance_episode(
         self,
         dataset_id: str,
@@ -1782,7 +2007,12 @@ class LanceDatasetStore:
         episode_index: int,
     ) -> EpisodeDetail | None:
         columns = _metadata_columns(bundle.schemas["episodes"], include_arrays=False)
-        row = _read_episode_row_by_index(bundle.tables["episodes"], episode_index, columns=columns)
+        row = self._read_lance_episode_row_by_index(
+            dataset_id,
+            bundle,
+            episode_index,
+            columns=columns,
+        )
         if row is None:
             return None
         payload = self._apply_episode_overrides(
@@ -1802,8 +2032,9 @@ class LanceDatasetStore:
         state_name = _first_present_name(schema, STATE_COLUMNS)
         action_name = _first_present_name(schema, ACTION_COLUMNS)
 
-        metadata_row = _read_episode_row_by_index(
-            bundle.tables["episodes"],
+        metadata_row = self._read_lance_episode_row_by_index(
+            dataset_id,
+            bundle,
             episode_index,
             columns=_metadata_columns(schema, include_arrays=False),
         )
@@ -1822,8 +2053,11 @@ class LanceDatasetStore:
             column for column in (state_name, action_name, "episode_index") if column
         ]
         if state_name or action_name:
-            array_row = _read_episode_row_by_index(
-                bundle.tables["episodes"], episode_index, columns=array_columns
+            array_row = self._read_lance_episode_row_by_index(
+                dataset_id,
+                bundle,
+                episode_index,
+                columns=array_columns,
             )
             if array_row is not None:
                 states = array_row.get(state_name) if state_name else None
@@ -1891,7 +2125,12 @@ class LanceDatasetStore:
             for column in (state_name, action_name, timestamp_name, "episode_index")
             if column is not None
         ]
-        row = _read_episode_row_by_index(bundle.tables["episodes"], episode_index, columns=columns)
+        row = self._read_lance_episode_row_by_index(
+            dataset_id,
+            bundle,
+            episode_index,
+            columns=columns,
+        )
         if row is None:
             return None
         return {
@@ -2135,7 +2374,7 @@ class LanceDatasetStore:
             videos,
             schema,
             columns=[camera_name],
-            limit=min(_count_rows(videos), 1000),
+            limit=_count_rows(videos),
         )
         return sorted(
             {
@@ -2160,14 +2399,13 @@ class LanceDatasetStore:
     def _get_episode_blob_source_by_offset(
         self,
         dataset: Any,
-        episode_index: int,
         column: str,
+        row_offset: int | None,
     ) -> VideoSource | None:
+        if row_offset is None or row_offset < 0:
+            return None
         try:
-            offset_rows = _read_rows(dataset, columns=["episode_index"], limit=1, offset=episode_index)
-            if not offset_rows or int(offset_rows[0].get("episode_index", -1)) != episode_index:
-                return None
-            blob_file = dataset.take_blobs(column, indices=[episode_index])[0]
+            blob_file = dataset.take_blobs(column, indices=[row_offset])[0]
             return _video_source_from_blob_file(blob_file)
         except Exception:
             return None
@@ -2209,7 +2447,7 @@ class LanceDatasetStore:
                 schema,
                 columns=columns,
                 filter=f"episode_index = {episode_index}",
-                limit=1000,
+                limit=_count_rows(videos),
                 include_offsets=can_take_blobs,
             )
         else:
@@ -2217,7 +2455,7 @@ class LanceDatasetStore:
                 videos,
                 schema,
                 columns=columns,
-                limit=1000,
+                limit=_count_rows(videos),
                 include_offsets=can_take_blobs,
             )
 
@@ -2349,6 +2587,7 @@ class LanceDatasetStore:
         self._summaries.pop(dataset_id, None)
         self._episodes.pop(dataset_id, None)
         self._bundles.pop(dataset_id, None)
+        self._episode_row_offsets.pop(dataset_id, None)
 
     def _episode_count(self, dataset_id: str) -> int:
         bundle = self._bundles.get(dataset_id)

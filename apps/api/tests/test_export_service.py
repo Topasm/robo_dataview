@@ -162,6 +162,48 @@ class ExportServiceTest(unittest.TestCase):
         self.assertEqual(manifest["splits"], ["val"])
         self.assertEqual(manifest["episodes"][0]["split"], "val")
 
+    def test_export_without_explicit_indices_paginates_all_split_pages(self) -> None:
+        episodes = [
+            EpisodeDetail(
+                dataset_id="split-dataset",
+                episode_index=index,
+                task_index=1,
+                length=10,
+                split="train",
+                fps=20.0,
+                camera_names=[],
+            )
+            for index in range(1000)
+        ]
+        episodes.append(
+            EpisodeDetail(
+                dataset_id="split-dataset",
+                episode_index=1000,
+                task_index=1,
+                length=11,
+                split="val",
+                fps=20.0,
+                camera_names=[],
+            )
+        )
+        fake_store = _FakeSplitStore(episodes)
+        versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
+        exports = ExportStore(versions=versions)
+
+        with patch.object(export_service, "store", fake_store):
+            record = exports.create(
+                ExportCreateRequest(
+                    dataset_id="split-dataset",
+                    splits=["val"],
+                    format=ExportFormat.jsonl,
+                    version_description="val split export",
+                )
+            )
+
+        self.assertEqual(record.status, JobStatus.succeeded)
+        self.assertEqual(record.episode_indices, [1000])
+        self.assertGreaterEqual(fake_store.list_calls, 2)
+
     def test_hf_dataset_export_fails_when_dependency_is_missing(self) -> None:
         versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
         exports = ExportStore(versions=versions)
@@ -680,8 +722,8 @@ def _fake_fsspec_module(fs: _FakePublishFs) -> dict[str, ModuleType]:
 
 
 class _FakeSplitStore:
-    def __init__(self) -> None:
-        self.episodes = [
+    def __init__(self, episodes: list[EpisodeDetail] | None = None) -> None:
+        self.episodes = episodes or [
             EpisodeDetail(
                 dataset_id="split-dataset",
                 episode_index=0,
@@ -710,8 +752,10 @@ class _FakeSplitStore:
                 camera_names=[],
             ),
         ]
+        self.list_calls = 0
 
     def list_episodes(self, dataset_id: str, limit: int, offset: int) -> list[EpisodeDetail]:
+        self.list_calls += 1
         if dataset_id != "split-dataset":
             return []
         return self.episodes[offset : offset + limit]

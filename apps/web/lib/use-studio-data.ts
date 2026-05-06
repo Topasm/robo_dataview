@@ -14,6 +14,7 @@ import {
   fetchAnnotationHistory,
   fetchAnnotations,
   fetchCurrentUser,
+  fetchDatasetHealth,
   fetchDatasetSummaries,
   fetchEpisodeLabelHistory,
   fetchEpisodes,
@@ -36,6 +37,7 @@ import {
 import { annotationHistory, annotations, datasetSummary, episodes } from "@/lib/sample-data";
 import type {
   AnnotationHistoryRecord,
+  DatasetHealth,
   DatasetSummary,
   Episode,
   EpisodeLabelHistoryRecord,
@@ -152,6 +154,7 @@ export function useStudioData() {
     "idle" | "loading" | "ready" | "error"
   >("idle");
   const [dataStatus, setDataStatus] = useState<"loading" | "api" | "sample">("loading");
+  const [selectedDatasetHealth, setSelectedDatasetHealth] = useState<DatasetHealth | null>(null);
 
   const selectedSummary =
     summaries.find((summary) => summary.datasetId === selectedDatasetId) ??
@@ -271,6 +274,30 @@ export function useStudioData() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (dataStatus !== "api" || !selectedDatasetId) {
+      setSelectedDatasetHealth(null);
+      return;
+    }
+
+    let isMounted = true;
+    fetchDatasetHealth(selectedDatasetId)
+      .then((health) => {
+        if (isMounted) {
+          setSelectedDatasetHealth(health);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setSelectedDatasetHealth(null);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [dataStatus, selectedDatasetId]);
 
   useEffect(() => {
     void refreshReviewQueue(selectedDatasetId);
@@ -657,6 +684,7 @@ export function useStudioData() {
     setFilterPresets([]);
     setAnnotationHistoryRows([]);
     setReviewQueueRows([]);
+    setSelectedDatasetHealth(null);
   }
 
   async function handleOpenDataset(uri: string) {
@@ -1164,6 +1192,7 @@ export function useStudioData() {
     selectedFrameRecord,
     selectedFrameStatus,
     selectedSummary,
+    selectedDatasetHealth,
     vlmJob,
     vlmResponses,
     handleCreateExport,

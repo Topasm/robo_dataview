@@ -37,3 +37,25 @@ class DatasetSummary(BaseModel):
     accepted_count: int = 0
     rejected_count: int = 0
     message: str | None = None
+
+
+class DatasetTableHealth(BaseModel):
+    table: str
+    present: bool
+    row_count: int | None = None
+    columns: list[str] = Field(default_factory=list)
+    missing_required_columns: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class DatasetHealth(BaseModel):
+    dataset_id: str
+    ok: bool
+    status: str
+    storage_model: str
+    episode_count: int = 0
+    frame_count: int = 0
+    camera_count: int = 0
+    tables: list[DatasetTableHealth] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
