@@ -386,15 +386,37 @@ export function AnnotationEditor({
             Failure
           </button>
         </div>
-        <button
-          className="text-button episode-label-save"
-          disabled={isSavingEpisode}
-          onClick={handleUpdateEpisodeLabels}
-          type="button"
-        >
-          <Save size={15} />
-          Save labels
-        </button>
+        <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+          <button
+            className="text-button episode-label-save secondary-text-button"
+            disabled={isSavingEpisode}
+            onClick={handleUpdateEpisodeLabels}
+            style={{ flex: 1 }}
+            type="button"
+          >
+            <Save size={15} />
+            Save labels
+          </button>
+          <button
+            className="text-button episode-label-approve"
+            disabled={isSavingEpisode}
+            onClick={async () => {
+              const approvedDraft = { ...episodeDraft, reviewStatus: "accepted" as ReviewStatus, successLabel: true };
+              setEpisodeDraft(approvedDraft);
+              setIsSavingEpisode(true);
+              try {
+                await onUpdateEpisodeLabels(approvedDraft);
+              } finally {
+                setIsSavingEpisode(false);
+              }
+            }}
+            style={{ flex: 1 }}
+            type="button"
+          >
+            <Check size={15} />
+            Approve Episode
+          </button>
+        </div>
       </section>
         </>
       ) : null}
@@ -414,413 +436,420 @@ export function AnnotationEditor({
 
       {activeTab === "segments" ? (
         <>
-      <PanelDisclosure
-        meta={`${subtaskSummary.coveragePercent.toFixed(0)}%`}
-        title="Subtask Coverage"
-      >
-        <div className="subtask-summary-grid">
-          <div className="metric compact-metric">
-            <span>Coverage</span>
-            <strong>{subtaskSummary.coveragePercent.toFixed(0)}%</strong>
-          </div>
-          <div className="metric compact-metric">
-            <span>Gaps</span>
-            <strong>{subtaskSummary.gapCount}</strong>
-          </div>
-          <div className="metric compact-metric">
-            <span>Overlap</span>
-            <strong>{subtaskSummary.overlapCount}</strong>
-          </div>
-        </div>
-        <div className="subtask-bar" aria-label="Subtask timeline coverage">
-          {subtaskSummary.rows.map((row) => (
-            <span
-              className={`subtask-bar-segment subtask-${row.reviewStatus}`}
-              key={row.id}
-              style={{ left: `${row.leftPercent}%`, width: `${row.widthPercent}%` }}
-              title={`${row.label} f${row.startFrame}-${row.endFrame}`}
-            />
-          ))}
-        </div>
-        <div className="subtask-list">
-          {subtaskSummary.rows.length === 0 ? (
-            <div className="empty-state compact-empty-state">No phase or subtask annotations.</div>
-          ) : (
-            subtaskSummary.rows.slice(0, 6).map((row) => (
-              <div className="subtask-row" key={row.id}>
-                <span className="subtask-label">{row.label}</span>
-                <span className="muted mono">
-                  {row.kind} / {row.percent.toFixed(0)}% / f{row.startFrame}-{row.endFrame}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-      </PanelDisclosure>
-
-      <PanelDisclosure
-        meta={generatedProposals.length > 0 ? `${generatedProposals.length} pending` : "none"}
-        title="AI Proposals"
-      >
-        <button
-          className="text-button secondary-text-button vlm-run-button"
-          disabled={isRunningVlm || isVlmJobActive}
-          onClick={handleRunVlmLabel}
-          type="button"
-        >
-          <Bot size={15} />
-          Run VLM
-        </button>
-        {vlmJob ? (
-          <div className="vlm-job-status">
-            <StatusPill status={vlmJob.status} />
-            <span className="muted">{vlmJob.message}</span>
-            <div className="vlm-progress">
-              <div className="progress-track compact-progress-track">
-                <div className="progress-fill" style={{ width: `${vlmProgressPercent}%` }} />
-              </div>
-              <span className="mono">{vlmProgressPercent}%</span>
-            </div>
-            <details className="advanced-menu compact-advanced-menu">
-              <summary>Job details</summary>
-              <div className="advanced-menu-content">
-                <span className="mono">
-                  {vlmJob.promptTemplate}
-                  {vlmJob.promptVersion ? `@${vlmJob.promptVersion}` : ""}
-                </span>
-                {vlmJob.provider ? <span className="mono">{vlmJob.provider}</span> : null}
-                {vlmJob.rawResponseIds.length > 0 ? (
-                  <span className="mono">{vlmJob.rawResponseIds.length} raw</span>
-                ) : null}
-                {vlmJob.queueJobId ? <span className="mono">queue {vlmJob.queueJobId}</span> : null}
-              </div>
-            </details>
-          </div>
-        ) : null}
-        {rationaleRows.length > 0 ? (
-          <div className="rationale-list">
-            {rationaleRows.map((row) => (
-              <div className="rationale-row" key={row.id}>
-                <div className="rationale-label">
-                  <span>{row.label}</span>
-                  {row.confidence !== null ? (
-                    <span className="mono">{row.confidence.toFixed(2)}</span>
-                  ) : null}
-                </div>
-                {row.rationale ? <div className="muted">{row.rationale}</div> : null}
-              </div>
-            ))}
-          </div>
-        ) : null}
-        {generatedProposals.length > 0 ? (
-          <div className="review-action-grid">
-            <button
-              className="text-button compact-text-button"
-              disabled={isBulkReviewing}
-              onClick={() => void handleBulkReview(generatedProposals, "accepted")}
-              type="button"
-            >
-              <Check size={14} />
-              Accept all
-            </button>
-            <button
-              className="text-button compact-text-button"
-              disabled={isBulkReviewing}
-              onClick={() => void handleBulkReview(generatedProposals, "rejected")}
-              type="button"
-            >
-              <X size={14} />
-              Reject all
-            </button>
-          </div>
-        ) : null}
-        <div className="proposal-list">
-          {generatedProposals.length === 0 ? (
-            <div className="empty-state compact-empty-state">No pending generated labels.</div>
-          ) : (
-            generatedProposals.map((annotation) => (
-              <div className="proposal-row" key={annotation.id}>
-                <div className="proposal-body">
-                  <div className="proposal-label">{annotation.labelValue}</div>
-                  <div className="muted mono">
-                    {annotation.labelType} / f{annotation.startFrame}-{annotation.endFrame} /{" "}
-                    {annotation.confidence.toFixed(2)}
-                  </div>
-                </div>
-                <div className="proposal-actions">
-                  {episodeDraftFromProposal(episodeDraft, annotation) !== null ? (
-                    <button
-                      className="icon-button compact"
-                      onClick={() => void handleApplyGeneratedProposal(annotation)}
-                      title="Apply to episode labels and accept"
-                      type="button"
-                    >
-                      <Save size={14} />
-                    </button>
-                  ) : null}
-                  <button
-                    className="icon-button compact"
-                    onClick={() => onUpdateReviewStatus(annotation.id, "accepted")}
-                    title="Accept generated label"
-                    type="button"
-                  >
-                    <Check size={14} />
-                  </button>
-                  <button
-                    className="icon-button compact"
-                    onClick={() => onUpdateReviewStatus(annotation.id, "rejected")}
-                    title="Reject generated label"
-                    type="button"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </PanelDisclosure>
-
-      <PanelDisclosure title="New Segment">
-        <div className="segment-form">
-          <label>
-            Type
-            <select
-              onChange={(event) => setDraft((current) => ({ ...current, labelType: event.target.value }))}
-              value={draft.labelType}
-            >
-              <option value="phase">phase</option>
-              <option value="subtask">subtask</option>
-              <option value="bad_range">bad_range</option>
-              <option value="important_frame">important_frame</option>
-              <option value="failure_event">failure_event</option>
-            </select>
-          </label>
-          <label>
-            Label
-            <input
-              onChange={(event) => setDraft((current) => ({ ...current, labelValue: event.target.value }))}
-              value={draft.labelValue}
-            />
-          </label>
-          <label>
-            Start
-            <input
-              min={0}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, startFrame: Number(event.target.value) }))
-              }
-              type="number"
-              value={draft.startFrame}
-            />
-          </label>
-          <label>
-            End
-            <input
-              min={0}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, endFrame: Number(event.target.value) }))
-              }
-              type="number"
-              value={draft.endFrame}
-            />
-          </label>
-          <button
-            className="text-button segment-save-button"
-            disabled={isSaving}
-            onClick={handleCreateSegment}
-            type="button"
-          >
-            <Plus size={15} />
-            Add
-          </button>
-        </div>
-      </PanelDisclosure>
-
-      <PanelDisclosure
-        defaultOpen={annotations.length > 0}
-        meta={annotations.length.toString()}
-        title="Segments"
-      >
-        <div className="review-action-grid">
-          <button
-            className="text-button compact-text-button"
-            disabled={isBulkReviewing || claimablePendingAnnotations.length === 0}
-            onClick={() => void handleClaimPending()}
-            type="button"
-          >
-            <UserCheck size={14} />
-            Claim pending
-          </button>
-          <button
-            className="text-button compact-text-button"
-            disabled={isBulkReviewing || assignedAnnotations.length === 0}
-            onClick={() => void handleClearAssignments()}
-            type="button"
-          >
-            <UserX size={14} />
-            Clear assigned
-          </button>
-        </div>
-        <div className="segment-list">
-          {annotations.length === 0 ? <div className="empty-state">No annotations for this episode.</div> : null}
-          {annotations.map((annotation) => (
-            <div className="segment-row" key={annotation.id}>
-              <div className="segment-edit-grid">
-                <input
-                  aria-label="Segment label"
-                  onChange={(event) => updateRowDraft(annotation, { labelValue: event.target.value })}
-                  value={(editingRows[annotation.id] ?? toDraft(annotation)).labelValue}
-                />
+          <PanelDisclosure title="New Segment">
+            <div className="segment-form">
+              <label>
+                Type
                 <select
-                  aria-label="Segment type"
-                  onChange={(event) => updateRowDraft(annotation, { labelType: event.target.value })}
-                  value={(editingRows[annotation.id] ?? toDraft(annotation)).labelType}
+                  onChange={(event) => setDraft((current) => ({ ...current, labelType: event.target.value }))}
+                  value={draft.labelType}
                 >
                   <option value="phase">phase</option>
                   <option value="subtask">subtask</option>
                   <option value="bad_range">bad_range</option>
                   <option value="important_frame">important_frame</option>
                   <option value="failure_event">failure_event</option>
-                  <option value="episode_caption">episode_caption</option>
-                  <option value="success_label">success_label</option>
-                  <option value="failure_reason">failure_reason</option>
-                  <option value="object_list">object_list</option>
                 </select>
+              </label>
+              <label>
+                Label
                 <input
-                  aria-label="Start frame"
-                  min={0}
-                  onChange={(event) => updateRowDraft(annotation, { startFrame: Number(event.target.value) })}
-                  type="number"
-                  value={(editingRows[annotation.id] ?? toDraft(annotation)).startFrame}
+                  onChange={(event) => setDraft((current) => ({ ...current, labelValue: event.target.value }))}
+                  value={draft.labelValue}
                 />
+              </label>
+              <label>
+                Start
                 <input
-                  aria-label="End frame"
                   min={0}
-                  onChange={(event) => updateRowDraft(annotation, { endFrame: Number(event.target.value) })}
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, startFrame: Number(event.target.value) }))
+                  }
                   type="number"
-                  value={(editingRows[annotation.id] ?? toDraft(annotation)).endFrame}
+                  value={draft.startFrame}
                 />
-                <div className="muted mono">
-                  {annotation.source} / {annotation.confidence.toFixed(2)} / assigned{" "}
-                  {annotation.assignedTo ?? "none"}
+              </label>
+              <label>
+                End
+                <input
+                  min={0}
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, endFrame: Number(event.target.value) }))
+                  }
+                  type="number"
+                  value={draft.endFrame}
+                />
+              </label>
+              <button
+                className="text-button segment-save-button"
+                disabled={isSaving}
+                onClick={handleCreateSegment}
+                type="button"
+              >
+                <Plus size={15} />
+                Add
+              </button>
+            </div>
+          </PanelDisclosure>
+
+          <PanelDisclosure
+            defaultOpen={annotations.length > 0}
+            meta={annotations.length.toString()}
+            title="Segments"
+          >
+            <div className="review-action-grid">
+              <button
+                className="text-button compact-text-button"
+                disabled={isBulkReviewing || claimablePendingAnnotations.length === 0}
+                onClick={() => void handleClaimPending()}
+                type="button"
+              >
+                <UserCheck size={14} />
+                Claim pending
+              </button>
+              <button
+                className="text-button compact-text-button"
+                disabled={isBulkReviewing || assignedAnnotations.length === 0}
+                onClick={() => void handleClearAssignments()}
+                type="button"
+              >
+                <UserX size={14} />
+                Clear assigned
+              </button>
+            </div>
+            <div className="segment-list">
+              {annotations.length === 0 ? <div className="empty-state">No annotations for this episode.</div> : null}
+              {annotations.map((annotation) => (
+                <div className="segment-row" key={annotation.id}>
+                  <div className="segment-edit-grid">
+                    <input
+                      aria-label="Segment label"
+                      onChange={(event) => updateRowDraft(annotation, { labelValue: event.target.value })}
+                      value={(editingRows[annotation.id] ?? toDraft(annotation)).labelValue}
+                    />
+                    <select
+                      aria-label="Segment type"
+                      onChange={(event) => updateRowDraft(annotation, { labelType: event.target.value })}
+                      value={(editingRows[annotation.id] ?? toDraft(annotation)).labelType}
+                    >
+                      <option value="phase">phase</option>
+                      <option value="subtask">subtask</option>
+                      <option value="bad_range">bad_range</option>
+                      <option value="important_frame">important_frame</option>
+                      <option value="failure_event">failure_event</option>
+                      <option value="episode_caption">episode_caption</option>
+                      <option value="success_label">success_label</option>
+                      <option value="failure_reason">failure_reason</option>
+                      <option value="object_list">object_list</option>
+                    </select>
+                    <input
+                      aria-label="Start frame"
+                      min={0}
+                      onChange={(event) => updateRowDraft(annotation, { startFrame: Number(event.target.value) })}
+                      type="number"
+                      value={(editingRows[annotation.id] ?? toDraft(annotation)).startFrame}
+                    />
+                    <input
+                      aria-label="End frame"
+                      min={0}
+                      onChange={(event) => updateRowDraft(annotation, { endFrame: Number(event.target.value) })}
+                      type="number"
+                      value={(editingRows[annotation.id] ?? toDraft(annotation)).endFrame}
+                    />
+                    <div className="muted mono">
+                      {annotation.source} / {annotation.confidence.toFixed(2)} / assigned{" "}
+                      {annotation.assignedTo ?? "none"}
+                    </div>
+                  </div>
+                  <StatusPill status={annotation.reviewStatus} />
+                  <div className="segment-actions">
+                    <button
+                      className="icon-button compact"
+                      disabled={annotation.assignedTo === reviewerUserId}
+                      onClick={() => onAssignAnnotation(annotation.id, reviewerUserId)}
+                      title={`Assign to ${reviewerUserId}`}
+                      type="button"
+                    >
+                      <UserCheck size={14} />
+                    </button>
+                    <button
+                      className="icon-button compact"
+                      disabled={annotation.assignedTo === null}
+                      onClick={() => onAssignAnnotation(annotation.id, null)}
+                      title="Clear assignment"
+                      type="button"
+                    >
+                      <UserX size={14} />
+                    </button>
+                    <button
+                      className="icon-button compact"
+                      disabled={isSaving}
+                      onClick={() => handleUpdateSegment(annotation)}
+                      title="Save segment edits"
+                      type="button"
+                    >
+                      <Save size={14} />
+                    </button>
+                    <button
+                      className="icon-button compact"
+                      disabled={isSaving || annotation.endFrame <= annotation.startFrame}
+                      onClick={() => handleSplitSegment(annotation)}
+                      title="Split segment at midpoint"
+                      type="button"
+                    >
+                      <GitBranch size={14} />
+                    </button>
+                    <button
+                      className="icon-button compact"
+                      onClick={() => onUpdateReviewStatus(annotation.id, "accepted")}
+                      title="Accept segment"
+                      type="button"
+                    >
+                      <Check size={14} />
+                    </button>
+                    <button
+                      className="icon-button compact"
+                      onClick={() => onUpdateReviewStatus(annotation.id, "rejected")}
+                      title="Reject segment"
+                      type="button"
+                    >
+                      <X size={14} />
+                    </button>
+                    <button
+                      className="icon-button compact danger"
+                      onClick={() => onDeleteSegment(annotation.id)}
+                      title="Delete segment"
+                      type="button"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
+              ))}
+            </div>
+          </PanelDisclosure>
+
+          <PanelDisclosure
+            meta={`${subtaskSummary.coveragePercent.toFixed(0)}%`}
+            title="Subtask Coverage"
+          >
+            <div className="subtask-summary-grid">
+              <div className="metric compact-metric">
+                <span>Coverage</span>
+                <strong>{subtaskSummary.coveragePercent.toFixed(0)}%</strong>
               </div>
-              <StatusPill status={annotation.reviewStatus} />
-              <div className="segment-actions">
+              <div className="metric compact-metric">
+                <span>Gaps</span>
+                <strong>{subtaskSummary.gapCount}</strong>
+              </div>
+              <div className="metric compact-metric">
+                <span>Overlap</span>
+                <strong>{subtaskSummary.overlapCount}</strong>
+              </div>
+            </div>
+            <div className="subtask-bar" aria-label="Subtask timeline coverage">
+              {subtaskSummary.rows.map((row) => (
+                <span
+                  className={`subtask-bar-segment subtask-${row.reviewStatus}`}
+                  key={row.id}
+                  style={{ left: `${row.leftPercent}%`, width: `${row.widthPercent}%` }}
+                  title={`${row.label} f${row.startFrame}-${row.endFrame}`}
+                />
+              ))}
+            </div>
+            <div className="subtask-list">
+              {subtaskSummary.rows.length === 0 ? (
+                <div className="empty-state compact-empty-state">No phase or subtask annotations.</div>
+              ) : (
+                subtaskSummary.rows.slice(0, 6).map((row) => (
+                  <div className="subtask-row" key={row.id}>
+                    <span className="subtask-label">{row.label}</span>
+                    <span className="muted mono">
+                      {row.kind} / {row.percent.toFixed(0)}% / f{row.startFrame}-{row.endFrame}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </PanelDisclosure>
+        </>
+      ) : null}
+
+      <details className="panel-section sidebar-details">
+        <summary>
+          <span>Advanced Details</span>
+        </summary>
+        <div className="panel-disclosure-body">
+          <PanelDisclosure
+            meta={generatedProposals.length > 0 ? `${generatedProposals.length} pending` : "none"}
+            title="AI Proposals"
+          >
+            <button
+              className="text-button secondary-text-button vlm-run-button"
+              disabled={isRunningVlm || isVlmJobActive}
+              onClick={handleRunVlmLabel}
+              type="button"
+            >
+              <Bot size={15} />
+              Run VLM
+            </button>
+            {vlmJob ? (
+              <div className="vlm-job-status">
+                <StatusPill status={vlmJob.status} />
+                <span className="muted">{vlmJob.message}</span>
+                <div className="vlm-progress">
+                  <div className="progress-track compact-progress-track">
+                    <div className="progress-fill" style={{ width: `${vlmProgressPercent}%` }} />
+                  </div>
+                  <span className="mono">{vlmProgressPercent}%</span>
+                </div>
+                <details className="advanced-menu compact-advanced-menu">
+                  <summary>Job details</summary>
+                  <div className="advanced-menu-content">
+                    <span className="mono">
+                      {vlmJob.promptTemplate}
+                      {vlmJob.promptVersion ? `@${vlmJob.promptVersion}` : ""}
+                    </span>
+                    {vlmJob.provider ? <span className="mono">{vlmJob.provider}</span> : null}
+                    {vlmJob.rawResponseIds.length > 0 ? (
+                      <span className="mono">{vlmJob.rawResponseIds.length} raw</span>
+                    ) : null}
+                    {vlmJob.queueJobId ? <span className="mono">queue {vlmJob.queueJobId}</span> : null}
+                  </div>
+                </details>
+              </div>
+            ) : null}
+            {rationaleRows.length > 0 ? (
+              <div className="rationale-list">
+                {rationaleRows.map((row) => (
+                  <div className="rationale-row" key={row.id}>
+                    <div className="rationale-label">
+                      <span>{row.label}</span>
+                      {row.confidence !== null ? (
+                        <span className="mono">{row.confidence.toFixed(2)}</span>
+                      ) : null}
+                    </div>
+                    {row.rationale ? <div className="muted">{row.rationale}</div> : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {generatedProposals.length > 0 ? (
+              <div className="review-action-grid">
                 <button
-                  className="icon-button compact"
-                  disabled={annotation.assignedTo === reviewerUserId}
-                  onClick={() => onAssignAnnotation(annotation.id, reviewerUserId)}
-                  title={`Assign to ${reviewerUserId}`}
-                  type="button"
-                >
-                  <UserCheck size={14} />
-                </button>
-                <button
-                  className="icon-button compact"
-                  disabled={annotation.assignedTo === null}
-                  onClick={() => onAssignAnnotation(annotation.id, null)}
-                  title="Clear assignment"
-                  type="button"
-                >
-                  <UserX size={14} />
-                </button>
-                <button
-                  className="icon-button compact"
-                  disabled={isSaving}
-                  onClick={() => handleUpdateSegment(annotation)}
-                  title="Save segment edits"
-                  type="button"
-                >
-                  <Save size={14} />
-                </button>
-                <button
-                  className="icon-button compact"
-                  disabled={isSaving || annotation.endFrame <= annotation.startFrame}
-                  onClick={() => handleSplitSegment(annotation)}
-                  title="Split segment at midpoint"
-                  type="button"
-                >
-                  <GitBranch size={14} />
-                </button>
-                <button
-                  className="icon-button compact"
-                  onClick={() => onUpdateReviewStatus(annotation.id, "accepted")}
-                  title="Accept segment"
+                  className="text-button compact-text-button"
+                  disabled={isBulkReviewing}
+                  onClick={() => void handleBulkReview(generatedProposals, "accepted")}
                   type="button"
                 >
                   <Check size={14} />
+                  Accept all
                 </button>
                 <button
-                  className="icon-button compact"
-                  onClick={() => onUpdateReviewStatus(annotation.id, "rejected")}
-                  title="Reject segment"
+                  className="text-button compact-text-button"
+                  disabled={isBulkReviewing}
+                  onClick={() => void handleBulkReview(generatedProposals, "rejected")}
                   type="button"
                 >
                   <X size={14} />
-                </button>
-                <button
-                  className="icon-button compact danger"
-                  onClick={() => onDeleteSegment(annotation.id)}
-                  title="Delete segment"
-                  type="button"
-                >
-                  <Trash2 size={14} />
+                  Reject all
                 </button>
               </div>
+            ) : null}
+            <div className="proposal-list">
+              {generatedProposals.length === 0 ? (
+                <div className="empty-state compact-empty-state">No pending generated labels.</div>
+              ) : (
+                generatedProposals.map((annotation) => (
+                  <div className="proposal-row" key={annotation.id}>
+                    <div className="proposal-body">
+                      <div className="proposal-label">{annotation.labelValue}</div>
+                      <div className="muted mono">
+                        {annotation.labelType} / f{annotation.startFrame}-{annotation.endFrame} /{" "}
+                        {annotation.confidence.toFixed(2)}
+                      </div>
+                    </div>
+                    <div className="proposal-actions">
+                      {episodeDraftFromProposal(episodeDraft, annotation) !== null ? (
+                        <button
+                          className="icon-button compact"
+                          onClick={() => void handleApplyGeneratedProposal(annotation)}
+                          title="Apply to episode labels and accept"
+                          type="button"
+                        >
+                          <Save size={14} />
+                        </button>
+                      ) : null}
+                      <button
+                        className="icon-button compact"
+                        onClick={() => onUpdateReviewStatus(annotation.id, "accepted")}
+                        title="Accept generated label"
+                        type="button"
+                      >
+                        <Check size={14} />
+                      </button>
+                      <button
+                        className="icon-button compact"
+                        onClick={() => onUpdateReviewStatus(annotation.id, "rejected")}
+                        title="Reject generated label"
+                        type="button"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-          ))}
-        </div>
-      </PanelDisclosure>
+          </PanelDisclosure>
 
-      <PanelDisclosure meta={recentHistory.length.toString()} title="History">
-        <div className="history-list">
-          {recentHistory.length === 0 ? (
-            <div className="empty-state compact-empty-state">No annotation history.</div>
-          ) : (
-            recentHistory.map((event) => (
-              <div className="history-row" key={event.eventId}>
-                <div className="history-row-top">
-                  <span className={`history-action history-action-${event.action}`}>
-                    {event.action}
-                  </span>
-                  <span className="muted">{formatHistoryTime(event.createdAt)}</span>
-                </div>
-                <div className="history-label">{historyLabel(event)}</div>
-                <div className="muted mono">
-                  {event.actor} / {historyFrameRange(event)}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </PanelDisclosure>
+          <PanelDisclosure meta={recentHistory.length.toString()} title="History">
+            <div className="history-list">
+              {recentHistory.length === 0 ? (
+                <div className="empty-state compact-empty-state">No annotation history.</div>
+              ) : (
+                recentHistory.map((event) => (
+                  <div className="history-row" key={event.eventId}>
+                    <div className="history-row-top">
+                      <span className={`history-action history-action-${event.action}`}>
+                        {event.action}
+                      </span>
+                      <span className="muted">{formatHistoryTime(event.createdAt)}</span>
+                    </div>
+                    <div className="history-label">{historyLabel(event)}</div>
+                    <div className="muted mono">
+                      {event.actor} / {historyFrameRange(event)}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </PanelDisclosure>
 
-      <PanelDisclosure meta={recentLabelHistory.length.toString()} title="Episode Label History">
-        <div className="history-list">
-          {recentLabelHistory.length === 0 ? (
-            <div className="empty-state compact-empty-state">No label edits yet.</div>
-          ) : (
-            recentLabelHistory.map((event) => (
-              <div className="history-row" key={event.eventId}>
-                <div className="history-row-top">
-                  <span className={`history-action history-action-${event.action}`}>
-                    {event.action}
-                  </span>
-                  <span className="muted">{formatHistoryTime(event.createdAt)}</span>
-                </div>
-                <div className="history-label">{episodeLabelHistorySummary(event)}</div>
-                <div className="muted mono">
-                  {event.actor} / episode {event.episodeIndex}
-                </div>
-              </div>
-            ))
-          )}
+          <PanelDisclosure meta={recentLabelHistory.length.toString()} title="Episode Label History">
+            <div className="history-list">
+              {recentLabelHistory.length === 0 ? (
+                <div className="empty-state compact-empty-state">No label edits yet.</div>
+              ) : (
+                recentLabelHistory.map((event) => (
+                  <div className="history-row" key={event.eventId}>
+                    <div className="history-row-top">
+                      <span className={`history-action history-action-${event.action}`}>
+                        {event.action}
+                      </span>
+                      <span className="muted">{formatHistoryTime(event.createdAt)}</span>
+                    </div>
+                    <div className="history-label">{episodeLabelHistorySummary(event)}</div>
+                    <div className="muted mono">
+                      {event.actor} / episode {event.episodeIndex}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </PanelDisclosure>
         </div>
-      </PanelDisclosure>
-        </>
-      ) : null}
+      </details>
     </aside>
   );
 }

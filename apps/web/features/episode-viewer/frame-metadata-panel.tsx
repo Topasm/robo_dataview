@@ -32,11 +32,6 @@ export function FrameMetadataPanel({
       (label) => label.labelType === "bad_frame" && label.reviewStatus !== "rejected"
     ) ?? false;
   const canToggleBadFrame = hasFrame && (!frame.isBadFrame || hasExactBadFrameLabel);
-  const mutationLabel = frame?.isBadFrame
-    ? hasExactBadFrameLabel
-      ? "Clear bad"
-      : "Bad source"
-    : "Mark bad";
 
   async function handleSetBadFrame(isBadFrame: boolean) {
     setIsSaving(true);
@@ -81,15 +76,28 @@ export function FrameMetadataPanel({
 
       {hasFrame ? (
         <>
-          <button
-            className={`text-button frame-mutation-button${frame.isBadFrame ? " secondary-text-button" : ""}`}
-            disabled={isSaving || !canToggleBadFrame}
-            onClick={() => void handleSetBadFrame(!frame.isBadFrame)}
-            type="button"
-          >
-            {frame.isBadFrame ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
-            {mutationLabel}
-          </button>
+          <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+            <button
+              className={`text-button frame-mutation-button${frame.isBadFrame ? "" : " secondary-text-button"}`}
+              disabled={isSaving || !canToggleBadFrame}
+              onClick={() => void handleSetBadFrame(true)}
+              type="button"
+              style={{ flex: 1 }}
+            >
+              <AlertTriangle size={14} />
+              Mark bad
+            </button>
+            <button
+              className={`text-button frame-mutation-button${!frame.isBadFrame ? "" : " secondary-text-button"}`}
+              disabled={isSaving || !canToggleBadFrame}
+              onClick={() => void handleSetBadFrame(false)}
+              type="button"
+              style={{ flex: 1 }}
+            >
+              <CheckCircle2 size={14} />
+              Approve
+            </button>
+          </div>
           <div className="frame-meta-grid">
             <MetaCell label="Timestamp" value={formatMaybeNumber(frame.timestamp, 4)} />
             <MetaCell label="Task" value={frame.taskIndex === null ? "none" : String(frame.taskIndex)} />
@@ -168,11 +176,27 @@ function VectorPreview({ label, values }: { label: string; values: number[] | nu
     );
   }
   const preview = values.slice(0, 8).map((value) => formatMaybeNumber(value, 3));
+  const maxAbsValue = values.length > 0 ? Math.max(...values.map(Math.abs)) : 0;
+  const maxBarHeight = 20;
+
   return (
     <div className="vector-preview">
       <div className="frame-subtitle">
         <span>{label}</span>
         <span className="muted">{values.length} dim</span>
+      </div>
+      <div className="sparkline-container">
+        {values.map((value, index) => {
+          const height = maxAbsValue > 0 ? (Math.abs(value) / maxAbsValue) * maxBarHeight : 0;
+          return (
+            <div
+              key={`spark-${index}`}
+              className={`sparkline-bar${value < 0 ? " negative" : ""}`}
+              style={{ height: `${Math.max(1, height)}px` }}
+              title={`Dim ${index}: ${value.toFixed(4)}`}
+            />
+          );
+        })}
       </div>
       <div className="vector-values mono">
         {preview.map((value, index) => (

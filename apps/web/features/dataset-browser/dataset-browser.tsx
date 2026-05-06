@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Database, FolderOpen, SlidersHorizontal } from "lucide-react";
+import { Database, FolderOpen } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
 import type { DatasetHealth, DatasetSummary, SegmentAnnotation } from "@/lib/types";
@@ -84,90 +84,16 @@ export function DatasetBrowser({
           <span>Dataset</span>
         </div>
         <div className="dataset-name">{summary.name}</div>
-        <div className="muted mono">{summary.uri}</div>
         <div className="dataset-status-row">
           <StatusPill status={summary.status} />
           {summary.message ? <span className="muted">{summary.message}</span> : null}
         </div>
-        <div className="dataset-open-form">
-          <input
-            aria-label="Dataset URI"
-            onChange={(event) => setUri(event.target.value)}
-            value={uri}
-          />
-          <button
-            className="icon-button"
-            disabled={isOpening}
-            onClick={handleOpenDataset}
-            title="Open dataset"
-            type="button"
-          >
-            <FolderOpen size={16} />
-          </button>
-        </div>
-        <div className="section-actions">
-          <button className="icon-button" title="Filter datasets" type="button">
-            <SlidersHorizontal size={16} />
-          </button>
-        </div>
       </section>
 
-      <section className="panel-section metrics-grid">
-        <Metric label="Episodes" value={summary.episodeCount.toLocaleString()} />
-        <Metric label="Frames" value={summary.frameCount.toLocaleString()} />
-        <Metric label="FPS" value={summary.fps.toString()} />
-        <Metric label="Cameras" value={summary.cameraNames.length.toString()} />
-      </section>
-
-      {health ? (
-        <section className="panel-section dataset-health">
-          <div className="section-title">Health</div>
-          <div className="health-status-row">
-            <StatusPill status={healthStatus} />
-            <span className="muted">{healthHeadline}</span>
-          </div>
-          <div className="health-details">
-            <HealthFact label="Storage" value={health.storageModel} />
-            <HealthFact label="Core" value={`${presentCoreTableCount}/${coreTables.length}`} />
-            <HealthFact label="Media" value={mediaValue} />
-          </div>
-          {healthIssues.length > 0 ? (
-            <div className="health-issues">
-              {healthIssues.slice(0, 3).map((issue) => (
-                <div className="health-issue" key={issue}>
-                  {issue}
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      <details className="panel-section sidebar-details">
-        <summary>
-          <span>Review</span>
-          <span>{reviewedPercent}%</span>
-        </summary>
-        <div className="progress-row">
-          <span>{summary.reviewedCount} reviewed</span>
-          <span>{reviewedPercent}%</span>
-        </div>
-        <div className="progress-track">
-          <div className="progress-fill" style={{ width: `${reviewedPercent}%` }} />
-        </div>
-        <div className="review-counts">
-          <StatusPill status="accepted" />
-          <span>{summary.acceptedCount}</span>
-          <StatusPill status="rejected" />
-          <span>{summary.rejectedCount}</span>
-        </div>
-      </details>
-
-      <details className="panel-section sidebar-details">
-        <summary>
+      <section className="panel-section review-queue-section">
+        <div className="section-title">
           <span>Reviewer Queue</span>
-          <span>{pendingRows.length}</span>
-        </summary>
+        </div>
         <div className="review-queue-metrics">
           <Metric label="Pending" value={pendingRows.length.toString()} />
           <Metric label="Mine" value={assignedRows.length.toString()} />
@@ -192,19 +118,89 @@ export function DatasetBrowser({
             ))
           )}
         </div>
-      </details>
+      </section>
+
+      <section className="panel-section review-progress-section">
+        <div className="section-title">
+          <span>Review Progress</span>
+          <span className="muted">{reviewedPercent}%</span>
+        </div>
+        <div className="progress-row">
+          <span>{summary.reviewedCount} reviewed</span>
+          <span className="muted">{summary.episodeCount} total</span>
+        </div>
+        <div className="progress-track">
+          <div className="progress-fill" style={{ width: `${reviewedPercent}%` }} />
+        </div>
+        <div className="review-counts">
+          <StatusPill status="accepted" />
+          <span>{summary.acceptedCount}</span>
+          <StatusPill status="rejected" />
+          <span>{summary.rejectedCount}</span>
+        </div>
+      </section>
 
       <details className="panel-section sidebar-details">
         <summary>
-          <span>Cameras</span>
-          <span>{summary.cameraNames.length}</span>
+          <span>Advanced Details</span>
         </summary>
-        <div className="camera-list">
-          {summary.cameraNames.map((camera) => (
-            <span className="camera-chip" key={camera}>
-              {camera}
-            </span>
-          ))}
+        <div className="panel-disclosure-body">
+          <div className="muted mono" style={{ marginBottom: "8px", wordBreak: "break-all" }}>{summary.uri}</div>
+          <div className="dataset-open-form">
+            <input
+              aria-label="Dataset URI"
+              onChange={(event) => setUri(event.target.value)}
+              value={uri}
+            />
+            <button
+              className="icon-button"
+              disabled={isOpening}
+              onClick={handleOpenDataset}
+              title="Open dataset"
+              type="button"
+            >
+              <FolderOpen size={16} />
+            </button>
+          </div>
+          
+          <div className="metrics-grid" style={{ marginTop: "16px", marginBottom: "16px" }}>
+            <Metric label="Episodes" value={summary.episodeCount.toLocaleString()} />
+            <Metric label="Frames" value={summary.frameCount.toLocaleString()} />
+            <Metric label="FPS" value={summary.fps.toString()} />
+            <Metric label="Cameras" value={summary.cameraNames.length.toString()} />
+          </div>
+
+          {health ? (
+            <div className="dataset-health" style={{ marginBottom: "16px" }}>
+              <div className="health-status-row">
+                <StatusPill status={healthStatus} />
+                <span className="muted">{healthHeadline}</span>
+              </div>
+              <div className="health-details">
+                <HealthFact label="Storage" value={health.storageModel} />
+                <HealthFact label="Core" value={`${presentCoreTableCount}/${coreTables.length}`} />
+                <HealthFact label="Media" value={mediaValue} />
+              </div>
+              {healthIssues.length > 0 ? (
+                <div className="health-issues">
+                  {healthIssues.slice(0, 3).map((issue) => (
+                    <div className="health-issue" key={issue}>
+                      {issue}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="camera-list">
+            <div className="section-title" style={{ fontSize: "11px", marginBottom: "4px" }}>Cameras ({summary.cameraNames.length})</div>
+            {summary.cameraNames.map((camera) => (
+              <span className="camera-chip" key={camera}>
+                {camera}
+              </span>
+            ))}
+          </div>
         </div>
       </details>
     </aside>

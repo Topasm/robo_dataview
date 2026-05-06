@@ -106,9 +106,9 @@ export default function Home() {
       } else if (event.key.toLowerCase() === "r") {
         event.preventDefault();
         setActiveDrawer((current) => (current === "rerun" ? null : "rerun"));
-      } else if (event.key.toLowerCase() === "x") {
+      } else if (event.key === "Escape") {
         event.preventDefault();
-        setActiveDrawer((current) => (current === "export" ? null : "export"));
+        setActiveDrawer(null);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
@@ -181,40 +181,42 @@ export default function Home() {
             results={searchResults}
           />
           <div className="review-action-bar">
+            <div className="drawer-buttons">
+              <button
+                className={`text-button compact-text-button${activeDrawer === "episodes" ? " active" : ""}`}
+                onClick={() => setActiveDrawer((current) => (current === "episodes" ? null : "episodes"))}
+                type="button"
+              >
+                Episodes ({episodeRows.length})
+              </button>
+              <button
+                className={`text-button compact-text-button${activeDrawer === "frames" ? " active" : ""}`}
+                onClick={() => setActiveDrawer((current) => (current === "frames" ? null : "frames"))}
+                type="button"
+              >
+                Frames
+              </button>
+              <button
+                className={`text-button compact-text-button${showSignals ? " active" : ""}`}
+                onClick={() => setShowSignals((current) => !current)}
+                type="button"
+              >
+                Signals
+              </button>
+              <button
+                className={`text-button compact-text-button${activeDrawer === "rerun" ? " active" : ""}`}
+                onClick={() => setActiveDrawer((current) => (current === "rerun" ? null : "rerun"))}
+                type="button"
+              >
+                Rerun
+              </button>
+            </div>
             <button
-              className={`text-button compact-text-button${activeDrawer === "episodes" ? " active" : ""}`}
-              onClick={() => setActiveDrawer((current) => (current === "episodes" ? null : "episodes"))}
-              type="button"
-            >
-              Episodes ({episodeRows.length})
-            </button>
-            <button
-              className={`text-button compact-text-button${activeDrawer === "frames" ? " active" : ""}`}
-              onClick={() => setActiveDrawer((current) => (current === "frames" ? null : "frames"))}
-              type="button"
-            >
-              Frames
-            </button>
-            <button
-              className={`text-button compact-text-button${showSignals ? " active" : ""}`}
-              onClick={() => setShowSignals((current) => !current)}
-              type="button"
-            >
-              Signals
-            </button>
-            <button
-              className={`text-button compact-text-button${activeDrawer === "rerun" ? " active" : ""}`}
-              onClick={() => setActiveDrawer((current) => (current === "rerun" ? null : "rerun"))}
-              type="button"
-            >
-              Rerun
-            </button>
-            <button
-              className={`text-button compact-text-button${activeDrawer === "export" ? " active" : ""}`}
+              className={`text-button primary-export-button${activeDrawer === "export" ? " active" : ""}`}
               onClick={() => setActiveDrawer((current) => (current === "export" ? null : "export"))}
               type="button"
             >
-              Export
+              Export Training Bundle
             </button>
           </div>
           <div className="content-split">

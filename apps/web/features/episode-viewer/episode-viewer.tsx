@@ -71,6 +71,30 @@ export function EpisodeViewer({
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   const animationRef = useRef<number | null>(null);
   const currentFrameRef = useRef(0);
+  const stageRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target;
+      const isTyping =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable);
+
+      if (isTyping) {
+        return;
+      }
+
+      if (event.code === "Space") {
+        event.preventDefault();
+        setIsPlaying((current) => !current);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   useEffect(() => {
     currentFrameRef.current = currentFrame;
@@ -242,7 +266,7 @@ export function EpisodeViewer({
   const currentTimestampSeconds = currentFrame / fps;
 
   return (
-    <main className="main-viewer">
+    <main className="main-viewer" ref={stageRef}>
       <div className="viewer-toolbar">
         <div>
           <div className="viewer-title">Episode #{episode.episodeIndex}</div>
@@ -287,7 +311,12 @@ export function EpisodeViewer({
           >
             <RotateCcw size={16} />
           </button>
-          <button className="icon-button" title="Fullscreen" type="button">
+          <button 
+            className="icon-button" 
+            onClick={() => stageRef.current?.requestFullscreen()}
+            title="Fullscreen" 
+            type="button"
+          >
             <Maximize2 size={16} />
           </button>
         </div>
