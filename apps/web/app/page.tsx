@@ -23,10 +23,10 @@ export default function Home() {
   const [showSignals, setShowSignals] = useState(false);
   const [clipStart, setClipStart] = useState<number | null>(null);
   const [clipEnd, setClipEnd] = useState<number | null>(null);
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedSkillId, setSelectedSkillId] = useState<number>(0);
   const {
     annotationHistoryRows,
-    episodeLabelHistoryRows,
     annotationRows,
     dataStatus,
     episodeRows,
@@ -73,7 +73,6 @@ export default function Home() {
     handleSetFrameBrowserLimit,
     handleSetFrameBrowserStart,
     handleSplitSegment,
-    handleUpdateEpisodeLabels,
     handleUpdateFrameBadFlag,
     handleUpdateSelectedFrameLabel,
     handleUpdateSelectedFrameBadFlag,
@@ -86,6 +85,7 @@ export default function Home() {
   useEffect(() => {
     setClipStart(null);
     setClipEnd(null);
+    setSelectedClipId(null);
   }, [selectedEpisode.datasetId, selectedEpisode.episodeIndex]);
 
   const handleSelectNextPendingEpisode = useCallback(() => {
@@ -129,16 +129,27 @@ export default function Home() {
         if (skill) {
           const start = Math.min(clipStart, clipEnd);
           const end = Math.max(clipStart, clipEnd);
-          void handleCreateSegment({ labelType: SKILL_LABEL_TYPE, labelValue: skill.name, startFrame: start, endFrame: end });
+          void handleCreateSegment({
+            labelType: SKILL_LABEL_TYPE,
+            labelValue: skill.name,
+            startFrame: start,
+            endFrame: end,
+            metadata: { skillId: skill.id, qualityScore: null, successLabel: null }
+          });
           setClipStart(null);
           setClipEnd(null);
         }
       } else if (event.key === "Enter") {
         event.preventDefault();
-        // Accept is handled inside AnnotationEditor via selected clip
+        if (selectedClipId !== null) {
+          void handleUpdateReviewStatus(selectedClipId, "accepted");
+        }
       } else if (event.key === "Backspace" || event.key === "Delete") {
         event.preventDefault();
-        // Delete is handled inside AnnotationEditor via selected clip
+        if (selectedClipId !== null) {
+          void handleDeleteSegment(selectedClipId);
+          setSelectedClipId(null);
+        }
       // --- Skill ID selection (0-9) ---
       } else if (event.key >= "0" && event.key <= "9") {
         event.preventDefault();
@@ -176,10 +187,13 @@ export default function Home() {
     clipStart,
     fps,
     handleCreateSegment,
+    handleDeleteSegment,
     handleSelectFrame,
     handleSelectNextPendingEpisode,
     handleUpdateSelectedFrameBadFlag,
+    handleUpdateReviewStatus,
     lastFrame,
+    selectedClipId,
     selectedFrameIndex,
     selectedFrameRecord?.isBadFrame,
     selectedSkillId
@@ -309,6 +323,7 @@ export default function Home() {
                 frameCount={selectedEpisode.length}
                 onCreateSegment={handleCreateSegment}
                 onDeleteSegment={handleDeleteSegment}
+                onSelectSegment={setSelectedClipId}
                 onMergeSegments={handleMergeSegments}
                 onSelectFrame={handleSelectFrame}
                 onSetClipEnd={setClipEnd}
@@ -316,6 +331,7 @@ export default function Home() {
                 onSplitSegment={handleSplitSegment}
                 onUpdateSegment={handleUpdateSegment}
                 selectedFrame={selectedFrameIndex}
+                selectedSegmentId={selectedClipId}
               />
             </div>
             <AnnotationEditor
@@ -323,25 +339,24 @@ export default function Home() {
               clipEnd={clipEnd}
               clipStart={clipStart}
               compact={workMode === "view"}
-              onNextPendingEpisode={handleSelectNextPendingEpisode}
               onSetClipEnd={setClipEnd}
-              onSetClipStart={setClipStart}
-              onSetSelectedSkillId={setSelectedSkillId}
-              episodeLabelHistory={episodeLabelHistoryRows}
-              annotations={annotationRows}
-              episode={selectedEpisode}
-              onCreateSegment={handleCreateSegment}
-              onAssignAnnotation={handleAssignAnnotation}
-              onDeleteSegment={handleDeleteSegment}
-              onRunVlmLabel={handleRunVlmLabel}
-              onUpdateEpisodeLabels={handleUpdateEpisodeLabels}
-              onUpdateSelectedFrameLabel={handleUpdateSelectedFrameLabel}
+                onSetClipStart={setClipStart}
+                onSetSelectedSkillId={setSelectedSkillId}
+                annotations={annotationRows}
+                episode={selectedEpisode}
+                onCreateSegment={handleCreateSegment}
+                onAssignAnnotation={handleAssignAnnotation}
+                onDeleteSegment={handleDeleteSegment}
+                onRunVlmLabel={handleRunVlmLabel}
+                onSelectClip={setSelectedClipId}
+                onUpdateSelectedFrameLabel={handleUpdateSelectedFrameLabel}
               onUpdateSelectedFrameBadFlag={handleUpdateSelectedFrameBadFlag}
               onUpdateSegment={handleUpdateSegment}
               onUpdateReviewStatus={handleUpdateReviewStatus}
               selectedFrame={selectedFrameIndex}
               selectedFrameRecord={selectedFrameRecord}
               selectedFrameStatus={selectedFrameStatus}
+              selectedClipId={selectedClipId}
               selectedSkillId={selectedSkillId}
               reviewerUserId={reviewerUserId}
               vlmJob={vlmJob}

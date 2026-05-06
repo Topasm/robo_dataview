@@ -164,6 +164,17 @@ EPISODE_METADATA_COLUMNS: tuple[ColumnSpec, ...] = tuple(
     if column.name not in {"timestamps", "observation_state", "actions"}
 )
 
+TRAIN_SKILL_CLIP_COLUMNS: tuple[ColumnSpec, ...] = (
+    ColumnSpec("clip_id", "string", nullable=False),
+    ColumnSpec("source_episode_index", "int64", nullable=False),
+    ColumnSpec("skill_id", "int64"),
+    ColumnSpec("skill_name", "string", nullable=False),
+    ColumnSpec("start_frame", "int64", nullable=False),
+    ColumnSpec("end_frame", "int64", nullable=False),
+    ColumnSpec("video_frame_offset", "int64", nullable=False),
+    *RAW_EPISODES_BASE_COLUMNS,
+)
+
 RAW_FRAMES_COLUMNS: tuple[ColumnSpec, ...] = (
     ColumnSpec("episode_id", "string"),
     ColumnSpec("episode_index", "int64", nullable=False),
@@ -285,6 +296,13 @@ def episode_metadata_column_names() -> list[str]:
     return [column.name for column in EPISODE_METADATA_COLUMNS]
 
 
+def train_skill_clip_column_names(camera_feature_keys: list[str] | None = None) -> list[str]:
+    return [
+        column.name
+        for column in _train_skill_clip_columns(camera_feature_keys=camera_feature_keys)
+    ]
+
+
 def raw_frames_column_names() -> list[str]:
     return [column.name for column in RAW_FRAMES_COLUMNS]
 
@@ -402,6 +420,17 @@ def build_episode_metadata_pyarrow_schema() -> Any:
     """Return the metadata-only curated export `episodes.lance` schema."""
 
     return _build_pyarrow_schema(EPISODE_METADATA_COLUMNS, "episodes.lance")
+
+
+def build_train_skill_clips_pyarrow_schema(
+    camera_feature_keys: list[str] | None = None,
+) -> Any:
+    """Return the clip-level training table schema."""
+
+    return _build_pyarrow_schema(
+        _train_skill_clip_columns(camera_feature_keys=camera_feature_keys),
+        "train_skill_clips.lance",
+    )
 
 
 def build_raw_frames_pyarrow_schema() -> Any:
@@ -526,6 +555,26 @@ def _raw_episodes_columns(
                     f"{normalized}_video_blob",
                     "large_binary",
                     description="Browser-playable H.264 MP4 blob",
+                ),
+                ColumnSpec(f"{normalized}_from_timestamp", "float64"),
+                ColumnSpec(f"{normalized}_to_timestamp", "float64"),
+            ]
+        )
+    return tuple(columns)
+
+
+def _train_skill_clip_columns(
+    camera_feature_keys: list[str] | None = None,
+) -> tuple[ColumnSpec, ...]:
+    columns = list(TRAIN_SKILL_CLIP_COLUMNS)
+    for feature_key in camera_feature_keys or []:
+        normalized = _normalize_feature_key(feature_key)
+        columns.extend(
+            [
+                ColumnSpec(
+                    f"{normalized}_video_blob",
+                    "large_binary",
+                    description="Full source episode MP4 blob reused by the skill clip",
                 ),
                 ColumnSpec(f"{normalized}_from_timestamp", "float64"),
                 ColumnSpec(f"{normalized}_to_timestamp", "float64"),

@@ -1476,6 +1476,11 @@ button:disabled {
   white-space: nowrap;
 }
 
+.timeline-segment.selected {
+  box-shadow: 0 0 0 2px var(--accent);
+  z-index: 3;
+}
+
 .timeline-segment.label-bad_range {
   background: rgba(255, 60, 60, 0.5);
   border-right-color: rgba(255, 60, 60, 0.9);
@@ -2360,6 +2365,24 @@ textarea {
   gap: 4px 6px;
   grid-template-columns: minmax(0, 1fr) auto;
   padding: 7px 8px;
+}
+
+.segment-row.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.segment-select-button {
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .segment-edit-grid {

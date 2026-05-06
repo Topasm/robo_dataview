@@ -490,6 +490,59 @@ class ExportServiceTest(unittest.TestCase):
         self.assertIsNone(media_rows[0]["video_blob"])
         self.assertEqual(train_episode_rows[0]["cam_high_video_blob"], b"video-bytes")
 
+    def test_lance_export_materializes_accepted_skill_clips(self) -> None:
+        skill = annotation_store.create(
+            AnnotationCreate(
+                dataset_id="sample-xvla-soft-fold",
+                episode_index=0,
+                start_frame=3,
+                end_frame=7,
+                label_type="skill",
+                label_value="approach",
+                review_status=ReviewStatus.accepted,
+                metadata={"skillId": 0, "qualityScore": 1.0, "successLabel": True},
+            )
+        )
+        fake_pyarrow = _fake_pyarrow_module()
+        fake_lance, written_paths = _fake_lance_module()
+        versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
+        exports = ExportStore(versions=versions)
+
+        with patch.dict(
+            sys.modules,
+            {"pyarrow": fake_pyarrow, "lance": fake_lance},
+        ):
+            record = exports.create(
+                ExportCreateRequest(
+                    dataset_id="sample-xvla-soft-fold",
+                    episode_indices=[0],
+                    format=ExportFormat.lance,
+                    materialize_skill_clips=True,
+                )
+            )
+
+        manifest = json.loads(Path(record.output_uri or "").read_text(encoding="utf-8"))
+        artifact = manifest["artifacts"]["lance_subset"]
+        metadata = json.loads(Path(artifact["files"]["manifest"]).read_text(encoding="utf-8"))
+        written_tables = getattr(written_paths, "tables", {})
+        skill_rows = written_tables[str(Path(artifact["files"]["skill_segments"]))]["rows"]
+        train_clip_rows = written_tables[str(Path(artifact["files"]["train_skill_clips"]))]["rows"]
+
+        self.assertEqual(record.status, JobStatus.succeeded)
+        self.assertEqual(metadata["primary_training_table"], "train_skill_clips.lance")
+        self.assertEqual(metadata["total_skill_segments"], 1)
+        self.assertEqual(metadata["total_train_skill_clips"], 1)
+        self.assertEqual(metadata["clip_export"]["train_skill_clips"], 1)
+        self.assertEqual(artifact["validation"]["train_skill_clip_count"], 1)
+        self.assertEqual(skill_rows[0]["clip_id"], skill.annotation_id)
+        self.assertEqual(train_clip_rows[0]["clip_id"], skill.annotation_id)
+        self.assertEqual(train_clip_rows[0]["source_episode_index"], 0)
+        self.assertEqual(train_clip_rows[0]["episode_index"], 0)
+        self.assertEqual(train_clip_rows[0]["length"], 5)
+        self.assertEqual(train_clip_rows[0]["video_frame_offset"], 3)
+
+        annotation_store.delete(skill.annotation_id)
+
     def test_lance_export_fails_when_validation_fails(self) -> None:
         fake_pyarrow = _fake_pyarrow_module()
         fake_lance, _written_paths = _fake_lance_module(row_count_overrides={"frames": 2})

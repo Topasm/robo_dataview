@@ -1177,7 +1177,7 @@ export function useStudioData() {
     const job = await createExportJob(selectedEpisode.datasetId, episodeIndices, format, splits, undefined, {
       clipLabelType: SKILL_LABEL_TYPE,
       acceptedClipsOnly: true,
-      materializeSkillClips: false,
+      materializeSkillClips: true,
       jitterOffsets: [0],
       copiesPerClip: 1
     });

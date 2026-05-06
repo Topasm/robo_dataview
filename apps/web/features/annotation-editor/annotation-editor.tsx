@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Bot, Check, Minus, Plus, Save, Trash2, X } from "lucide-react";
+import { Bot, Check, Plus, Save, Trash2, X } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
 import { FrameMetadataPanel } from "@/features/episode-viewer/frame-metadata-panel";
 import { HUMANOID_SKILLS, SKILL_LABEL_TYPE, skillByName } from "@/lib/skill-vocabulary";
 import type {
   Episode,
-  EpisodeLabelHistoryRecord,
   FrameRecord,
   JobRecord,
   ReviewStatus,
@@ -24,21 +23,11 @@ type AnnotationDraft = {
   metadata?: SegmentAnnotation["metadata"];
 };
 
-type EpisodeLabelDraft = {
-  caption: string;
-  successLabel: boolean | null;
-  failureReason: string;
-  qualityScore: number | null;
-  split: string | null;
-  reviewStatus: ReviewStatus;
-};
-
-type InspectorTab = "skills" | "frame" | "episode";
+type InspectorTab = "skills" | "frame";
 
 type AnnotationEditorProps = {
   episode: Episode;
   annotationHistory: AnnotationHistoryRecord[];
-  episodeLabelHistory: EpisodeLabelHistoryRecord[];
   annotations: SegmentAnnotation[];
   clipStart: number | null;
   clipEnd: number | null;
@@ -46,6 +35,7 @@ type AnnotationEditorProps = {
   selectedFrame: number;
   selectedFrameRecord: FrameRecord | null;
   selectedFrameStatus: "idle" | "loading" | "ready" | "error";
+  selectedClipId: string | null;
   selectedSkillId: number;
   reviewerUserId: string;
   vlmJob: JobRecord | null;
@@ -56,8 +46,8 @@ type AnnotationEditorProps = {
   onRunVlmLabel: () => Promise<void>;
   onSetClipStart: (frame: number | null) => void;
   onSetClipEnd: (frame: number | null) => void;
+  onSelectClip: (annotationId: string | null) => void;
   onSetSelectedSkillId: (id: number) => void;
-  onUpdateEpisodeLabels: (draft: EpisodeLabelDraft) => Promise<void>;
   onUpdateSelectedFrameLabel: (
     labelType: string,
     labelValue: string,
@@ -66,19 +56,7 @@ type AnnotationEditorProps = {
   onUpdateSelectedFrameBadFlag: (isBadFrame: boolean) => Promise<void>;
   onUpdateSegment: (annotationId: string, draft: AnnotationDraft) => Promise<void>;
   onUpdateReviewStatus: (annotationId: string, status: ReviewStatus) => Promise<void>;
-  onNextPendingEpisode?: () => void;
 };
-
-const FAILURE_REASONS = [
-  "Fall", "Slip", "Collision", "Timeout", "Sensor", "Operator", "Other"
-];
-
-const QUICK_EPISODE_STATUSES = [
-  { label: "Keep", reviewStatus: "accepted" as ReviewStatus, quality: 1.0 },
-  { label: "Usable", reviewStatus: "accepted" as ReviewStatus, quality: 0.7 },
-  { label: "Bad", reviewStatus: "edited" as ReviewStatus, quality: 0.3 },
-  { label: "Discard", reviewStatus: "rejected" as ReviewStatus, quality: 0.0 }
-];
 
 const QUICK_CLIP_QUALITY = [
   { label: "Keep", reviewStatus: "accepted" as ReviewStatus, quality: 1.0 },
@@ -90,7 +68,6 @@ const QUICK_CLIP_QUALITY = [
 export function AnnotationEditor({
   episode,
   annotationHistory,
-  episodeLabelHistory,
   annotations,
   clipStart,
   clipEnd,
@@ -98,6 +75,7 @@ export function AnnotationEditor({
   selectedFrame,
   selectedFrameRecord,
   selectedFrameStatus,
+  selectedClipId,
   selectedSkillId,
   // reviewerUserId not destructured — admin actions removed
   vlmJob,
@@ -108,15 +86,13 @@ export function AnnotationEditor({
   onRunVlmLabel,
   onSetClipStart,
   onSetClipEnd,
+  onSelectClip,
   onSetSelectedSkillId,
-  onUpdateEpisodeLabels,
   onUpdateSelectedFrameLabel,
   onUpdateSelectedFrameBadFlag,
   onUpdateSegment,
-  onUpdateReviewStatus,
-  onNextPendingEpisode
+  onUpdateReviewStatus
 }: AnnotationEditorProps) {
-  const [episodeDraft, setEpisodeDraft] = useState<EpisodeLabelDraft>(() => toEpisodeDraft(episode));
   const [draft, setDraft] = useState<AnnotationDraft>({
     labelType: "phase",
     labelValue: "phase_label",
@@ -124,7 +100,6 @@ export function AnnotationEditor({
     endFrame: Math.max(0, Math.min(episode.length - 1, 30))
   });
   const [editingRows, setEditingRows] = useState<Record<string, AnnotationDraft>>({});
-  const [isSavingEpisode, setIsSavingEpisode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isBulkReviewing, setIsBulkReviewing] = useState(false);
   const [isRunningVlm, setIsRunningVlm] = useState(false);
@@ -143,9 +118,6 @@ export function AnnotationEditor({
   const recentHistory = [...annotationHistory]
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
     .slice(0, 8);
-  const recentLabelHistory = [...episodeLabelHistory]
-    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
-    .slice(0, 8);
   const rationaleRows = vlmResponses.flatMap(responseRationaleRows).slice(0, 6);
   const subtaskSummary = useMemo(
     () => computeSubtaskSummary(annotations, episode.length),
@@ -153,21 +125,11 @@ export function AnnotationEditor({
   );
 
   useEffect(() => {
-    setEpisodeDraft(toEpisodeDraft(episode));
     setDraft((current) => ({
       ...current,
       endFrame: Math.max(0, Math.min(episode.length - 1, current.endFrame))
     }));
   }, [episode]);
-
-  async function handleUpdateEpisodeLabels() {
-    setIsSavingEpisode(true);
-    try {
-      await onUpdateEpisodeLabels(episodeDraft);
-    } finally {
-      setIsSavingEpisode(false);
-    }
-  }
 
   async function handleCreateSegment() {
     if (!draft.labelValue.trim()) {
@@ -242,22 +204,7 @@ export function AnnotationEditor({
 
 
   async function handleApplyGeneratedProposal(annotation: SegmentAnnotation) {
-    if (annotation.labelType === SKILL_LABEL_TYPE) {
-      await onUpdateReviewStatus(annotation.id, "accepted");
-      return;
-    }
-    const nextDraft = episodeDraftFromProposal(episodeDraft, annotation);
-    if (nextDraft === null) {
-      return;
-    }
-    setEpisodeDraft(nextDraft);
-    setIsSavingEpisode(true);
-    try {
-      await onUpdateEpisodeLabels(nextDraft);
-      await onUpdateReviewStatus(annotation.id, "accepted");
-    } finally {
-      setIsSavingEpisode(false);
-    }
+    await onUpdateReviewStatus(annotation.id, "accepted");
   }
 
   return (
@@ -276,13 +223,6 @@ export function AnnotationEditor({
           type="button"
         >
           Frame
-        </button>
-        <button
-          className={activeTab === "episode" ? "active" : ""}
-          onClick={() => setActiveTab("episode")}
-          type="button"
-        >
-          Episode QA
         </button>
       </div>
 
@@ -371,9 +311,16 @@ export function AnnotationEditor({
               {skillClips.map((clip) => {
                 const skill = skillByName(clip.labelValue);
                 return (
-                  <div className="segment-row" key={clip.id}>
+                  <div className={`segment-row${selectedClipId === clip.id ? " selected" : ""}`} key={clip.id}>
                     <div className="segment-edit-grid">
-                      <span style={{ fontWeight: 700, color: skill?.color ?? "var(--text)" }}>{skill?.label ?? clip.labelValue}</span>
+                      <button
+                        className="segment-select-button"
+                        onClick={() => onSelectClip(clip.id)}
+                        style={{ color: skill?.color ?? "var(--text)" }}
+                        type="button"
+                      >
+                        {skill?.label ?? clip.labelValue}
+                      </button>
                       <span className="muted mono">f{clip.startFrame}–f{clip.endFrame}</span>
                       <StatusPill status={clip.reviewStatus} />
                     </div>
@@ -418,168 +365,6 @@ export function AnnotationEditor({
           </section>
         </>
       ) : null}
-      {activeTab === "episode" ? (
-        <>
-      <section className="panel-section">
-        <div className="section-title">Episode Status</div>
-        <div className="segmented-control">
-          {QUICK_EPISODE_STATUSES.map((item) => (
-            <button
-              key={item.label}
-              className={episodeDraft.reviewStatus === item.reviewStatus && episodeDraft.qualityScore === item.quality ? "active" : ""}
-              disabled={isSavingEpisode}
-              onClick={() => setEpisodeDraft((current) => ({
-                ...current,
-                reviewStatus: item.reviewStatus,
-                qualityScore: item.quality
-              }))}
-              type="button"
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-        <div className="section-title" style={{ marginTop: "12px" }}>Task Result</div>
-        <div className="segmented-control">
-          <button
-            className={episodeDraft.successLabel === null ? "active" : ""}
-            onClick={() => setEpisodeDraft((current) => ({ ...current, successLabel: null }))}
-            type="button"
-          >
-            <Minus size={14} />
-            Unknown
-          </button>
-          <button
-            className={episodeDraft.successLabel === true ? "active" : ""}
-            onClick={() => setEpisodeDraft((current) => ({ ...current, successLabel: true }))}
-            type="button"
-          >
-            <Check size={14} />
-            Success
-          </button>
-          <button
-            className={episodeDraft.successLabel === false ? "active" : ""}
-            onClick={() => setEpisodeDraft((current) => ({ ...current, successLabel: false }))}
-            type="button"
-          >
-            <X size={14} />
-            Fail
-          </button>
-        </div>
-        <div className="section-title" style={{ marginTop: "12px" }}>Failure Reason</div>
-        <div className="frame-quick-labels">
-          {FAILURE_REASONS.map((reason) => (
-            <button
-              key={reason}
-              className={`quick-label-button${episodeDraft.failureReason.toLowerCase() === reason.toLowerCase() ? " active" : ""}`}
-              disabled={isSavingEpisode}
-              onClick={() => setEpisodeDraft((current) => ({
-                ...current,
-                failureReason: reason.toLowerCase(),
-                successLabel: false
-              }))}
-              type="button"
-            >
-              {reason}
-            </button>
-          ))}
-        </div>
-        {!compact ? (
-          <div className="form-grid" style={{ marginTop: "12px" }}>
-            <label>
-              Caption
-              <textarea
-                onChange={(event) =>
-                  setEpisodeDraft((current) => ({ ...current, caption: event.target.value }))
-                }
-                rows={2}
-                value={episodeDraft.caption}
-              />
-            </label>
-            <label>
-              Split
-              <select
-                onChange={(event) =>
-                  setEpisodeDraft((current) => ({
-                    ...current,
-                    split: event.target.value === "" ? null : event.target.value
-                  }))
-                }
-                value={episodeDraft.split ?? ""}
-              >
-                <option value="">unassigned</option>
-                <option value="train">train</option>
-                <option value="val">val</option>
-                <option value="test">test</option>
-              </select>
-            </label>
-            <label>
-              Failure detail
-              <textarea
-                onChange={(event) =>
-                  setEpisodeDraft((current) => ({ ...current, failureReason: event.target.value }))
-                }
-                rows={2}
-                value={episodeDraft.failureReason}
-              />
-            </label>
-          </div>
-        ) : null}
-        <div className="episode-action-row">
-          <button
-            className="text-button episode-label-save secondary-text-button"
-            disabled={isSavingEpisode}
-            onClick={handleUpdateEpisodeLabels}
-            type="button"
-            title="Save without auto-advancing"
-          >
-            <Save size={15} />
-            Save
-          </button>
-          <button
-            className="text-button episode-label-reject"
-            disabled={isSavingEpisode}
-            onClick={async () => {
-              const rejectedDraft = { ...episodeDraft, reviewStatus: "rejected" as ReviewStatus, qualityScore: 0 };
-              setEpisodeDraft(rejectedDraft);
-              setIsSavingEpisode(true);
-              try {
-                await onUpdateEpisodeLabels(rejectedDraft);
-                if (onNextPendingEpisode) onNextPendingEpisode();
-              } finally {
-                setIsSavingEpisode(false);
-              }
-            }}
-            type="button"
-            title="Drop and advance to next episode"
-          >
-            <X size={15} />
-            Drop + Next
-          </button>
-          <button
-            className="text-button episode-label-approve"
-            disabled={isSavingEpisode}
-            onClick={async () => {
-              const approvedDraft = { ...episodeDraft, reviewStatus: "accepted" as ReviewStatus, qualityScore: 1.0 };
-              setEpisodeDraft(approvedDraft);
-              setIsSavingEpisode(true);
-              try {
-                await onUpdateEpisodeLabels(approvedDraft);
-                if (onNextPendingEpisode) onNextPendingEpisode();
-              } finally {
-                setIsSavingEpisode(false);
-              }
-            }}
-            type="button"
-            title="Keep and advance to next episode"
-          >
-            <Check size={15} />
-            Keep + Next
-          </button>
-        </div>
-      </section>
-        </>
-      ) : null}
 
       {activeTab === "frame" ? (
         <>
@@ -594,7 +379,7 @@ export function AnnotationEditor({
         </>
       ) : null}
 
-      {activeTab === "episode" && !compact ? (
+      {!compact ? (
         <>
           <PanelDisclosure title="New Segment">
             <div className="segment-form">
@@ -889,20 +674,10 @@ export function AnnotationEditor({
                       </div>
                     </div>
                     <div className="proposal-actions">
-                      {episodeDraftFromProposal(episodeDraft, annotation) !== null ? (
-                        <button
-                          className="icon-button compact"
-                          onClick={() => void handleApplyGeneratedProposal(annotation)}
-                          title="Apply episode label and accept"
-                          type="button"
-                        >
-                          <Save size={14} />
-                        </button>
-                      ) : null}
                       <button
                         className="icon-button compact"
-                        onClick={() => onUpdateReviewStatus(annotation.id, "accepted")}
-                        title="Accept generated label"
+                        onClick={() => void handleApplyGeneratedProposal(annotation)}
+                        title="Accept boundary proposal"
                         type="button"
                       >
                         <Check size={14} />
@@ -945,28 +720,6 @@ export function AnnotationEditor({
             </div>
           </PanelDisclosure>
 
-          <PanelDisclosure meta={recentLabelHistory.length.toString()} title="Episode Label History">
-            <div className="history-list">
-              {recentLabelHistory.length === 0 ? (
-                <div className="empty-state compact-empty-state">No label edits yet.</div>
-              ) : (
-                recentLabelHistory.map((event) => (
-                  <div className="history-row" key={event.eventId}>
-                    <div className="history-row-top">
-                      <span className={`history-action history-action-${event.action}`}>
-                        {event.action}
-                      </span>
-                      <span className="muted">{formatHistoryTime(event.createdAt)}</span>
-                    </div>
-                    <div className="history-label">{episodeLabelHistorySummary(event)}</div>
-                    <div className="muted mono">
-                      {event.actor} / episode {event.episodeIndex}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </PanelDisclosure>
         </div>
       </details>
       ) : null}
@@ -994,37 +747,6 @@ function PanelDisclosure({
       <div className="panel-disclosure-body">{children}</div>
     </details>
   );
-}
-
-function episodeLabelHistorySummary(event: EpisodeLabelHistoryRecord): string {
-  const after = event.after;
-  if (after && Object.keys(after).length > 0) {
-    return Object.entries(after)
-      .map(([key, value]) => `${key}=${formatLabelValue(value)}`)
-      .join(", ");
-  }
-  return `episode ${event.episodeIndex}`;
-}
-
-function formatLabelValue(value: unknown): string {
-  if (value === null || value === undefined) {
-    return "—";
-  }
-  if (typeof value === "string") {
-    return value.length > 40 ? `${value.slice(0, 37)}…` : value;
-  }
-  return String(value);
-}
-
-function toEpisodeDraft(episode: Episode): EpisodeLabelDraft {
-  return {
-    caption: episode.caption,
-    successLabel: episode.successLabel,
-    failureReason: episode.failureReason,
-    qualityScore: episode.qualityScore,
-    split: episode.split,
-    reviewStatus: episode.reviewStatus
-  };
 }
 
 function toDraft(annotation: SegmentAnnotation): AnnotationDraft {
@@ -1109,35 +831,6 @@ type SubtaskSummary = {
   overlapCount: number;
   rows: SubtaskSummaryRow[];
 };
-
-function episodeDraftFromProposal(
-  current: EpisodeLabelDraft,
-  annotation: SegmentAnnotation,
-): EpisodeLabelDraft | null {
-  const value = annotation.labelValue.trim();
-  if (!value) {
-    return null;
-  }
-  if (annotation.labelType === "episode_caption") {
-    return { ...current, caption: value };
-  }
-  if (annotation.labelType === "failure_reason") {
-    return { ...current, failureReason: value, successLabel: false };
-  }
-  if (annotation.labelType === "success_label") {
-    const normalized = value.toLowerCase();
-    if (["success", "succeeded", "true", "pass", "passed"].includes(normalized)) {
-      return { ...current, successLabel: true, failureReason: "" };
-    }
-    if (["failure", "failed", "false", "fail"].includes(normalized)) {
-      return { ...current, successLabel: false };
-    }
-    if (["unknown", "uncertain", "none", "null"].includes(normalized)) {
-      return { ...current, successLabel: null };
-    }
-  }
-  return null;
-}
 
 function computeSubtaskSummary(
   annotations: SegmentAnnotation[],

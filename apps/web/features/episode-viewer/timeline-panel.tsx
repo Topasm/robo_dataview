@@ -9,6 +9,7 @@ type SegmentDraft = {
   labelValue: string;
   startFrame: number;
   endFrame: number;
+  metadata?: SegmentAnnotation["metadata"];
 };
 
 type TimelinePanelProps = {
@@ -21,10 +22,12 @@ type TimelinePanelProps = {
   onDeleteSegment: (annotationId: string) => Promise<void>;
   onMergeSegments: (left: SegmentAnnotation, right: SegmentAnnotation) => Promise<void>;
   onSelectFrame: (frameIndex: number) => void;
+  onSelectSegment?: (annotationId: string | null) => void;
   onSetClipEnd?: (frame: number | null) => void;
   onSetClipStart?: (frame: number | null) => void;
   onSplitSegment: (annotation: SegmentAnnotation) => Promise<void>;
   onUpdateSegment: (annotationId: string, draft: SegmentDraft) => Promise<void>;
+  selectedSegmentId?: string | null;
   selectedFrame: number;
 };
 
@@ -48,10 +51,12 @@ export function TimelinePanel({
   onDeleteSegment,
   onMergeSegments,
   onSelectFrame,
+  onSelectSegment,
   onSetClipEnd,
   onSetClipStart,
   onSplitSegment,
   onUpdateSegment,
+  selectedSegmentId = null,
   selectedFrame
 }: TimelinePanelProps) {
   const trackRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -252,7 +257,7 @@ export function TimelinePanel({
                 );
                 return (
                   <div
-                    className={`timeline-segment segment-${annotation.reviewStatus} label-${annotation.labelType}`}
+                    className={`timeline-segment segment-${annotation.reviewStatus} label-${annotation.labelType}${selectedSegmentId === annotation.id ? " selected" : ""}`}
                     key={annotation.id}
                     style={{ left: `${left}%`, width: `${width}%` }}
                     title={`${annotation.labelValue} (${bounds.startFrame}-${bounds.endFrame})`}
@@ -271,6 +276,9 @@ export function TimelinePanel({
                       className="timeline-segment-body"
                       onClick={(event) => {
                         event.stopPropagation();
+                        if (annotation.labelType === SKILL_LABEL_TYPE) {
+                          onSelectSegment?.(annotation.id);
+                        }
                         onSelectFrame(bounds.startFrame);
                       }}
                       type="button"

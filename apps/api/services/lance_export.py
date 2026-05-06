@@ -20,6 +20,7 @@ from packages.robot_schema import (
     build_frames_pyarrow_schema,
     build_media_pyarrow_schema,
     build_raw_videos_pyarrow_schema,
+    build_train_skill_clips_pyarrow_schema,
 )
 
 
@@ -30,6 +31,8 @@ EPISODES_LANCE_PATH = Path("episodes.lance")
 FRAMES_LANCE_PATH = Path("frames.lance")
 MEDIA_LANCE_PATH = Path("media.lance")
 TRAIN_EPISODES_LANCE_PATH = Path("train_episodes.lance")
+TRAIN_SKILL_CLIPS_LANCE_PATH = Path("train_skill_clips.lance")
+SKILL_SEGMENTS_LANCE_PATH = Path("skill_segments.lance")
 ANNOTATIONS_CURRENT_LANCE_PATH = Path("annotations_current.lance")
 ANNOTATION_EVENTS_LANCE_PATH = Path("annotation_events.lance")
 LEGACY_VIDEOS_LANCE_PATH = Path("videos.lance")
@@ -94,6 +97,27 @@ def write_lance_subset(
         frames_by_episode,
         video_blobs_by_episode or {},
     )
+    clip_export = clip_export_options or {}
+    materialize_skill_clips = bool(clip_export.get("materialize_skill_clips"))
+    clip_label_type = str(clip_export.get("clip_label_type") or "skill")
+    accepted_only = bool(clip_export.get("accepted_clips_only", True))
+    skill_segment_rows = _skill_segment_rows(
+        annotations_by_episode,
+        clip_label_type=clip_label_type,
+        accepted_only=accepted_only,
+    )
+    train_skill_clip_rows = (
+        _train_skill_clip_rows(
+            episodes,
+            annotations_by_episode,
+            frames_by_episode,
+            video_blobs_by_episode or {},
+            clip_label_type=clip_label_type,
+            accepted_only=accepted_only,
+        )
+        if materialize_skill_clips
+        else []
+    )
     annotation_rows = [
         _annotation_row(annotation)
         for annotations in annotations_by_episode.values()
@@ -129,6 +153,9 @@ def write_lance_subset(
         "annotations_current": root / ANNOTATIONS_CURRENT_LANCE_PATH,
         "annotation_events": root / ANNOTATION_EVENTS_LANCE_PATH,
     }
+    if materialize_skill_clips:
+        canonical_paths["skill_segments"] = root / SKILL_SEGMENTS_LANCE_PATH
+        canonical_paths["train_skill_clips"] = root / TRAIN_SKILL_CLIPS_LANCE_PATH
     legacy_paths: dict[str, Path] = {}
     if write_legacy:
         legacy_paths = {
@@ -162,6 +189,21 @@ def write_lance_subset(
         ),
         table_paths["train_episodes"],
     )
+    if materialize_skill_clips:
+        _write_lance_table(
+            lance,
+            _table_from_rows(pa, skill_segment_rows, _skill_segments_schema(pa)),
+            table_paths["skill_segments"],
+        )
+        _write_lance_table(
+            lance,
+            _table_from_rows(
+                pa,
+                train_skill_clip_rows,
+                build_train_skill_clips_pyarrow_schema(camera_feature_keys),
+            ),
+            table_paths["train_skill_clips"],
+        )
     _write_lance_table(
         lance,
         _table_from_rows(pa, annotation_rows, build_annotations_current_pyarrow_schema()),
@@ -192,13 +234,19 @@ def write_lance_subset(
         "total_episodes": len(train_episode_rows),
         "total_frames": len(frame_rows),
         "total_media": len(media_rows),
+        "total_skill_segments": len(skill_segment_rows),
+        "total_train_skill_clips": len(train_skill_clip_rows),
         "total_videos": len(legacy_video_rows) if write_legacy else 0,
         "total_annotations": len(annotation_rows),
         "total_annotation_events": len(annotation_event_rows),
         "state_dim": state_dim,
         "action_dim": action_dim,
         "fps": fps,
-        "primary_training_table": table_paths["train_episodes"].name,
+        "primary_training_table": (
+            table_paths["train_skill_clips"].name
+            if train_skill_clip_rows
+            else table_paths["train_episodes"].name
+        ),
         "training_columns": {
             "state": "observation_state",
             "action": "actions",
@@ -221,9 +269,14 @@ def write_lance_subset(
         "blob_storage": {
             "episodes": "metadata_only",
             "train_episodes": "video_blob_columns",
+            "train_skill_clips": "source_video_blob_columns" if train_skill_clip_rows else "absent",
             "media": "video_blob_column" if write_media_blobs else "metadata_only",
         },
-        "clip_export": clip_export_options or {},
+        "clip_export": {
+            **clip_export,
+            "skill_segments": len(skill_segment_rows),
+            "train_skill_clips": len(train_skill_clip_rows),
+        },
         "tables": {name: path.name for name, path in table_paths.items()},
         "canonical_tables": {name: path.name for name, path in canonical_paths.items()},
         "legacy_tables": {name: path.name for name, path in legacy_paths.items()},
@@ -248,6 +301,8 @@ def write_lance_subset(
         "frame_rows": len(frame_rows),
         "media_rows": len(media_rows),
         "train_episode_rows": len(train_episode_rows),
+        "skill_segment_rows": len(skill_segment_rows),
+        "train_skill_clip_rows": len(train_skill_clip_rows),
         "annotation_current_rows": len(annotation_rows),
         "annotation_event_rows": len(annotation_event_rows),
     }
@@ -274,6 +329,8 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
         "frames": root / FRAMES_LANCE_PATH,
         "media": root / MEDIA_LANCE_PATH,
         "train_episodes": root / TRAIN_EPISODES_LANCE_PATH,
+        "skill_segments": root / SKILL_SEGMENTS_LANCE_PATH,
+        "train_skill_clips": root / TRAIN_SKILL_CLIPS_LANCE_PATH,
         "annotations_current": root / ANNOTATIONS_CURRENT_LANCE_PATH,
         "annotation_events": root / ANNOTATION_EVENTS_LANCE_PATH,
         "videos": root / LEGACY_VIDEOS_LANCE_PATH,
@@ -329,6 +386,8 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
                 "frames": int(metadata.get("total_frames") or 0),
                 "media": int(metadata.get("total_media") or metadata.get("total_videos") or 0),
                 "train_episodes": int(metadata.get("total_episodes") or 0),
+                "skill_segments": int(metadata.get("total_skill_segments") or 0),
+                "train_skill_clips": int(metadata.get("total_train_skill_clips") or 0),
                 "annotations_current": int(metadata.get("total_annotations") or 0),
                 "annotation_events": int(metadata.get("total_annotation_events") or 0),
                 "videos": int(metadata.get("total_media") or metadata.get("total_videos") or 0),
@@ -349,6 +408,8 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
         "frame_count": int(metadata.get("total_frames") or 0),
         "media_count": int(metadata.get("total_media") or metadata.get("total_videos") or 0),
         "train_episode_count": int(metadata.get("total_episodes") or 0),
+        "skill_segment_count": int(metadata.get("total_skill_segments") or 0),
+        "train_skill_clip_count": int(metadata.get("total_train_skill_clips") or 0),
         "video_count": int(metadata.get("total_videos") or 0),
         "annotation_count": int(metadata.get("total_annotations") or 0),
         "annotation_current_count": int(metadata.get("total_annotations") or 0),
@@ -370,6 +431,8 @@ def _lance_table_readability(
         "frames": "frames.lance",
         "media": "media.lance",
         "train_episodes": "train_episodes.lance",
+        "skill_segments": "skill_segments.lance",
+        "train_skill_clips": "train_skill_clips.lance",
         "annotations_current": "annotations_current.lance",
         "annotation_events": "annotation_events.lance",
         "videos": "videos.lance",
@@ -516,6 +579,132 @@ def _train_episode_rows(
     return rows
 
 
+def _skill_segment_rows(
+    annotations_by_episode: dict[int, list[AnnotationRecord]],
+    *,
+    clip_label_type: str,
+    accepted_only: bool,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for episode_index, annotations in sorted(annotations_by_episode.items()):
+        for annotation in sorted(annotations, key=lambda row: (row.start_frame, row.end_frame)):
+            if annotation.label_type != clip_label_type:
+                continue
+            if accepted_only and annotation.review_status.value != "accepted":
+                continue
+            metadata = dict(annotation.metadata or {})
+            rows.append(
+                {
+                    "clip_id": annotation.annotation_id,
+                    "source_episode_index": int(episode_index),
+                    "skill_id": _int_or_none(metadata.get("skillId", metadata.get("skill_id"))),
+                    "skill_name": annotation.label_value,
+                    "start_frame": int(annotation.start_frame),
+                    "end_frame": int(annotation.end_frame),
+                    "length": int(annotation.end_frame - annotation.start_frame + 1),
+                    "quality_score": _float_or_none(
+                        metadata.get("qualityScore", metadata.get("quality_score"))
+                    ),
+                    "success_label": _bool_or_none(
+                        metadata.get("successLabel", metadata.get("success_label"))
+                    ),
+                    "review_status": annotation.review_status.value,
+                    "split": _string_or_none(metadata.get("split")),
+                    "metadata_json": json.dumps(metadata, sort_keys=True),
+                }
+            )
+    return rows
+
+
+def _train_skill_clip_rows(
+    episodes: list[EpisodeDetail],
+    annotations_by_episode: dict[int, list[AnnotationRecord]],
+    frames_by_episode: dict[int, list[FrameRecord]],
+    video_blobs_by_episode: dict[int, dict[str, bytes]],
+    *,
+    clip_label_type: str,
+    accepted_only: bool,
+) -> list[dict[str, Any]]:
+    episodes_by_index = {int(episode.episode_index): episode for episode in episodes}
+    rows: list[dict[str, Any]] = []
+    clip_index = 0
+    for source_episode_index, annotations in sorted(annotations_by_episode.items()):
+        episode = episodes_by_index.get(int(source_episode_index))
+        if episode is None:
+            continue
+        frames = sorted(
+            frames_by_episode.get(source_episode_index, []),
+            key=lambda frame: frame.frame_index,
+        )
+        if not frames:
+            continue
+        frames_by_index = {int(frame.frame_index): frame for frame in frames}
+        for annotation in sorted(annotations, key=lambda row: (row.start_frame, row.end_frame)):
+            if annotation.label_type != clip_label_type:
+                continue
+            if accepted_only and annotation.review_status.value != "accepted":
+                continue
+            start_frame = max(0, int(annotation.start_frame))
+            end_frame = min(int(annotation.end_frame), max(frames_by_index))
+            clip_frames = [
+                frames_by_index[index]
+                for index in range(start_frame, end_frame + 1)
+                if index in frames_by_index
+            ]
+            if not clip_frames:
+                continue
+            timestamps = [frame.timestamp for frame in clip_frames]
+            timestamp_values = [timestamp for timestamp in timestamps if timestamp is not None]
+            metadata = dict(annotation.metadata or {})
+            row: dict[str, Any] = {
+                "clip_id": annotation.annotation_id,
+                "source_episode_index": int(source_episode_index),
+                "skill_id": _int_or_none(metadata.get("skillId", metadata.get("skill_id"))),
+                "skill_name": annotation.label_value,
+                "start_frame": start_frame,
+                "end_frame": end_frame,
+                "video_frame_offset": start_frame,
+                "episode_id": f"skill_clip_{clip_index:06d}",
+                "episode_index": clip_index,
+                "task_id": _task_id(episode.task_index),
+                "task_index": episode.task_index,
+                "num_frames": len(clip_frames),
+                "fps": episode.fps,
+                "length": len(clip_frames),
+                "start_time": min(timestamp_values) if timestamp_values else None,
+                "end_time": max(timestamp_values) if timestamp_values else None,
+                "timestamps": timestamps,
+                "observation_state": [frame.observation_state for frame in clip_frames],
+                "actions": [frame.action for frame in clip_frames],
+                "language_instruction": episode.language_instruction,
+                "episode_caption": episode.caption,
+                "success_label": _bool_or_none(
+                    metadata.get("successLabel", metadata.get("success_label"))
+                ),
+                "failure_reason": _string_or_none(
+                    metadata.get("failureReason", metadata.get("failure_reason"))
+                ),
+                "quality_score": _float_or_none(
+                    metadata.get("qualityScore", metadata.get("quality_score"))
+                ),
+                "review_status": annotation.review_status.value,
+                "train_val_test_split": _string_or_none(metadata.get("split")) or episode.split,
+                "split": _string_or_none(metadata.get("split")) or episode.split,
+                "created_at": datetime.now(timezone.utc),
+                "dataset_version": None,
+            }
+            for camera, blob in sorted(video_blobs_by_episode.get(source_episode_index, {}).items()):
+                if not blob:
+                    continue
+                key = _normalize_feature_key(camera)
+                row[f"{key}_video_blob"] = blob
+                row[f"{key}_from_timestamp"] = row["start_time"]
+                row[f"{key}_to_timestamp"] = row["end_time"]
+            rows.append(row)
+            clip_index += 1
+    return rows
+
+
 def _frame_row(frame: FrameRecord) -> dict[str, Any]:
     return {
         "episode_id": _episode_id(frame.episode_index),
@@ -595,6 +784,25 @@ def _table_from_rows(pa: Any, rows: list[dict[str, Any]], schema: Any) -> Any:
     return pa.Table.from_pylist(rows, schema=schema)
 
 
+def _skill_segments_schema(pa: Any) -> Any:
+    return pa.schema(
+        [
+            pa.field("clip_id", pa.string(), nullable=False),
+            pa.field("source_episode_index", pa.int64(), nullable=False),
+            pa.field("skill_id", pa.int64()),
+            pa.field("skill_name", pa.string(), nullable=False),
+            pa.field("start_frame", pa.int64(), nullable=False),
+            pa.field("end_frame", pa.int64(), nullable=False),
+            pa.field("length", pa.int64(), nullable=False),
+            pa.field("quality_score", pa.float32()),
+            pa.field("success_label", pa.bool_()),
+            pa.field("review_status", pa.string(), nullable=False),
+            pa.field("split", pa.string()),
+            pa.field("metadata_json", pa.string(), nullable=False),
+        ]
+    )
+
+
 def _safe_path_name(value: str) -> str:
     safe = "".join(character if character.isalnum() else "_" for character in value.strip())
     return "_".join(part for part in safe.split("_") if part) or "camera"
@@ -669,6 +877,34 @@ def _vectors_have_consistent_dim(values: Any) -> bool:
         if len(value) != expected:
             return False
     return True
+
+
+def _int_or_none(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _float_or_none(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _bool_or_none(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    return None
+
+
+def _string_or_none(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
 
 
 def _representative_fps(episodes: list[EpisodeDetail]) -> float | None:

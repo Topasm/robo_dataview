@@ -15,6 +15,7 @@ from packages.robot_schema.lance_tables import (
     RAW_VIDEOS_COLUMNS,
     SPLITS_COLUMNS,
     TASKS_COLUMNS,
+    TRAIN_SKILL_CLIP_COLUMNS,
     VERSIONS_COLUMNS,
     annotation_events_column_names,
     annotations_column_names,
@@ -35,6 +36,7 @@ from packages.robot_schema.lance_tables import (
     build_raw_videos_pyarrow_schema,
     build_splits_pyarrow_schema,
     build_tasks_pyarrow_schema,
+    build_train_skill_clips_pyarrow_schema,
     build_versions_pyarrow_schema,
     cameras_column_names,
     embeddings_column_names,
@@ -49,6 +51,7 @@ from packages.robot_schema.lance_tables import (
     raw_videos_column_names,
     splits_column_names,
     tasks_column_names,
+    train_skill_clip_column_names,
     versions_column_names,
 )
 
@@ -67,6 +70,7 @@ __all__ = [
     "RAW_VIDEOS_COLUMNS",
     "SPLITS_COLUMNS",
     "TASKS_COLUMNS",
+    "TRAIN_SKILL_CLIP_COLUMNS",
     "VERSIONS_COLUMNS",
     "annotation_events_column_names",
     "annotations_column_names",
@@ -87,6 +91,7 @@ __all__ = [
     "build_raw_videos_pyarrow_schema",
     "build_splits_pyarrow_schema",
     "build_tasks_pyarrow_schema",
+    "build_train_skill_clips_pyarrow_schema",
     "build_versions_pyarrow_schema",
     "cameras_column_names",
     "embeddings_column_names",
@@ -101,5 +106,6 @@ __all__ = [
     "raw_videos_column_names",
     "splits_column_names",
     "tasks_column_names",
+    "train_skill_clip_column_names",
     "versions_column_names",
 ]
