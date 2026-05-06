@@ -17,7 +17,6 @@ import {
   fetchCurrentUser,
   fetchDatasetHealth,
   fetchDatasetSummaries,
-  fetchEpisodeLabelHistory,
   fetchEpisodes,
   fetchExport,
   fetchFilterPresets,
@@ -30,7 +29,6 @@ import {
   openDataset,
   semanticSearch,
   streamJobEvents,
-  updateEpisodeLabels,
   updateSegmentAnnotation,
   updateAnnotationReviewStatus,
   updateFrameRecord
@@ -42,7 +40,6 @@ import type {
   DatasetHealth,
   DatasetSummary,
   Episode,
-  EpisodeLabelHistoryRecord,
   ExportRecord,
   ExportFormat,
   FilterPreset,
@@ -65,15 +62,6 @@ type SegmentDraft = {
   endFrame: number;
   reviewStatus?: ReviewStatus;
   metadata?: SegmentAnnotation["metadata"];
-};
-
-type EpisodeLabelDraft = {
-  caption: string;
-  successLabel: boolean | null;
-  failureReason: string;
-  qualityScore: number | null;
-  split: string | null;
-  reviewStatus: ReviewStatus;
 };
 
 const TERMINAL_JOB_STATUSES = new Set(["succeeded", "failed"]);
@@ -158,9 +146,6 @@ export function useStudioData() {
   const [annotationRows, setAnnotationRows] = useState<SegmentAnnotation[]>(annotations);
   const [annotationHistoryRows, setAnnotationHistoryRows] =
     useState<AnnotationHistoryRecord[]>(annotationHistory);
-  const [episodeLabelHistoryRows, setEpisodeLabelHistoryRows] = useState<
-    EpisodeLabelHistoryRecord[]
-  >([]);
   const [reviewQueueRows, setReviewQueueRows] = useState<SegmentAnnotation[]>(annotations);
   const [reviewerUserId, setReviewerUserId] = useState("local");
   const [rerunSession, setRerunSession] = useState<RerunSession | null>(null);
@@ -220,18 +205,6 @@ export function useStudioData() {
       );
     }
   }, []);
-
-  const refreshEpisodeLabelHistory = useCallback(
-    async (datasetId: string, episodeIndex: number) => {
-      try {
-        const history = await fetchEpisodeLabelHistory(datasetId, episodeIndex);
-        setEpisodeLabelHistoryRows(history);
-      } catch {
-        setEpisodeLabelHistoryRows([]);
-      }
-    },
-    []
-  );
 
   const refreshReviewQueue = useCallback(async (datasetId: string) => {
     try {
@@ -392,19 +365,6 @@ export function useStudioData() {
                 event.episodeIndex === selectedEpisode.episodeIndex
             )
           );
-        }
-      }
-      try {
-        const labelHistory = await fetchEpisodeLabelHistory(
-          selectedEpisode.datasetId,
-          selectedEpisode.episodeIndex
-        );
-        if (isMounted) {
-          setEpisodeLabelHistoryRows(labelHistory);
-        }
-      } catch {
-        if (isMounted) {
-          setEpisodeLabelHistoryRows([]);
         }
       }
     }
@@ -836,56 +796,6 @@ export function useStudioData() {
     }
   }
 
-  async function handleUpdateEpisodeLabels(draft: EpisodeLabelDraft) {
-    const previousEpisode = selectedEpisode;
-    const optimisticEpisode: Episode = {
-      ...selectedEpisode,
-      caption: draft.caption.trim(),
-      successLabel: draft.successLabel,
-      failureReason: draft.failureReason.trim(),
-      qualityScore: draft.qualityScore,
-      split: draft.split,
-      reviewStatus: draft.reviewStatus,
-      hasHumanLabel: true
-    };
-    setEpisodeRows((current) =>
-      current.map((episode) =>
-        episode.datasetId === optimisticEpisode.datasetId &&
-        episode.episodeIndex === optimisticEpisode.episodeIndex
-          ? optimisticEpisode
-          : episode
-      )
-    );
-    try {
-      const updated = await updateEpisodeLabels(selectedEpisode.datasetId, selectedEpisode.episodeIndex, {
-        caption: draft.caption.trim() || null,
-        successLabel: draft.successLabel,
-        failureReason: draft.failureReason.trim() || null,
-        qualityScore: draft.qualityScore,
-        split: draft.split || null,
-        reviewStatus: draft.reviewStatus
-      });
-      setEpisodeRows((current) =>
-        current.map((episode) =>
-          episode.datasetId === updated.datasetId && episode.episodeIndex === updated.episodeIndex
-            ? updated
-            : episode
-        )
-      );
-      await refreshEpisodeLabelHistory(updated.datasetId, updated.episodeIndex);
-    } catch (error) {
-      setEpisodeRows((current) =>
-        current.map((episode) =>
-          episode.datasetId === previousEpisode.datasetId &&
-          episode.episodeIndex === previousEpisode.episodeIndex
-            ? previousEpisode
-            : episode
-        )
-      );
-      throw error;
-    }
-  }
-
   async function handleUpdateSegment(annotationId: string, draft: SegmentDraft) {
     const previousAnnotations = annotationRows;
     const existing = annotationRows.find((annotation) => annotation.id === annotationId);
@@ -1260,7 +1170,6 @@ export function useStudioData() {
 
   return {
     annotationHistoryRows,
-    episodeLabelHistoryRows,
     annotationRows,
     dataStatus,
     episodeRows,
@@ -1305,7 +1214,6 @@ export function useStudioData() {
     handleDismissMutationNotice: () => setMutationNotice(null),
     handleSemanticSearch,
     handleSplitSegment,
-    handleUpdateEpisodeLabels,
     handleUpdateFrameBadFlag,
     handleSetFrameBrowserLimit,
     handleSetFrameBrowserStart,

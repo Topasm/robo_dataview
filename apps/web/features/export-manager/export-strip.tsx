@@ -41,7 +41,7 @@ export function ExportStrip({
           <span>Export</span>
         </div>
         <div className="muted">
-          Episode #{episodeIndex} / Lance subset / accepted labels only
+          Export accepted skill clips from episode #{episodeIndex} as train_skill_clips.lance
         </div>
         {exportRecord ? (
           <div className="muted">
@@ -118,7 +118,7 @@ export function ExportStrip({
             onClick={() => setScope("episode")}
             type="button"
           >
-            Episode
+            Current Episode
           </button>
           <button
             className={scope === "split" ? "active" : ""}
@@ -126,7 +126,7 @@ export function ExportStrip({
             onClick={() => setScope("split")}
             type="button"
           >
-            Split {split ?? ""}
+            Selected Split {split ?? ""}
           </button>
         </div>
         <div className="section-actions" style={{ flexDirection: "column", gap: "8px", alignItems: "stretch" }}>
