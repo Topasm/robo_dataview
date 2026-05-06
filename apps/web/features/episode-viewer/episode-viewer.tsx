@@ -273,6 +273,9 @@ export function EpisodeViewer({
           <div className="muted">
             {episode.caption || "(no caption)"} / {frameCount} frames / {fps} FPS
           </div>
+          <div className="shortcut-hints">
+            <kbd>␣</kbd> play <kbd>←→</kbd> frame <kbd>M</kbd> bad <kbd>E</kbd> episodes <kbd>Esc</kbd> close
+          </div>
         </div>
         <div className="toolbar-actions">
           {onToggleSignals ? (

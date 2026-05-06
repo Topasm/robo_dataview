@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Bot, Check, GitBranch, Minus, Plus, Save, Trash2, UserCheck, UserX, X } from "lucide-react";
+import { Bot, Check, Minus, Plus, Save, Trash2, UserCheck, UserX, X } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
 import { FrameMetadataPanel } from "@/features/episode-viewer/frame-metadata-panel";
@@ -57,6 +57,7 @@ type AnnotationEditorProps = {
   onUpdateSelectedFrameBadFlag: (isBadFrame: boolean) => Promise<void>;
   onUpdateSegment: (annotationId: string, draft: AnnotationDraft) => Promise<void>;
   onUpdateReviewStatus: (annotationId: string, status: ReviewStatus) => Promise<void>;
+  onNextPendingEpisode?: () => void;
 };
 
 export function AnnotationEditor({
@@ -79,7 +80,8 @@ export function AnnotationEditor({
   onUpdateSelectedFrameLabel,
   onUpdateSelectedFrameBadFlag,
   onUpdateSegment,
-  onUpdateReviewStatus
+  onUpdateReviewStatus,
+  onNextPendingEpisode
 }: AnnotationEditorProps) {
   const [episodeDraft, setEpisodeDraft] = useState<EpisodeLabelDraft>(() => toEpisodeDraft(episode));
   const [draft, setDraft] = useState<AnnotationDraft>({
@@ -173,14 +175,7 @@ export function AnnotationEditor({
     }
   }
 
-  async function handleSplitSegment(annotation: SegmentAnnotation) {
-    setIsSaving(true);
-    try {
-      await onSplitSegment(annotation);
-    } finally {
-      setIsSaving(false);
-    }
-  }
+
 
   function updateRowDraft(annotation: SegmentAnnotation, patch: Partial<AnnotationDraft>) {
     setEditingRows((current) => ({
@@ -386,16 +381,36 @@ export function AnnotationEditor({
             Failure
           </button>
         </div>
-        <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+        <div className="episode-action-row">
           <button
             className="text-button episode-label-save secondary-text-button"
             disabled={isSavingEpisode}
             onClick={handleUpdateEpisodeLabels}
-            style={{ flex: 1 }}
             type="button"
+            title="Save without auto-advancing"
           >
             <Save size={15} />
-            Save labels
+            Save
+          </button>
+          <button
+            className="text-button episode-label-reject"
+            disabled={isSavingEpisode}
+            onClick={async () => {
+              const rejectedDraft = { ...episodeDraft, reviewStatus: "rejected" as ReviewStatus, successLabel: false };
+              setEpisodeDraft(rejectedDraft);
+              setIsSavingEpisode(true);
+              try {
+                await onUpdateEpisodeLabels(rejectedDraft);
+                if (onNextPendingEpisode) onNextPendingEpisode();
+              } finally {
+                setIsSavingEpisode(false);
+              }
+            }}
+            type="button"
+            title="Mark as failure and advance to next episode"
+          >
+            <X size={15} />
+            Reject
           </button>
           <button
             className="text-button episode-label-approve"
@@ -406,15 +421,16 @@ export function AnnotationEditor({
               setIsSavingEpisode(true);
               try {
                 await onUpdateEpisodeLabels(approvedDraft);
+                if (onNextPendingEpisode) onNextPendingEpisode();
               } finally {
                 setIsSavingEpisode(false);
               }
             }}
-            style={{ flex: 1 }}
             type="button"
+            title="Mark as success and advance to next episode"
           >
             <Check size={15} />
-            Approve Episode
+            Approve
           </button>
         </div>
       </section>
@@ -497,26 +513,6 @@ export function AnnotationEditor({
             meta={annotations.length.toString()}
             title="Segments"
           >
-            <div className="review-action-grid">
-              <button
-                className="text-button compact-text-button"
-                disabled={isBulkReviewing || claimablePendingAnnotations.length === 0}
-                onClick={() => void handleClaimPending()}
-                type="button"
-              >
-                <UserCheck size={14} />
-                Claim pending
-              </button>
-              <button
-                className="text-button compact-text-button"
-                disabled={isBulkReviewing || assignedAnnotations.length === 0}
-                onClick={() => void handleClearAssignments()}
-                type="button"
-              >
-                <UserX size={14} />
-                Clear assigned
-              </button>
-            </div>
             <div className="segment-list">
               {annotations.length === 0 ? <div className="empty-state">No annotations for this episode.</div> : null}
               {annotations.map((annotation) => (
@@ -556,31 +552,9 @@ export function AnnotationEditor({
                       type="number"
                       value={(editingRows[annotation.id] ?? toDraft(annotation)).endFrame}
                     />
-                    <div className="muted mono">
-                      {annotation.source} / {annotation.confidence.toFixed(2)} / assigned{" "}
-                      {annotation.assignedTo ?? "none"}
-                    </div>
                   </div>
                   <StatusPill status={annotation.reviewStatus} />
                   <div className="segment-actions">
-                    <button
-                      className="icon-button compact"
-                      disabled={annotation.assignedTo === reviewerUserId}
-                      onClick={() => onAssignAnnotation(annotation.id, reviewerUserId)}
-                      title={`Assign to ${reviewerUserId}`}
-                      type="button"
-                    >
-                      <UserCheck size={14} />
-                    </button>
-                    <button
-                      className="icon-button compact"
-                      disabled={annotation.assignedTo === null}
-                      onClick={() => onAssignAnnotation(annotation.id, null)}
-                      title="Clear assignment"
-                      type="button"
-                    >
-                      <UserX size={14} />
-                    </button>
                     <button
                       className="icon-button compact"
                       disabled={isSaving}
@@ -589,15 +563,6 @@ export function AnnotationEditor({
                       type="button"
                     >
                       <Save size={14} />
-                    </button>
-                    <button
-                      className="icon-button compact"
-                      disabled={isSaving || annotation.endFrame <= annotation.startFrame}
-                      onClick={() => handleSplitSegment(annotation)}
-                      title="Split segment at midpoint"
-                      type="button"
-                    >
-                      <GitBranch size={14} />
                     </button>
                     <button
                       className="icon-button compact"
@@ -627,6 +592,31 @@ export function AnnotationEditor({
                 </div>
               ))}
             </div>
+            <details className="advanced-menu" style={{ marginTop: "8px" }}>
+              <summary>Admin actions</summary>
+              <div className="advanced-menu-content">
+                <div className="review-action-grid">
+                  <button
+                    className="text-button compact-text-button secondary-text-button"
+                    disabled={isBulkReviewing || claimablePendingAnnotations.length === 0}
+                    onClick={() => void handleClaimPending()}
+                    type="button"
+                  >
+                    <UserCheck size={14} />
+                    Claim
+                  </button>
+                  <button
+                    className="text-button compact-text-button secondary-text-button"
+                    disabled={isBulkReviewing || assignedAnnotations.length === 0}
+                    onClick={() => void handleClearAssignments()}
+                    type="button"
+                  >
+                    <UserX size={14} />
+                    Unassign
+                  </button>
+                </div>
+              </div>
+            </details>
           </PanelDisclosure>
 
           <PanelDisclosure

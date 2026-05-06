@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Database, Settings } from "lucide-react";
 
 import { AnnotationEditor } from "@/features/annotation-editor/annotation-editor";
@@ -75,7 +75,14 @@ export default function Home() {
     handleUpdateSegment,
     handleUpdateReviewStatus
   } = useStudioData();
-  const lastFrame = Math.max(0, selectedEpisode.length - 1);
+  const lastFrame = Math.max(0, (selectedEpisode?.length ?? 1) - 1);
+
+  const handleSelectNextPendingEpisode = useCallback(() => {
+    const nextPending = episodeRows.find(ep => ep.reviewStatus === "pending" && ep.episodeIndex !== selectedEpisodeIndex);
+    if (nextPending) {
+      handleSelectEpisode(nextPending.episodeIndex);
+    }
+  }, [episodeRows, selectedEpisodeIndex, handleSelectEpisode]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -243,6 +250,7 @@ export default function Home() {
             </div>
             <AnnotationEditor
               annotationHistory={annotationHistoryRows}
+              onNextPendingEpisode={handleSelectNextPendingEpisode}
               episodeLabelHistory={episodeLabelHistoryRows}
               annotations={annotationRows}
               episode={selectedEpisode}
