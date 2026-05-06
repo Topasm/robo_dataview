@@ -157,6 +157,12 @@ RAW_EPISODES_BASE_COLUMNS: tuple[ColumnSpec, ...] = (
     ColumnSpec("dataset_version", "string"),
 )
 
+EPISODE_METADATA_COLUMNS: tuple[ColumnSpec, ...] = tuple(
+    column
+    for column in RAW_EPISODES_BASE_COLUMNS
+    if column.name not in {"timestamps", "observation_state", "actions"}
+)
+
 RAW_FRAMES_COLUMNS: tuple[ColumnSpec, ...] = (
     ColumnSpec("episode_id", "string"),
     ColumnSpec("episode_index", "int64", nullable=False),
@@ -274,6 +280,10 @@ def episodes_column_names(camera_feature_keys: list[str] | None = None) -> list[
     return raw_episodes_column_names(camera_feature_keys)
 
 
+def episode_metadata_column_names() -> list[str]:
+    return [column.name for column in EPISODE_METADATA_COLUMNS]
+
+
 def raw_frames_column_names() -> list[str]:
     return [column.name for column in RAW_FRAMES_COLUMNS]
 
@@ -385,6 +395,12 @@ def build_episodes_pyarrow_schema(camera_feature_keys: list[str] | None = None) 
     """Alias for the canonical raw `episodes.lance` schema."""
 
     return build_raw_episodes_pyarrow_schema(camera_feature_keys)
+
+
+def build_episode_metadata_pyarrow_schema() -> Any:
+    """Return the metadata-only curated export `episodes.lance` schema."""
+
+    return _build_pyarrow_schema(EPISODE_METADATA_COLUMNS, "episodes.lance")
 
 
 def build_raw_frames_pyarrow_schema() -> Any:

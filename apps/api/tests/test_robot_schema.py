@@ -9,6 +9,7 @@ from packages.robot_schema import (
     annotations_current_column_names,
     cameras_column_names,
     embeddings_column_names,
+    episode_metadata_column_names,
     episode_labels_column_names,
     build_raw_episodes_pyarrow_schema,
     episodes_column_names,
@@ -126,6 +127,15 @@ class RobotSchemaTest(unittest.TestCase):
         self.assertIn("observation_images_cam_head_from_timestamp", columns)
         self.assertIn("observation_images_cam_head_to_timestamp", columns)
         self.assertEqual(columns, episodes_column_names(["observation.images.cam_head"]))
+
+    def test_episode_metadata_schema_excludes_training_payload_columns(self) -> None:
+        columns = episode_metadata_column_names()
+
+        self.assertIn("episode_index", columns)
+        self.assertIn("num_frames", columns)
+        self.assertNotIn("timestamps", columns)
+        self.assertNotIn("observation_state", columns)
+        self.assertNotIn("actions", columns)
 
     def test_raw_frame_and_video_contracts_expose_core_columns(self) -> None:
         self.assertIn("frame_index", raw_frames_column_names())

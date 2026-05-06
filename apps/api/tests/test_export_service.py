@@ -417,6 +417,8 @@ class ExportServiceTest(unittest.TestCase):
         self.assertEqual(metadata["primary_training_table"], "train_episodes.lance")
         self.assertEqual(metadata["training_columns"]["state"], "observation_state")
         self.assertEqual(metadata["training_columns"]["action"], "actions")
+        self.assertEqual(metadata["blob_storage"]["episodes"], "metadata_only")
+        self.assertEqual(metadata["blob_storage"]["media"], "metadata_only")
         self.assertGreater(metadata["state_dim"], 0)
         self.assertGreater(metadata["action_dim"], 0)
         self.assertEqual(metadata["frame_table"]["index_columns"], ["episode_index", "frame_index"])
@@ -424,6 +426,17 @@ class ExportServiceTest(unittest.TestCase):
         self.assertEqual(metadata["frame_table"]["action_column"], "action")
         self.assertTrue(metadata["frame_table"]["state_dim_consistent"])
         self.assertTrue(metadata["frame_table"]["action_dim_consistent"])
+        written_tables = getattr(written_paths, "tables", {})
+        episode_rows = written_tables[str(Path(artifact["files"]["episodes"]))]["rows"]
+        train_episode_rows = written_tables[str(Path(artifact["files"]["train_episodes"]))]["rows"]
+        self.assertEqual(len(episode_rows), 1)
+        self.assertEqual(len(train_episode_rows), 1)
+        self.assertNotIn("timestamps", episode_rows[0])
+        self.assertNotIn("observation_state", episode_rows[0])
+        self.assertNotIn("actions", episode_rows[0])
+        self.assertIn("timestamps", train_episode_rows[0])
+        self.assertIn("observation_state", train_episode_rows[0])
+        self.assertIn("actions", train_episode_rows[0])
         self.assertEqual(
             manifest["episodes"][0]["annotations"][0]["label_value"],
             "accepted_exact_frame",
@@ -467,6 +480,15 @@ class ExportServiceTest(unittest.TestCase):
         self.assertTrue(any(path.endswith("media.lance") for path in written_paths))
         self.assertTrue(any(path.endswith("train_episodes.lance") for path in written_paths))
         self.assertFalse(any(path.endswith("videos.lance") for path in written_paths))
+        metadata = json.loads(Path(artifact["files"]["manifest"]).read_text(encoding="utf-8"))
+        self.assertEqual(metadata["camera_keys"], ["cam_high"])
+        self.assertEqual(metadata["blob_storage"]["media"], "metadata_only")
+        written_tables = getattr(written_paths, "tables", {})
+        media_rows = written_tables[str(Path(artifact["files"]["media"]))]["rows"]
+        train_episode_rows = written_tables[str(Path(artifact["files"]["train_episodes"]))]["rows"]
+        self.assertEqual(media_rows[0]["byte_size"], len(b"video-bytes"))
+        self.assertIsNone(media_rows[0]["video_blob"])
+        self.assertEqual(train_episode_rows[0]["cam_high_video_blob"], b"video-bytes")
 
     def test_lance_export_fails_when_validation_fails(self) -> None:
         fake_pyarrow = _fake_pyarrow_module()
@@ -652,11 +674,17 @@ class _FakeLanceDataset:
         return self._row_count
 
 
+class _WrittenPaths(list[str]):
+    def __init__(self) -> None:
+        super().__init__()
+        self.tables: dict[str, dict] = {}
+
+
 def _fake_lance_module(
     row_count_overrides: dict[str, int] | None = None,
 ) -> tuple[ModuleType, list[str]]:
     module = ModuleType("lance")
-    written_paths: list[str] = []
+    written_paths = _WrittenPaths()
     row_counts: dict[str, int] = {}
     row_count_overrides = row_count_overrides or {}
 
@@ -666,6 +694,7 @@ def _fake_lance_module(
         path_obj.mkdir(parents=True, exist_ok=True)
         (path_obj / "_SUCCESS").write_text("ok", encoding="utf-8")
         written_paths.append(path)
+        written_paths.tables[path] = table
         key = path_obj.name.removesuffix(".lance")
         row_counts[str(path_obj)] = int(row_count_overrides.get(key, len(table["rows"])))
 

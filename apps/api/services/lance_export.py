@@ -15,6 +15,7 @@ from packages.robot_schema import (
     build_annotation_events_pyarrow_schema,
     build_annotations_current_pyarrow_schema,
     build_annotations_pyarrow_schema,
+    build_episode_metadata_pyarrow_schema,
     build_episodes_pyarrow_schema,
     build_frames_pyarrow_schema,
     build_media_pyarrow_schema,
@@ -69,6 +70,9 @@ def write_lance_subset(
     write_legacy = _env_flag(
         "ROBOT_DATA_STUDIO_WRITE_LEGACY_EXPORT_TABLES", default=False
     )
+    write_media_blobs = _env_flag(
+        "ROBOT_DATA_STUDIO_EXPORT_MEDIA_BLOBS", default=False
+    )
 
     frame_rows = sorted(
         [
@@ -78,19 +82,16 @@ def write_lance_subset(
         ],
         key=lambda row: (int(row["episode_index"]), int(row["frame_index"])),
     )
-    episode_metadata_rows = _episode_rows(
+    episode_metadata_rows = _episode_metadata_rows(
         episodes,
         annotations_by_episode,
         frames_by_episode,
-        video_blobs_by_episode or {},
-        include_blobs=False,
     )
-    train_episode_rows = _episode_rows(
+    train_episode_rows = _train_episode_rows(
         episodes,
         annotations_by_episode,
         frames_by_episode,
         video_blobs_by_episode or {},
-        include_blobs=True,
     )
     annotation_rows = [
         _annotation_row(annotation)
@@ -98,7 +99,16 @@ def write_lance_subset(
         for annotation in annotations
     ]
     annotation_event_rows: list[dict[str, Any]] = []
-    media_rows = _media_rows(episodes, video_blobs_by_episode or {})
+    media_rows = _media_rows(
+        episodes,
+        video_blobs_by_episode or {},
+        include_blobs=write_media_blobs,
+    )
+    legacy_video_rows = (
+        _media_rows(episodes, video_blobs_by_episode or {}, include_blobs=True)
+        if write_legacy
+        else []
+    )
     camera_feature_keys = _camera_feature_keys(episodes, video_blobs_by_episode or {})
     state_dim = _first_vector_dim(
         row.get("observation_state")
@@ -129,7 +139,7 @@ def write_lance_subset(
     # episodes.lance is metadata-only; training-grade blobs live in train_episodes.lance.
     _write_lance_table(
         lance,
-        _table_from_rows(pa, episode_metadata_rows, build_episodes_pyarrow_schema([])),
+        _table_from_rows(pa, episode_metadata_rows, build_episode_metadata_pyarrow_schema()),
         table_paths["episodes"],
     )
     _write_lance_table(
@@ -144,7 +154,11 @@ def write_lance_subset(
     )
     _write_lance_table(
         lance,
-        _table_from_rows(pa, train_episode_rows, build_episodes_pyarrow_schema(camera_feature_keys)),
+        _table_from_rows(
+            pa,
+            train_episode_rows,
+            build_episodes_pyarrow_schema(camera_feature_keys),
+        ),
         table_paths["train_episodes"],
     )
     _write_lance_table(
@@ -160,7 +174,7 @@ def write_lance_subset(
     if write_legacy:
         _write_lance_table(
             lance,
-            _table_from_rows(pa, media_rows, build_raw_videos_pyarrow_schema()),
+            _table_from_rows(pa, legacy_video_rows, build_raw_videos_pyarrow_schema()),
             table_paths["videos"],
         )
         _write_lance_table(
@@ -177,7 +191,7 @@ def write_lance_subset(
         "total_episodes": len(train_episode_rows),
         "total_frames": len(frame_rows),
         "total_media": len(media_rows),
-        "total_videos": len(media_rows) if write_legacy else 0,
+        "total_videos": len(legacy_video_rows) if write_legacy else 0,
         "total_annotations": len(annotation_rows),
         "total_annotation_events": len(annotation_event_rows),
         "state_dim": state_dim,
@@ -188,6 +202,7 @@ def write_lance_subset(
             "state": "observation_state",
             "action": "actions",
         },
+        "camera_keys": camera_feature_keys,
         "frame_table": {
             "index_columns": ["episode_index", "frame_index"],
             "state_column": "observation_state",
@@ -205,7 +220,7 @@ def write_lance_subset(
         "blob_storage": {
             "episodes": "metadata_only",
             "train_episodes": "video_blob_columns",
-            "media": "video_blob_column",
+            "media": "video_blob_column" if write_media_blobs else "metadata_only",
         },
         "tables": {name: path.name for name, path in table_paths.items()},
         "canonical_tables": {name: path.name for name, path in canonical_paths.items()},
@@ -235,7 +250,7 @@ def write_lance_subset(
         "annotation_event_rows": len(annotation_event_rows),
     }
     if write_legacy:
-        materialized["video_rows"] = len(media_rows)
+        materialized["video_rows"] = len(legacy_video_rows)
         materialized["annotation_rows"] = len(annotation_rows)
 
     return {
@@ -433,13 +448,10 @@ def _lance_table_row_count_errors(
     return errors
 
 
-def _episode_rows(
+def _episode_metadata_rows(
     episodes: list[EpisodeDetail],
     annotations_by_episode: dict[int, list[AnnotationRecord]],
     frames_by_episode: dict[int, list[FrameRecord]],
-    video_blobs_by_episode: dict[int, dict[str, bytes]],
-    *,
-    include_blobs: bool = True,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     created_at = datetime.now(timezone.utc)
@@ -460,9 +472,6 @@ def _episode_rows(
             "length": episode.length,
             "start_time": min(timestamp_values) if timestamp_values else None,
             "end_time": max(timestamp_values) if timestamp_values else None,
-            "timestamps": timestamps,
-            "observation_state": [frame.observation_state for frame in frames],
-            "actions": [frame.action for frame in frames],
             "language_instruction": episode.language_instruction,
             "episode_caption": episode.caption,
             "success_label": episode.success_label,
@@ -476,15 +485,32 @@ def _episode_rows(
         }
         if len(annotations_by_episode.get(episode.episode_index, [])) > 0:
             row["review_status"] = row["review_status"] or "accepted"
-        if include_blobs:
-            for camera, blob in sorted(video_blobs_by_episode.get(episode.episode_index, {}).items()):
-                if not blob:
-                    continue
-                key = _normalize_feature_key(camera)
-                row[f"{key}_video_blob"] = blob
-                row[f"{key}_from_timestamp"] = row["start_time"]
-                row[f"{key}_to_timestamp"] = row["end_time"]
         rows.append(row)
+    return rows
+
+
+def _train_episode_rows(
+    episodes: list[EpisodeDetail],
+    annotations_by_episode: dict[int, list[AnnotationRecord]],
+    frames_by_episode: dict[int, list[FrameRecord]],
+    video_blobs_by_episode: dict[int, dict[str, bytes]],
+) -> list[dict[str, Any]]:
+    rows = _episode_metadata_rows(episodes, annotations_by_episode, frames_by_episode)
+    for row, episode in zip(rows, episodes, strict=False):
+        frames = sorted(
+            frames_by_episode.get(episode.episode_index, []),
+            key=lambda frame: frame.frame_index,
+        )
+        row["timestamps"] = [frame.timestamp for frame in frames]
+        row["observation_state"] = [frame.observation_state for frame in frames]
+        row["actions"] = [frame.action for frame in frames]
+        for camera, blob in sorted(video_blobs_by_episode.get(episode.episode_index, {}).items()):
+            if not blob:
+                continue
+            key = _normalize_feature_key(camera)
+            row[f"{key}_video_blob"] = blob
+            row[f"{key}_from_timestamp"] = row["start_time"]
+            row[f"{key}_to_timestamp"] = row["end_time"]
     return rows
 
 
@@ -512,6 +538,8 @@ def _frame_row(frame: FrameRecord) -> dict[str, Any]:
 def _media_rows(
     episodes: list[EpisodeDetail],
     video_blobs_by_episode: dict[int, dict[str, bytes]],
+    *,
+    include_blobs: bool,
 ) -> list[dict[str, Any]]:
     rows = []
     for episode in episodes:
@@ -530,7 +558,7 @@ def _media_rows(
                     "media_type": "video",
                     "uri": None,
                     "relative_path": f"videos/{video_key}/{filename}",
-                    "video_blob": blob,
+                    "video_blob": blob if include_blobs else None,
                     "video_path": None,
                     "from_timestamp": 0.0,
                     "to_timestamp": episode.duration_seconds,
@@ -581,7 +609,7 @@ def _camera_feature_keys(
     keys: set[str] = set()
     for episode in episodes:
         keys.update(
-            camera
+            _normalize_feature_key(camera)
             for camera, blob in video_blobs_by_episode.get(episode.episode_index, {}).items()
             if blob
         )
