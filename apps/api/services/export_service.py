@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -109,6 +110,7 @@ class ExportStore:
         episode_records = []
         annotations_by_episode = {}
         missing_episodes = []
+        clip_export = _clip_export_options(payload)
         for episode_index in record.episode_indices:
             episode = store.get_episode(record.dataset_id, episode_index)
             if episode is None:
@@ -195,6 +197,7 @@ class ExportStore:
                         for episode in episode_records
                     },
                     version_description=payload.version_description,
+                    clip_export_options=clip_export,
                 )
                 validation = artifacts["lance_subset"].get("validation", {})
                 if not validation.get("metadata_ok", False):
@@ -298,6 +301,7 @@ class ExportStore:
             "num_episodes": len(episodes),
             "episode_indices": [episode["episode_index"] for episode in episodes],
             "missing_episode_indices": missing_episodes,
+            "clip_export": clip_export,
             "artifacts": artifacts,
             "episodes": episodes,
         }
@@ -415,3 +419,13 @@ class ExportStore:
 
 
 exports = ExportStore()
+
+
+def _clip_export_options(payload: ExportCreateRequest) -> dict[str, Any]:
+    return {
+        "clip_label_type": payload.clip_label_type,
+        "accepted_clips_only": payload.accepted_clips_only,
+        "materialize_skill_clips": payload.materialize_skill_clips,
+        "jitter_offsets": payload.jitter_offsets,
+        "copies_per_clip": payload.copies_per_clip,
+    }

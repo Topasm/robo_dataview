@@ -39,6 +39,7 @@ class RobotSchemaTest(unittest.TestCase):
                 "source",
                 "confidence",
                 "review_status",
+                "metadata_json",
                 "created_by",
                 "updated_by",
                 "assigned_to",

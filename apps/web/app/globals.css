@@ -1399,7 +1399,7 @@ button:disabled {
 .timeline-panel {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  min-height: 148px;
+  min-height: 180px;
   padding: 13px 14px;
 }
 
@@ -1427,13 +1427,35 @@ button:disabled {
   font-size: 11px;
   justify-content: space-between;
   margin-bottom: 8px;
+  margin-left: 92px;
+}
+
+.timeline-lanes {
+  display: grid;
+  gap: 6px;
+}
+
+.timeline-lane {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 84px minmax(0, 1fr);
+}
+
+.timeline-lane-title {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .timeline-track {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 6px;
-  height: 56px;
+  height: 34px;
   overflow: hidden;
   position: relative;
   touch-action: none;
@@ -1445,12 +1467,12 @@ button:disabled {
   color: #ffffff;
   display: flex;
   font-size: 11px;
-  height: 30px;
+  height: 22px;
   left: 0;
   overflow: hidden;
   position: absolute;
   text-overflow: ellipsis;
-  top: 13px;
+  top: 5px;
   white-space: nowrap;
 }
 
@@ -1515,9 +1537,9 @@ button:disabled {
 
 .timeline-selected-frame {
   background: var(--text);
-  bottom: 5px;
+  bottom: 3px;
   position: absolute;
-  top: 5px;
+  top: 3px;
   transform: translateX(-50%);
   width: 2px;
   z-index: 2;
@@ -2367,6 +2389,29 @@ textarea {
   gap: 2px;
   grid-column: 1 / -1;
   justify-content: flex-end;
+}
+
+.clip-quality-actions {
+  display: grid;
+  gap: 4px;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.clip-quality-actions button {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  height: 26px;
+}
+
+.clip-quality-actions button.active {
+  background: #e7f4f5;
+  border-color: var(--accent);
+  color: var(--text);
+  font-weight: 700;
 }
 
 .table-toolbar {

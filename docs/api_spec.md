@@ -130,7 +130,7 @@ Response:
     "layout_detected": "v2_1",
     "episodes_written": 8,
     "frames_written": 1200,
-    "videos_written": 24,
+    "media_written": 24,
     "cameras": ["observation_images_cam_head"]
   },
   "dataset": {

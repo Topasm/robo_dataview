@@ -83,6 +83,11 @@ export default function Home() {
   const lastFrame = Math.max(0, (selectedEpisode?.length ?? 1) - 1);
   const fps = selectedEpisode?.fps > 0 ? selectedEpisode.fps : 20;
 
+  useEffect(() => {
+    setClipStart(null);
+    setClipEnd(null);
+  }, [selectedEpisode.datasetId, selectedEpisode.episodeIndex]);
+
   const handleSelectNextPendingEpisode = useCallback(() => {
     const nextPending = episodeRows.find(ep => ep.reviewStatus === "pending" && ep.episodeIndex !== selectedEpisodeIndex);
     if (nextPending) {

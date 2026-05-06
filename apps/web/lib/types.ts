@@ -133,6 +133,17 @@ export type FrameListPage = {
   items: FrameRecord[];
 };
 
+export type SegmentAnnotationMetadata = {
+  skillId?: number;
+  qualityScore?: number | null;
+  successLabel?: boolean | null;
+  failureReason?: string | null;
+  split?: "train" | "val" | "test" | null;
+  targetObject?: string | null;
+  handMode?: "left" | "right" | "both" | null;
+  notes?: string | null;
+};
+
 export type SegmentAnnotation = {
   id: string;
   datasetId: string;
@@ -144,6 +155,7 @@ export type SegmentAnnotation = {
   source: "human" | "vlm" | "heuristic" | "import";
   confidence: number;
   reviewStatus: ReviewStatus;
+  metadata: SegmentAnnotationMetadata;
   createdBy: string;
   updatedBy: string;
   assignedTo: string | null;

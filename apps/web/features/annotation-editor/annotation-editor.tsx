@@ -20,6 +20,8 @@ type AnnotationDraft = {
   labelValue: string;
   startFrame: number;
   endFrame: number;
+  reviewStatus?: ReviewStatus;
+  metadata?: SegmentAnnotation["metadata"];
 };
 
 type EpisodeLabelDraft = {
@@ -72,10 +74,17 @@ const FAILURE_REASONS = [
 ];
 
 const QUICK_EPISODE_STATUSES = [
-  { label: "Keep", reviewStatus: "accepted" as ReviewStatus, quality: 1.0, success: true },
-  { label: "Usable", reviewStatus: "accepted" as ReviewStatus, quality: 0.7, success: true },
-  { label: "Bad", reviewStatus: "edited" as ReviewStatus, quality: 0.3, success: false },
-  { label: "Discard", reviewStatus: "rejected" as ReviewStatus, quality: 0.0, success: false }
+  { label: "Keep", reviewStatus: "accepted" as ReviewStatus, quality: 1.0 },
+  { label: "Usable", reviewStatus: "accepted" as ReviewStatus, quality: 0.7 },
+  { label: "Bad", reviewStatus: "edited" as ReviewStatus, quality: 0.3 },
+  { label: "Discard", reviewStatus: "rejected" as ReviewStatus, quality: 0.0 }
+];
+
+const QUICK_CLIP_QUALITY = [
+  { label: "Keep", reviewStatus: "accepted" as ReviewStatus, quality: 1.0 },
+  { label: "Usable", reviewStatus: "accepted" as ReviewStatus, quality: 0.7 },
+  { label: "Bad", reviewStatus: "edited" as ReviewStatus, quality: 0.3 },
+  { label: "Discard", reviewStatus: "rejected" as ReviewStatus, quality: 0.0 }
 ];
 
 export function AnnotationEditor({
@@ -233,6 +242,10 @@ export function AnnotationEditor({
 
 
   async function handleApplyGeneratedProposal(annotation: SegmentAnnotation) {
+    if (annotation.labelType === SKILL_LABEL_TYPE) {
+      await onUpdateReviewStatus(annotation.id, "accepted");
+      return;
+    }
     const nextDraft = episodeDraftFromProposal(episodeDraft, annotation);
     if (nextDraft === null) {
       return;
@@ -327,7 +340,13 @@ export function AnnotationEditor({
                   if (!skill || clipStart === null || clipEnd === null) return;
                   setIsSaving(true);
                   try {
-                    await onCreateSegment({ labelType: SKILL_LABEL_TYPE, labelValue: skill.name, startFrame: Math.min(clipStart, clipEnd), endFrame: Math.max(clipStart, clipEnd) });
+                    await onCreateSegment({
+                      labelType: SKILL_LABEL_TYPE,
+                      labelValue: skill.name,
+                      startFrame: Math.min(clipStart, clipEnd),
+                      endFrame: Math.max(clipStart, clipEnd),
+                      metadata: { skillId: skill.id, qualityScore: null, successLabel: null }
+                    });
                     onSetClipStart(null);
                     onSetClipEnd(null);
                   } finally {
@@ -363,6 +382,27 @@ export function AnnotationEditor({
                       <button className="icon-button compact" onClick={() => onUpdateReviewStatus(clip.id, "rejected")} title="Reject clip" type="button"><X size={14} /></button>
                       <button className="icon-button compact danger" onClick={() => onDeleteSegment(clip.id)} title="Delete clip" type="button"><Trash2 size={14} /></button>
                     </div>
+                    <div className="clip-quality-actions">
+                      {QUICK_CLIP_QUALITY.map((item) => (
+                        <button
+                          className={clip.metadata.qualityScore === item.quality ? "active" : ""}
+                          key={item.label}
+                          onClick={() =>
+                            onUpdateSegment(clip.id, {
+                              labelType: clip.labelType,
+                              labelValue: clip.labelValue,
+                              startFrame: clip.startFrame,
+                              endFrame: clip.endFrame,
+                              reviewStatus: item.reviewStatus,
+                              metadata: { ...clip.metadata, qualityScore: item.quality }
+                            })
+                          }
+                          type="button"
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 );
               })}
@@ -391,8 +431,7 @@ export function AnnotationEditor({
               onClick={() => setEpisodeDraft((current) => ({
                 ...current,
                 reviewStatus: item.reviewStatus,
-                qualityScore: item.quality,
-                successLabel: item.success
+                qualityScore: item.quality
               }))}
               type="button"
             >
@@ -501,7 +540,7 @@ export function AnnotationEditor({
             className="text-button episode-label-reject"
             disabled={isSavingEpisode}
             onClick={async () => {
-              const rejectedDraft = { ...episodeDraft, reviewStatus: "rejected" as ReviewStatus, successLabel: false, qualityScore: 0 };
+              const rejectedDraft = { ...episodeDraft, reviewStatus: "rejected" as ReviewStatus, qualityScore: 0 };
               setEpisodeDraft(rejectedDraft);
               setIsSavingEpisode(true);
               try {
@@ -521,7 +560,7 @@ export function AnnotationEditor({
             className="text-button episode-label-approve"
             disabled={isSavingEpisode}
             onClick={async () => {
-              const approvedDraft = { ...episodeDraft, reviewStatus: "accepted" as ReviewStatus, successLabel: true, qualityScore: 1.0 };
+              const approvedDraft = { ...episodeDraft, reviewStatus: "accepted" as ReviewStatus, qualityScore: 1.0 };
               setEpisodeDraft(approvedDraft);
               setIsSavingEpisode(true);
               try {
@@ -762,7 +801,7 @@ export function AnnotationEditor({
         <div className="panel-disclosure-body">
           <PanelDisclosure
             meta={generatedProposals.length > 0 ? `${generatedProposals.length} pending` : "none"}
-            title="AI Proposals"
+            title="AI Boundary Proposals"
           >
             <button
               className="text-button secondary-text-button vlm-run-button"
@@ -838,7 +877,7 @@ export function AnnotationEditor({
             ) : null}
             <div className="proposal-list">
               {generatedProposals.length === 0 ? (
-                <div className="empty-state compact-empty-state">No pending generated labels.</div>
+                <div className="empty-state compact-empty-state">No pending boundary proposals.</div>
               ) : (
                 generatedProposals.map((annotation) => (
                   <div className="proposal-row" key={annotation.id}>
@@ -854,7 +893,7 @@ export function AnnotationEditor({
                         <button
                           className="icon-button compact"
                           onClick={() => void handleApplyGeneratedProposal(annotation)}
-                          title="Apply to episode labels and accept"
+                          title="Apply episode label and accept"
                           type="button"
                         >
                           <Save size={14} />
@@ -993,7 +1032,8 @@ function toDraft(annotation: SegmentAnnotation): AnnotationDraft {
     labelType: annotation.labelType,
     labelValue: annotation.labelValue,
     startFrame: annotation.startFrame,
-    endFrame: annotation.endFrame
+    endFrame: annotation.endFrame,
+    metadata: annotation.metadata
   };
 }
 

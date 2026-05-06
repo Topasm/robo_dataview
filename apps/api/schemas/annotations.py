@@ -24,6 +24,7 @@ class AnnotationCreate(BaseModel):
     source: AnnotationSource = AnnotationSource.human
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     review_status: ReviewStatus = ReviewStatus.pending
+    metadata: dict[str, Any] = Field(default_factory=dict)
     created_by: str = "local"
     assigned_to: str | None = None
 
@@ -52,6 +53,7 @@ class AnnotationUpdate(BaseModel):
     source: AnnotationSource | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     review_status: ReviewStatus | None = None
+    metadata: dict[str, Any] | None = None
     assigned_to: str | None = None
     updated_by: str | None = None
     expected_revision: int | None = Field(default=None, ge=1)
@@ -74,6 +76,7 @@ class AnnotationRecord(BaseModel):
     source: AnnotationSource
     confidence: float
     review_status: ReviewStatus
+    metadata: dict[str, Any] = Field(default_factory=dict)
     created_by: str
     updated_by: str = "local"
     assigned_to: str | None = None

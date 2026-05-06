@@ -49,6 +49,7 @@ def write_lance_subset(
     frames_by_episode: dict[int, list[FrameRecord]],
     video_blobs_by_episode: dict[int, dict[str, bytes]] | None = None,
     version_description: str | None,
+    clip_export_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Write a real Lance subset for selected episodes.
 
@@ -222,6 +223,7 @@ def write_lance_subset(
             "train_episodes": "video_blob_columns",
             "media": "video_blob_column" if write_media_blobs else "metadata_only",
         },
+        "clip_export": clip_export_options or {},
         "tables": {name: path.name for name, path in table_paths.items()},
         "canonical_tables": {name: path.name for name, path in canonical_paths.items()},
         "legacy_tables": {name: path.name for name, path in legacy_paths.items()},

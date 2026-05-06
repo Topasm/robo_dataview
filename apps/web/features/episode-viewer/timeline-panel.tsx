@@ -1,6 +1,7 @@
 import { GitBranch, MapPin, Merge, OctagonAlert, Trash2 } from "lucide-react";
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
+import { SKILL_LABEL_TYPE } from "@/lib/skill-vocabulary";
 import type { SegmentAnnotation } from "@/lib/types";
 
 type SegmentDraft = {
@@ -30,6 +31,13 @@ type TimelinePanelProps = {
 type DragState = {
   annotation: SegmentAnnotation;
   edge: "start" | "end";
+  laneKey: string;
+};
+
+type TimelineLane = {
+  key: string;
+  title: string;
+  annotations: SegmentAnnotation[];
 };
 
 export function TimelinePanel({
@@ -46,7 +54,7 @@ export function TimelinePanel({
   onUpdateSegment,
   selectedFrame
 }: TimelinePanelProps) {
-  const trackRef = useRef<HTMLDivElement | null>(null);
+  const trackRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [draftBounds, setDraftBounds] = useState<Record<string, { startFrame: number; endFrame: number }>>({});
   const safeFrameCount = Math.max(1, frameCount);
@@ -55,6 +63,28 @@ export function TimelinePanel({
   const sortedAnnotations = useMemo(
     () => [...annotations].sort((left, right) => left.startFrame - right.startFrame),
     [annotations]
+  );
+  const timelineLanes = useMemo<TimelineLane[]>(
+    () => [
+      {
+        key: "skills",
+        title: "Skill Clips",
+        annotations: sortedAnnotations.filter((annotation) => annotation.labelType === SKILL_LABEL_TYPE)
+      },
+      {
+        key: "bad",
+        title: "Bad Ranges",
+        annotations: sortedAnnotations.filter((annotation) => annotation.labelType === "bad_range")
+      },
+      {
+        key: "events",
+        title: "Events",
+        annotations: sortedAnnotations.filter(
+          (annotation) => annotation.labelType !== SKILL_LABEL_TYPE && annotation.labelType !== "bad_range"
+        )
+      }
+    ],
+    [sortedAnnotations]
   );
 
   const rulerValues = useMemo(
@@ -102,14 +132,14 @@ export function TimelinePanel({
     if (event.target !== event.currentTarget) {
       return;
     }
-    onSelectFrame(frameFromPointer(event, trackRef.current, maxFrame));
+    onSelectFrame(frameFromPointer(event, event.currentTarget, maxFrame));
   }
 
   function handleDragPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
     if (dragState === null) {
       return;
     }
-    const frame = frameFromPointer(event, trackRef.current, maxFrame);
+    const frame = frameFromPointer(event, trackRefs.current[dragState.laneKey] ?? null, maxFrame);
     const current = draftBounds[dragState.annotation.id] ?? {
       startFrame: dragState.annotation.startFrame,
       endFrame: dragState.annotation.endFrame
@@ -190,108 +220,131 @@ export function TimelinePanel({
           <span key={value}>{value}</span>
         ))}
       </div>
-      <div
-        className="timeline-track"
-        onPointerDown={handleTrackPointerDown}
-        onPointerLeave={handleDragPointerUp}
-        onPointerMove={handleDragPointerMove}
-        onPointerUp={handleDragPointerUp}
-        ref={trackRef}
-      >
-        <div
-          className="timeline-selected-frame"
-          style={{ left: `${framePercent(activeFrame, safeFrameCount)}%` }}
-        />
-        {sortedAnnotations.map((annotation, index) => {
-          const nextAnnotation = sortedAnnotations[index + 1] ?? null;
-          const bounds = draftBounds[annotation.id] ?? {
-            startFrame: annotation.startFrame,
-            endFrame: annotation.endFrame
-          };
-          const left = framePercent(bounds.startFrame, safeFrameCount);
-          const width = Math.max(
-            0.8,
-            ((bounds.endFrame - bounds.startFrame + 1) / safeFrameCount) * 100
-          );
-          return (
+      <div className="timeline-lanes">
+        {timelineLanes.map((lane) => (
+          <div className="timeline-lane" key={lane.key}>
+            <div className="timeline-lane-title">{lane.title}</div>
             <div
-              className={`timeline-segment segment-${annotation.reviewStatus} label-${annotation.labelType}`}
-              key={annotation.id}
-              style={{ left: `${left}%`, width: `${width}%` }}
-              title={`${annotation.labelValue} (${bounds.startFrame}-${bounds.endFrame})`}
+              className="timeline-track"
+              onPointerDown={handleTrackPointerDown}
+              onPointerLeave={handleDragPointerUp}
+              onPointerMove={handleDragPointerMove}
+              onPointerUp={handleDragPointerUp}
+              ref={(node) => {
+                trackRefs.current[lane.key] = node;
+              }}
             >
-              <button
-                aria-label="Drag segment start"
-                className="timeline-handle left"
-                onPointerDown={(event) => {
-                  event.stopPropagation();
-                  setDragState({ annotation, edge: "start" });
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                }}
-                type="button"
+              <div
+                className="timeline-selected-frame"
+                style={{ left: `${framePercent(activeFrame, safeFrameCount)}%` }}
               />
-              <button
-                className="timeline-segment-body"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onSelectFrame(bounds.startFrame);
-                }}
-                type="button"
-              >
-                {annotation.labelValue}
-              </button>
-              <span className="timeline-segment-controls">
-                <button
-                  aria-label="Split segment"
-                  disabled={annotation.endFrame <= annotation.startFrame}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void onSplitSegment(annotation);
-                  }}
-                  type="button"
-                >
-                  <GitBranch size={12} />
-                </button>
-                <button
-                  aria-label="Merge with next segment"
-                  disabled={nextAnnotation === null}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (nextAnnotation !== null) {
-                      void onMergeSegments(annotation, nextAnnotation);
-                    }
-                  }}
-                  type="button"
-                >
-                  <Merge size={12} />
-                </button>
-                <button
-                  aria-label="Delete segment"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void onDeleteSegment(annotation.id);
-                  }}
-                  type="button"
-                >
-                  <Trash2 size={12} />
-                </button>
-              </span>
-              <button
-                aria-label="Drag segment end"
-                className="timeline-handle right"
-                onPointerDown={(event) => {
-                  event.stopPropagation();
-                  setDragState({ annotation, edge: "end" });
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                }}
-                type="button"
-              />
+              {lane.annotations.map((annotation, index) => {
+                const nextAnnotation = lane.annotations[index + 1] ?? null;
+                const mergeAllowed = canMerge(annotation, nextAnnotation);
+                const bounds = draftBounds[annotation.id] ?? {
+                  startFrame: annotation.startFrame,
+                  endFrame: annotation.endFrame
+                };
+                const left = framePercent(bounds.startFrame, safeFrameCount);
+                const width = Math.max(
+                  0.8,
+                  ((bounds.endFrame - bounds.startFrame + 1) / safeFrameCount) * 100
+                );
+                return (
+                  <div
+                    className={`timeline-segment segment-${annotation.reviewStatus} label-${annotation.labelType}`}
+                    key={annotation.id}
+                    style={{ left: `${left}%`, width: `${width}%` }}
+                    title={`${annotation.labelValue} (${bounds.startFrame}-${bounds.endFrame})`}
+                  >
+                    <button
+                      aria-label="Drag segment start"
+                      className="timeline-handle left"
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+                        setDragState({ annotation, edge: "start", laneKey: lane.key });
+                        event.currentTarget.setPointerCapture(event.pointerId);
+                      }}
+                      type="button"
+                    />
+                    <button
+                      className="timeline-segment-body"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSelectFrame(bounds.startFrame);
+                      }}
+                      type="button"
+                    >
+                      {annotation.labelValue}
+                    </button>
+                    <span className="timeline-segment-controls">
+                      <button
+                        aria-label="Split segment"
+                        disabled={annotation.endFrame <= annotation.startFrame}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void onSplitSegment(annotation);
+                        }}
+                        type="button"
+                      >
+                        <GitBranch size={12} />
+                      </button>
+                      <button
+                        aria-label="Merge with next segment"
+                        disabled={!mergeAllowed}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (mergeAllowed) {
+                            void onMergeSegments(annotation, nextAnnotation);
+                          }
+                        }}
+                        type="button"
+                      >
+                        <Merge size={12} />
+                      </button>
+                      <button
+                        aria-label="Delete segment"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void onDeleteSegment(annotation.id);
+                        }}
+                        type="button"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </span>
+                    <button
+                      aria-label="Drag segment end"
+                      className="timeline-handle right"
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+                        setDragState({ annotation, edge: "end", laneKey: lane.key });
+                        event.currentTarget.setPointerCapture(event.pointerId);
+                      }}
+                      type="button"
+                    />
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
     </section>
   );
+}
+
+function canMerge(left: SegmentAnnotation, right: SegmentAnnotation | null): right is SegmentAnnotation {
+  if (right === null) {
+    return false;
+  }
+  if (left.labelType !== right.labelType) {
+    return false;
+  }
+  if (left.labelType === SKILL_LABEL_TYPE) {
+    return left.labelValue === right.labelValue;
+  }
+  return true;
 }
 
 function framePercent(frame: number, frameCount: number): number {

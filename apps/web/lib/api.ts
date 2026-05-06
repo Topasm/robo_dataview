@@ -127,6 +127,7 @@ type AnnotationResponse = {
   source: SegmentAnnotation["source"];
   confidence: number;
   review_status: ReviewStatus;
+  metadata?: Record<string, unknown> | null;
   created_by: string;
   updated_by?: string | null;
   assigned_to: string | null;
@@ -341,6 +342,7 @@ export type SegmentAnnotationCreate = {
   source?: SegmentAnnotation["source"];
   confidence?: number;
   reviewStatus?: ReviewStatus;
+  metadata?: SegmentAnnotation["metadata"];
 };
 
 export type SegmentAnnotationUpdate = {
@@ -351,6 +353,7 @@ export type SegmentAnnotationUpdate = {
   reviewStatus?: ReviewStatus;
   assignedTo?: string | null;
   expectedRevision?: number;
+  metadata?: SegmentAnnotation["metadata"];
 };
 
 export type EpisodeLabelUpdate = {
@@ -628,19 +631,23 @@ export async function fetchAnnotationHistory(
 export async function createSegmentAnnotation(
   payload: SegmentAnnotationCreate,
 ): Promise<SegmentAnnotation> {
+  const body: Record<string, unknown> = {
+    dataset_id: payload.datasetId,
+    episode_index: payload.episodeIndex,
+    start_frame: payload.startFrame,
+    end_frame: payload.endFrame,
+    label_type: payload.labelType,
+    label_value: payload.labelValue,
+    source: payload.source ?? "human",
+    confidence: payload.confidence ?? 1,
+    review_status: payload.reviewStatus ?? "accepted"
+  };
+  if (payload.metadata !== undefined) {
+    body.metadata = payload.metadata;
+  }
   const row = await request<AnnotationResponse>("/annotations", {
     method: "POST",
-    body: JSON.stringify({
-      dataset_id: payload.datasetId,
-      episode_index: payload.episodeIndex,
-      start_frame: payload.startFrame,
-      end_frame: payload.endFrame,
-      label_type: payload.labelType,
-      label_value: payload.labelValue,
-      source: payload.source ?? "human",
-      confidence: payload.confidence ?? 1,
-      review_status: payload.reviewStatus ?? "accepted"
-    })
+    body: JSON.stringify(body)
   });
   return toSegmentAnnotation(row);
 }
@@ -681,7 +688,7 @@ export async function updateSegmentAnnotation(
   annotationId: string,
   payload: SegmentAnnotationUpdate,
 ): Promise<SegmentAnnotation> {
-  const body: Record<string, number | string | null> = {};
+  const body: Record<string, unknown> = {};
   if (payload.startFrame !== undefined) {
     body.start_frame = payload.startFrame;
   }
@@ -702,6 +709,9 @@ export async function updateSegmentAnnotation(
   }
   if (payload.expectedRevision !== undefined) {
     body.expected_revision = payload.expectedRevision;
+  }
+  if (payload.metadata !== undefined) {
+    body.metadata = payload.metadata;
   }
   const row = await request<AnnotationResponse>(`/annotations/${annotationId}`, {
     method: "PATCH",
@@ -812,13 +822,25 @@ export async function createExportJob(
   format: ExportFormat = "lance",
   splits: string[] = [],
   publishUri?: string,
+  options?: {
+    clipLabelType?: string;
+    acceptedClipsOnly?: boolean;
+    materializeSkillClips?: boolean;
+    jitterOffsets?: number[];
+    copiesPerClip?: number;
+  },
 ): Promise<JobRecord> {
-  const body: Record<string, string | string[] | number[] | ExportFormat | null> = {
+  const body: Record<string, unknown> = {
     dataset_id: datasetId,
     episode_indices: episodeIndices,
     splits,
     format,
-    version_description: `web selected episode ${format} export`
+    version_description: `web skill clip ${format} export`,
+    clip_label_type: options?.clipLabelType ?? "skill",
+    accepted_clips_only: options?.acceptedClipsOnly ?? true,
+    materialize_skill_clips: options?.materializeSkillClips ?? false,
+    jitter_offsets: options?.jitterOffsets ?? [0],
+    copies_per_clip: options?.copiesPerClip ?? 1
   };
   if (publishUri !== undefined) {
     body.publish_uri = publishUri || null;
@@ -1229,6 +1251,7 @@ function toSegmentAnnotation(raw: AnnotationResponse): SegmentAnnotation {
     source: raw.source,
     confidence: raw.confidence,
     reviewStatus: raw.review_status,
+    metadata: toSegmentMetadata(raw.metadata),
     createdBy: raw.created_by,
     updatedBy: raw.updated_by ?? raw.created_by,
     assignedTo: raw.assigned_to,
@@ -1236,6 +1259,46 @@ function toSegmentAnnotation(raw: AnnotationResponse): SegmentAnnotation {
     deletedAt: raw.deleted_at ?? null,
     lockOwner: raw.lock_owner ?? null,
     lockExpiresAt: raw.lock_expires_at ?? null
+  };
+}
+
+function toSegmentMetadata(raw: Record<string, unknown> | null | undefined): SegmentAnnotation["metadata"] {
+  if (raw === null || raw === undefined || Array.isArray(raw)) {
+    return {};
+  }
+  return {
+    skillId: typeof raw.skillId === "number" ? raw.skillId : typeof raw.skill_id === "number" ? raw.skill_id : undefined,
+    qualityScore:
+      typeof raw.qualityScore === "number"
+        ? raw.qualityScore
+        : typeof raw.quality_score === "number"
+          ? raw.quality_score
+          : null,
+    successLabel:
+      typeof raw.successLabel === "boolean"
+        ? raw.successLabel
+        : typeof raw.success_label === "boolean"
+          ? raw.success_label
+          : null,
+    failureReason:
+      typeof raw.failureReason === "string"
+        ? raw.failureReason
+        : typeof raw.failure_reason === "string"
+          ? raw.failure_reason
+          : null,
+    split: raw.split === "train" || raw.split === "val" || raw.split === "test" ? raw.split : null,
+    targetObject:
+      typeof raw.targetObject === "string"
+        ? raw.targetObject
+        : typeof raw.target_object === "string"
+          ? raw.target_object
+          : null,
+    handMode: raw.handMode === "left" || raw.handMode === "right" || raw.handMode === "both"
+      ? raw.handMode
+      : raw.hand_mode === "left" || raw.hand_mode === "right" || raw.hand_mode === "both"
+        ? raw.hand_mode
+        : null,
+    notes: typeof raw.notes === "string" ? raw.notes : null
   };
 }
 

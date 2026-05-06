@@ -36,6 +36,7 @@ import {
   updateFrameRecord
 } from "@/lib/api";
 import { annotationHistory, annotations, datasetSummary, episodes } from "@/lib/sample-data";
+import { SKILL_LABEL_TYPE } from "@/lib/skill-vocabulary";
 import type {
   AnnotationHistoryRecord,
   DatasetHealth,
@@ -61,6 +62,8 @@ type SegmentDraft = {
   labelValue: string;
   startFrame: number;
   endFrame: number;
+  reviewStatus?: ReviewStatus;
+  metadata?: SegmentAnnotation["metadata"];
 };
 
 type EpisodeLabelDraft = {
@@ -78,6 +81,25 @@ function sortAnnotations(rows: SegmentAnnotation[]): SegmentAnnotation[] {
   return [...rows].sort((a, b) => a.startFrame - b.startFrame);
 }
 
+function canMergeAnnotations(
+  left: SegmentAnnotation,
+  right: SegmentAnnotation | null,
+): right is SegmentAnnotation {
+  if (right === null) {
+    return false;
+  }
+  if (left.datasetId !== right.datasetId || left.episodeIndex !== right.episodeIndex) {
+    return false;
+  }
+  if (left.labelType !== right.labelType) {
+    return false;
+  }
+  if (left.labelType === SKILL_LABEL_TYPE) {
+    return left.labelValue === right.labelValue;
+  }
+  return true;
+}
+
 function optimisticAnnotation(
   episode: Pick<Episode, "datasetId" | "episodeIndex">,
   draft: SegmentDraft,
@@ -93,7 +115,8 @@ function optimisticAnnotation(
     labelValue: draft.labelValue,
     source: "human",
     confidence: 1,
-    reviewStatus: "accepted",
+    reviewStatus: draft.reviewStatus ?? "accepted",
+    metadata: draft.metadata ?? {},
     createdBy: "local",
     updatedBy: "local",
     assignedTo: null,
@@ -797,7 +820,8 @@ export function useStudioData() {
         labelValue: draft.labelValue,
         source: "human",
         confidence: 1,
-        reviewStatus: "accepted"
+        reviewStatus: draft.reviewStatus ?? "accepted",
+        metadata: draft.metadata
       });
       setAnnotationRows((current) =>
         sortAnnotations(current.map((annotation) => (annotation.id === optimistic.id ? created : annotation)))
@@ -875,7 +899,8 @@ export function useStudioData() {
                   labelValue: draft.labelValue,
                   startFrame: draft.startFrame,
                   endFrame: draft.endFrame,
-                  reviewStatus: "edited"
+                  reviewStatus: draft.reviewStatus ?? "edited",
+                  metadata: draft.metadata ?? annotation.metadata
                 }
               : annotation
           )
@@ -888,8 +913,9 @@ export function useStudioData() {
         labelValue: draft.labelValue,
         startFrame: draft.startFrame,
         endFrame: draft.endFrame,
-        reviewStatus: "edited",
-        expectedRevision: existing?.revision
+        reviewStatus: draft.reviewStatus ?? "edited",
+        expectedRevision: existing?.revision,
+        metadata: draft.metadata
       });
       setAnnotationRows((current) =>
         sortAnnotations(current.map((annotation) => (annotation.id === annotationId ? updated : annotation)))
@@ -913,17 +939,22 @@ export function useStudioData() {
     }
     const splitFrame = Math.floor((annotation.startFrame + annotation.endFrame) / 2);
     const previousAnnotations = annotationRows;
+    const isSkillClip = annotation.labelType === SKILL_LABEL_TYPE;
+    const leftLabelValue = isSkillClip ? annotation.labelValue : `${annotation.labelValue}_a`;
+    const rightLabelValue = isSkillClip ? annotation.labelValue : `${annotation.labelValue}_b`;
     const leftDraft = {
       startFrame: annotation.startFrame,
       endFrame: splitFrame,
       labelType: annotation.labelType,
-      labelValue: `${annotation.labelValue}_a`
+      labelValue: leftLabelValue,
+      metadata: annotation.metadata
     };
     const rightDraft = {
       startFrame: splitFrame + 1,
       endFrame: annotation.endFrame,
       labelType: annotation.labelType,
-      labelValue: `${annotation.labelValue}_b`
+      labelValue: rightLabelValue,
+      metadata: annotation.metadata
     };
     const leftOptimistic = optimisticAnnotation(annotation, leftDraft, { reviewStatus: "edited" });
     const rightOptimistic = optimisticAnnotation(annotation, rightDraft, { reviewStatus: "edited" });
@@ -941,10 +972,11 @@ export function useStudioData() {
         startFrame: annotation.startFrame,
         endFrame: splitFrame,
         labelType: annotation.labelType,
-        labelValue: `${annotation.labelValue}_a`,
+        labelValue: leftLabelValue,
         source: "human",
         confidence: 1,
-        reviewStatus: "edited"
+        reviewStatus: "edited",
+        metadata: annotation.metadata
       });
       const right = await createSegmentAnnotation({
         datasetId: annotation.datasetId,
@@ -952,10 +984,11 @@ export function useStudioData() {
         startFrame: splitFrame + 1,
         endFrame: annotation.endFrame,
         labelType: annotation.labelType,
-        labelValue: `${annotation.labelValue}_b`,
+        labelValue: rightLabelValue,
         source: "human",
         confidence: 1,
-        reviewStatus: "edited"
+        reviewStatus: "edited",
+        metadata: annotation.metadata
       });
       await deleteAnnotation(annotation.id, annotation.revision);
       setAnnotationRows((current) =>
@@ -977,12 +1010,16 @@ export function useStudioData() {
   }
 
   async function handleMergeSegments(left: SegmentAnnotation, right: SegmentAnnotation) {
+    if (!canMergeAnnotations(left, right)) {
+      return;
+    }
     const previousAnnotations = annotationRows;
     const mergedDraft = {
       startFrame: Math.min(left.startFrame, right.startFrame),
       endFrame: Math.max(left.endFrame, right.endFrame),
       labelType: left.labelType,
-      labelValue: left.labelValue
+      labelValue: left.labelValue,
+      metadata: left.metadata
     };
     const mergedOptimistic = optimisticAnnotation(left, mergedDraft, {
       confidence: Math.max(left.confidence, right.confidence),
@@ -1004,7 +1041,8 @@ export function useStudioData() {
         labelValue: left.labelValue,
         source: "human",
         confidence: Math.max(left.confidence, right.confidence),
-        reviewStatus: "edited"
+        reviewStatus: "edited",
+        metadata: left.metadata
       });
       await deleteAnnotation(left.id, left.revision);
       await deleteAnnotation(right.id, right.revision);
@@ -1136,7 +1174,13 @@ export function useStudioData() {
     const split = selectedEpisode.split || null;
     const splits = scope === "split" && split ? [split] : [];
     const episodeIndices = splits.length > 0 ? [] : [selectedEpisode.episodeIndex];
-    const job = await createExportJob(selectedEpisode.datasetId, episodeIndices, format, splits);
+    const job = await createExportJob(selectedEpisode.datasetId, episodeIndices, format, splits, undefined, {
+      clipLabelType: SKILL_LABEL_TYPE,
+      acceptedClipsOnly: true,
+      materializeSkillClips: false,
+      jitterOffsets: [0],
+      copiesPerClip: 1
+    });
     setExportJob(job);
     if (TERMINAL_JOB_STATUSES.has(job.status) && job.createdExportId) {
       const record = await fetchExport(job.createdExportId);

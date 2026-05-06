@@ -7,9 +7,14 @@ class ExportCreateRequest(BaseModel):
     dataset_id: str
     episode_indices: list[int] = Field(default_factory=list)
     splits: list[str] = Field(default_factory=list)
-    format: ExportFormat = ExportFormat.lerobot
+    format: ExportFormat = ExportFormat.lance
     version_description: str | None = None
     publish_uri: str | None = None
+    clip_label_type: str | None = "skill"
+    accepted_clips_only: bool = True
+    materialize_skill_clips: bool = False
+    jitter_offsets: list[int] = Field(default_factory=lambda: [0])
+    copies_per_clip: int = Field(default=1, ge=1)
 
 
 class ExportRecord(BaseModel):

@@ -104,6 +104,8 @@ class AnnotationStore:
                 f"annotation revision mismatch: expected {expected_revision}, current {existing.revision}"
             )
         actor = str(update_data.pop("updated_by", None) or "local")
+        if update_data.get("metadata") is None:
+            update_data.pop("metadata", None)
         action = action or _annotation_update_action(update_data)
         merged = model_dump(existing)
         merged.update(update_data)
@@ -382,10 +384,13 @@ class AnnotationStore:
 
     @staticmethod
     def _lance_row(record: AnnotationRecord) -> dict[str, object]:
+        row = model_dump(record)
+        metadata = row.pop("metadata", {}) or {}
         return {
-            **model_dump(record),
+            **row,
             "source": record.source.value,
             "review_status": record.review_status.value,
+            "metadata_json": json.dumps(metadata, sort_keys=True),
         }
 
 
