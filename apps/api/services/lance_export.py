@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import re
 from typing import Any
@@ -65,6 +66,10 @@ def write_lance_subset(
     root = export_dir / "lance_subset"
     root.mkdir(parents=True, exist_ok=True)
 
+    write_legacy = _env_flag(
+        "ROBOT_DATA_STUDIO_WRITE_LEGACY_EXPORT_TABLES", default=False
+    )
+
     frame_rows = sorted(
         [
             _frame_row(frame)
@@ -73,11 +78,19 @@ def write_lance_subset(
         ],
         key=lambda row: (int(row["episode_index"]), int(row["frame_index"])),
     )
-    episode_rows = _episode_rows(
+    episode_metadata_rows = _episode_rows(
         episodes,
         annotations_by_episode,
         frames_by_episode,
         video_blobs_by_episode or {},
+        include_blobs=False,
+    )
+    train_episode_rows = _episode_rows(
+        episodes,
+        annotations_by_episode,
+        frames_by_episode,
+        video_blobs_by_episode or {},
+        include_blobs=True,
     )
     annotation_rows = [
         _annotation_row(annotation)
@@ -97,19 +110,26 @@ def write_lance_subset(
     )
     fps = _representative_fps(episodes)
 
-    table_paths = {
+    canonical_paths = {
         "episodes": root / EPISODES_LANCE_PATH,
         "frames": root / FRAMES_LANCE_PATH,
         "media": root / MEDIA_LANCE_PATH,
         "train_episodes": root / TRAIN_EPISODES_LANCE_PATH,
         "annotations_current": root / ANNOTATIONS_CURRENT_LANCE_PATH,
         "annotation_events": root / ANNOTATION_EVENTS_LANCE_PATH,
-        "videos": root / LEGACY_VIDEOS_LANCE_PATH,
-        "annotations": root / LEGACY_ANNOTATIONS_LANCE_PATH,
     }
+    legacy_paths: dict[str, Path] = {}
+    if write_legacy:
+        legacy_paths = {
+            "videos": root / LEGACY_VIDEOS_LANCE_PATH,
+            "annotations": root / LEGACY_ANNOTATIONS_LANCE_PATH,
+        }
+    table_paths = {**canonical_paths, **legacy_paths}
+
+    # episodes.lance is metadata-only; training-grade blobs live in train_episodes.lance.
     _write_lance_table(
         lance,
-        _table_from_rows(pa, episode_rows, build_episodes_pyarrow_schema(camera_feature_keys)),
+        _table_from_rows(pa, episode_metadata_rows, build_episodes_pyarrow_schema([])),
         table_paths["episodes"],
     )
     _write_lance_table(
@@ -124,7 +144,7 @@ def write_lance_subset(
     )
     _write_lance_table(
         lance,
-        _table_from_rows(pa, episode_rows, build_episodes_pyarrow_schema(camera_feature_keys)),
+        _table_from_rows(pa, train_episode_rows, build_episodes_pyarrow_schema(camera_feature_keys)),
         table_paths["train_episodes"],
     )
     _write_lance_table(
@@ -137,26 +157,27 @@ def write_lance_subset(
         _table_from_rows(pa, annotation_event_rows, build_annotation_events_pyarrow_schema()),
         table_paths["annotation_events"],
     )
-    _write_lance_table(
-        lance,
-        _table_from_rows(pa, media_rows, build_raw_videos_pyarrow_schema()),
-        table_paths["videos"],
-    )
-    _write_lance_table(
-        lance,
-        _table_from_rows(pa, annotation_rows, build_annotations_pyarrow_schema()),
-        table_paths["annotations"],
-    )
+    if write_legacy:
+        _write_lance_table(
+            lance,
+            _table_from_rows(pa, media_rows, build_raw_videos_pyarrow_schema()),
+            table_paths["videos"],
+        )
+        _write_lance_table(
+            lance,
+            _table_from_rows(pa, annotation_rows, build_annotations_pyarrow_schema()),
+            table_paths["annotations"],
+        )
 
     metadata = {
         "dataset_id": dataset_id,
         "format": LANCE_SUBSET_VERSION,
         "version_description": version_description,
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "total_episodes": len(episode_rows),
+        "total_episodes": len(train_episode_rows),
         "total_frames": len(frame_rows),
         "total_media": len(media_rows),
-        "total_videos": len(media_rows),
+        "total_videos": len(media_rows) if write_legacy else 0,
         "total_annotations": len(annotation_rows),
         "total_annotation_events": len(annotation_event_rows),
         "state_dim": state_dim,
@@ -181,19 +202,14 @@ def write_lance_subset(
                 for row in frame_rows
             ),
         },
+        "blob_storage": {
+            "episodes": "metadata_only",
+            "train_episodes": "video_blob_columns",
+            "media": "video_blob_column",
+        },
         "tables": {name: path.name for name, path in table_paths.items()},
-        "canonical_tables": {
-            "episodes": table_paths["episodes"].name,
-            "frames": table_paths["frames"].name,
-            "media": table_paths["media"].name,
-            "train_episodes": table_paths["train_episodes"].name,
-            "annotations_current": table_paths["annotations_current"].name,
-            "annotation_events": table_paths["annotation_events"].name,
-        },
-        "legacy_tables": {
-            "videos": table_paths["videos"].name,
-            "annotations": table_paths["annotations"].name,
-        },
+        "canonical_tables": {name: path.name for name, path in canonical_paths.items()},
+        "legacy_tables": {name: path.name for name, path in legacy_paths.items()},
     }
     manifest_path = root / MANIFEST_JSON_PATH
     metadata_path = root / METADATA_JSON_PATH
@@ -203,33 +219,31 @@ def write_lance_subset(
     validation_path = root / "validation.json"
     validation_path.write_text(json.dumps(validation, indent=2, sort_keys=True), encoding="utf-8")
 
+    files: dict[str, str] = {
+        "manifest": str(manifest_path),
+        "metadata": str(metadata_path),
+        "validation": str(validation_path),
+    }
+    files.update({name: str(path) for name, path in table_paths.items()})
+
+    materialized: dict[str, int] = {
+        "episode_rows": len(episode_metadata_rows),
+        "frame_rows": len(frame_rows),
+        "media_rows": len(media_rows),
+        "train_episode_rows": len(train_episode_rows),
+        "annotation_current_rows": len(annotation_rows),
+        "annotation_event_rows": len(annotation_event_rows),
+    }
+    if write_legacy:
+        materialized["video_rows"] = len(media_rows)
+        materialized["annotation_rows"] = len(annotation_rows)
+
     return {
         "format": LANCE_SUBSET_VERSION,
         "root": str(root),
         "validation": validation,
-        "files": {
-            "manifest": str(manifest_path),
-            "metadata": str(metadata_path),
-            "validation": str(validation_path),
-            "episodes": str(table_paths["episodes"]),
-            "frames": str(table_paths["frames"]),
-            "media": str(table_paths["media"]),
-            "train_episodes": str(table_paths["train_episodes"]),
-            "annotations_current": str(table_paths["annotations_current"]),
-            "annotation_events": str(table_paths["annotation_events"]),
-            "videos": str(table_paths["videos"]),
-            "annotations": str(table_paths["annotations"]),
-        },
-        "materialized": {
-            "episode_rows": len(episode_rows),
-            "frame_rows": len(frame_rows),
-            "media_rows": len(media_rows),
-            "train_episode_rows": len(episode_rows),
-            "video_rows": len(media_rows),
-            "annotation_current_rows": len(annotation_rows),
-            "annotation_event_rows": len(annotation_event_rows),
-            "annotation_rows": len(annotation_rows),
-        },
+        "files": files,
+        "materialized": materialized,
     }
 
 
@@ -424,6 +438,8 @@ def _episode_rows(
     annotations_by_episode: dict[int, list[AnnotationRecord]],
     frames_by_episode: dict[int, list[FrameRecord]],
     video_blobs_by_episode: dict[int, dict[str, bytes]],
+    *,
+    include_blobs: bool = True,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     created_at = datetime.now(timezone.utc)
@@ -460,13 +476,14 @@ def _episode_rows(
         }
         if len(annotations_by_episode.get(episode.episode_index, [])) > 0:
             row["review_status"] = row["review_status"] or "accepted"
-        for camera, blob in sorted(video_blobs_by_episode.get(episode.episode_index, {}).items()):
-            if not blob:
-                continue
-            key = _normalize_feature_key(camera)
-            row[f"{key}_video_blob"] = blob
-            row[f"{key}_from_timestamp"] = row["start_time"]
-            row[f"{key}_to_timestamp"] = row["end_time"]
+        if include_blobs:
+            for camera, blob in sorted(video_blobs_by_episode.get(episode.episode_index, {}).items()):
+                if not blob:
+                    continue
+                key = _normalize_feature_key(camera)
+                row[f"{key}_video_blob"] = blob
+                row[f"{key}_from_timestamp"] = row["start_time"]
+                row[f"{key}_to_timestamp"] = row["end_time"]
         rows.append(row)
     return rows
 
@@ -629,3 +646,10 @@ def _representative_fps(episodes: list[EpisodeDetail]) -> float | None:
         if episode.fps is not None:
             return episode.fps
     return None
+
+
+def _env_flag(name: str, *, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off", ""}
