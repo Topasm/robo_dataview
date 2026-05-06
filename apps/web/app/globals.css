@@ -60,9 +60,15 @@ button:disabled {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr) 44px;
+  grid-template-columns: 240px minmax(0, 1fr) auto;
   gap: 16px;
   padding: 0 14px;
+}
+
+.top-bar-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
 }
 
 .brand,
@@ -162,9 +168,7 @@ button:disabled {
   min-height: 0;
 }
 
-.content-split.dataset-mode {
-  grid-template-columns: 1fr;
-}
+
 
 .viewer-column {
   display: grid;

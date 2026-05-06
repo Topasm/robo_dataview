@@ -12,11 +12,16 @@ type SegmentDraft = {
 
 type TimelinePanelProps = {
   annotations: SegmentAnnotation[];
+  clipEnd?: number | null;
+  clipStart?: number | null;
+  fps?: number;
   frameCount: number;
   onCreateSegment: (draft: SegmentDraft) => Promise<void>;
   onDeleteSegment: (annotationId: string) => Promise<void>;
   onMergeSegments: (left: SegmentAnnotation, right: SegmentAnnotation) => Promise<void>;
   onSelectFrame: (frameIndex: number) => void;
+  onSetClipEnd?: (frame: number | null) => void;
+  onSetClipStart?: (frame: number | null) => void;
   onSplitSegment: (annotation: SegmentAnnotation) => Promise<void>;
   onUpdateSegment: (annotationId: string, draft: SegmentDraft) => Promise<void>;
   selectedFrame: number;
@@ -29,11 +34,14 @@ type DragState = {
 
 export function TimelinePanel({
   annotations,
+  fps = 20,
   frameCount,
   onCreateSegment,
   onDeleteSegment,
   onMergeSegments,
   onSelectFrame,
+  onSetClipEnd,
+  onSetClipStart,
   onSplitSegment,
   onUpdateSegment,
   selectedFrame
@@ -63,14 +71,30 @@ export function TimelinePanel({
     });
   }
 
-  async function handleCreateBadRange() {
-    const startFrame = clampFrame(activeFrame - 5, maxFrame);
-    const endFrame = clampFrame(activeFrame + 5, maxFrame);
+  function rangeAroundActiveFrame(seconds: number) {
+    const radius = Math.max(1, Math.round((fps * seconds) / 2));
+    return {
+      startFrame: clampFrame(activeFrame - radius, maxFrame),
+      endFrame: clampFrame(activeFrame + radius, maxFrame)
+    };
+  }
+
+  async function handleCreateBadRange(seconds = 1) {
+    const { startFrame, endFrame } = rangeAroundActiveFrame(seconds);
     await onCreateSegment({
       labelType: "bad_range",
-      labelValue: "bad_range",
+      labelValue: `bad_${seconds}s`,
       startFrame,
       endFrame
+    });
+  }
+
+  async function handleCreateEvent(type: string) {
+    await onCreateSegment({
+      labelType: type,
+      labelValue: type,
+      startFrame: activeFrame,
+      endFrame: activeFrame
     });
   }
 
@@ -132,10 +156,33 @@ export function TimelinePanel({
             <MapPin size={14} />
             Marker
           </button>
-          <button className="text-button compact-text-button" onClick={handleCreateBadRange} type="button">
+          <button className="text-button compact-text-button" onClick={() => void handleCreateBadRange(0.5)} type="button">
             <OctagonAlert size={14} />
-            Bad range
+            Bad ±0.5s
           </button>
+          <button className="text-button compact-text-button" onClick={() => void handleCreateBadRange(1)} type="button">
+            <OctagonAlert size={14} />
+            Bad ±1s
+          </button>
+          <button className="text-button compact-text-button" onClick={() => void handleCreateEvent("foot_slip")} type="button">
+            Slip
+          </button>
+          <button className="text-button compact-text-button" onClick={() => void handleCreateEvent("fall_event")} type="button">
+            Fall
+          </button>
+          <button className="text-button compact-text-button" onClick={() => void handleCreateEvent("collision")} type="button">
+            Collision
+          </button>
+          {onSetClipStart ? (
+            <button className="text-button compact-text-button" onClick={() => onSetClipStart(activeFrame)} type="button" style={{ background: "#e4f5ed", borderColor: "#acd8c1" }}>
+              Set Start
+            </button>
+          ) : null}
+          {onSetClipEnd ? (
+            <button className="text-button compact-text-button" onClick={() => onSetClipEnd(activeFrame)} type="button" style={{ background: "#e7effb", borderColor: "#b7c9ea" }}>
+              Set End
+            </button>
+          ) : null}
         </div>
       </div>
       <div className="timeline-ruler">

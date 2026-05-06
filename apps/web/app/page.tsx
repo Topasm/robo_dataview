@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Database, Settings } from "lucide-react";
+import { Database, Download, Settings } from "lucide-react";
 
 import { AnnotationEditor } from "@/features/annotation-editor/annotation-editor";
 import { DatasetBrowser } from "@/features/dataset-browser/dataset-browser";
@@ -12,14 +12,18 @@ import { TimelinePanel } from "@/features/episode-viewer/timeline-panel";
 import { ExportStrip } from "@/features/export-manager/export-strip";
 import { RerunPanel } from "@/features/rerun-viewer/rerun-panel";
 import { SearchFilterBar } from "@/features/search-filter/search-filter-bar";
+import { HUMANOID_SKILLS, SKILL_LABEL_TYPE } from "@/lib/skill-vocabulary";
 import { useStudioData } from "@/lib/use-studio-data";
 
 type DrawerTab = "episodes" | "frames" | "rerun" | "export";
 
 export default function Home() {
-  const [viewMode, setViewMode] = useState<"dataset" | "annotation">("dataset");
+  const [workMode, setWorkMode] = useState<"view" | "segment">("view");
   const [activeDrawer, setActiveDrawer] = useState<DrawerTab | null>(null);
   const [showSignals, setShowSignals] = useState(false);
+  const [clipStart, setClipStart] = useState<number | null>(null);
+  const [clipEnd, setClipEnd] = useState<number | null>(null);
+  const [selectedSkillId, setSelectedSkillId] = useState<number>(0);
   const {
     annotationHistoryRows,
     episodeLabelHistoryRows,
@@ -77,6 +81,7 @@ export default function Home() {
     handleUpdateReviewStatus
   } = useStudioData();
   const lastFrame = Math.max(0, (selectedEpisode?.length ?? 1) - 1);
+  const fps = selectedEpisode?.fps > 0 ? selectedEpisode.fps : 20;
 
   const handleSelectNextPendingEpisode = useCallback(() => {
     const nextPending = episodeRows.find(ep => ep.reviewStatus === "pending" && ep.episodeIndex !== selectedEpisodeIndex);
@@ -96,37 +101,83 @@ export default function Home() {
       if (isTyping) {
         return;
       }
+      // --- Navigation / playback ---
       if (event.key === "ArrowLeft") {
         event.preventDefault();
         handleSelectFrame(Math.max(0, selectedFrameIndex - (event.shiftKey ? 10 : 1)));
       } else if (event.key === "ArrowRight") {
         event.preventDefault();
         handleSelectFrame(Math.min(lastFrame, selectedFrameIndex + (event.shiftKey ? 10 : 1)));
-      } else if (event.key.toLowerCase() === "m") {
-        event.preventDefault();
-        void handleUpdateSelectedFrameBadFlag(!(selectedFrameRecord?.isBadFrame ?? false));
-      } else if (event.key.toLowerCase() === "f") {
-        event.preventDefault();
-        setActiveDrawer((current) => (current === "frames" ? null : "frames"));
-      } else if (event.key.toLowerCase() === "e") {
-        event.preventDefault();
-        setActiveDrawer((current) => (current === "episodes" ? null : "episodes"));
-      } else if (event.key.toLowerCase() === "r") {
-        event.preventDefault();
-        setActiveDrawer((current) => (current === "rerun" ? null : "rerun"));
       } else if (event.key === "Escape") {
         event.preventDefault();
         setActiveDrawer(null);
+      // --- Skill clip boundary ---
+      } else if (event.key.toLowerCase() === "i") {
+        event.preventDefault();
+        setClipStart(selectedFrameIndex);
+      } else if (event.key.toLowerCase() === "o") {
+        event.preventDefault();
+        setClipEnd(selectedFrameIndex);
+      } else if (event.key.toLowerCase() === "a" && clipStart !== null && clipEnd !== null) {
+        event.preventDefault();
+        const skill = HUMANOID_SKILLS[selectedSkillId];
+        if (skill) {
+          const start = Math.min(clipStart, clipEnd);
+          const end = Math.max(clipStart, clipEnd);
+          void handleCreateSegment({ labelType: SKILL_LABEL_TYPE, labelValue: skill.name, startFrame: start, endFrame: end });
+          setClipStart(null);
+          setClipEnd(null);
+        }
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        // Accept is handled inside AnnotationEditor via selected clip
+      } else if (event.key === "Backspace" || event.key === "Delete") {
+        event.preventDefault();
+        // Delete is handled inside AnnotationEditor via selected clip
+      // --- Skill ID selection (0-9) ---
+      } else if (event.key >= "0" && event.key <= "9") {
+        event.preventDefault();
+        const id = Number(event.key);
+        if (id < HUMANOID_SKILLS.length) {
+          setSelectedSkillId(id);
+        }
+      // --- Frame tools ---
+      } else if (event.key.toLowerCase() === "m") {
+        event.preventDefault();
+        void handleUpdateSelectedFrameBadFlag(!(selectedFrameRecord?.isBadFrame ?? false));
+      } else if (event.key.toLowerCase() === "b") {
+        event.preventDefault();
+        const radius = Math.max(1, Math.round(fps / 2));
+        void handleCreateSegment({ labelType: "bad_range", labelValue: "bad_range", startFrame: Math.max(0, selectedFrameIndex - radius), endFrame: Math.min(lastFrame, selectedFrameIndex + radius) });
+      // --- Drawer toggles ---
+      } else if (event.key.toLowerCase() === "e") {
+        event.preventDefault();
+        setActiveDrawer((current) => (current === "episodes" ? null : "episodes"));
+      } else if (event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setActiveDrawer((current) => (current === "frames" ? null : "frames"));
+      } else if (event.key.toLowerCase() === "r") {
+        event.preventDefault();
+        setActiveDrawer((current) => (current === "rerun" ? null : "rerun"));
+      } else if (event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        handleSelectNextPendingEpisode();
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
+    clipEnd,
+    clipStart,
+    fps,
+    handleCreateSegment,
     handleSelectFrame,
+    handleSelectNextPendingEpisode,
     handleUpdateSelectedFrameBadFlag,
     lastFrame,
     selectedFrameIndex,
-    selectedFrameRecord?.isBadFrame
+    selectedFrameRecord?.isBadFrame,
+    selectedSkillId
   ]);
 
   return (
@@ -138,23 +189,33 @@ export default function Home() {
         </div>
         <nav className="top-nav">
           <button
-            className={`nav-button ${viewMode === "dataset" ? "active" : ""}`}
-            onClick={() => setViewMode("dataset")}
+            className={`nav-button ${workMode === "view" ? "active" : ""}`}
+            onClick={() => setWorkMode("view")}
             type="button"
           >
-            Dataset
+            View
           </button>
           <button
-            className={`nav-button ${viewMode === "annotation" ? "active" : ""}`}
-            onClick={() => setViewMode("annotation")}
+            className={`nav-button ${workMode === "segment" ? "active" : ""}`}
+            onClick={() => setWorkMode("segment")}
             type="button"
           >
-            Annotation
+            Segment
           </button>
         </nav>
-        <button className="icon-button" title="Advanced settings" type="button">
-          <Settings size={17} />
-        </button>
+        <div className="top-bar-actions">
+          <button
+            className={`text-button primary-export-button compact-text-button${activeDrawer === "export" ? " active" : ""}`}
+            onClick={() => setActiveDrawer((current) => (current === "export" ? null : "export"))}
+            type="button"
+          >
+            <Download size={15} />
+            Export
+          </button>
+          <button className="icon-button" title="Advanced settings" type="button">
+            <Settings size={17} />
+          </button>
+        </div>
       </header>
 
       <div className={`data-source-banner data-source-${dataStatus}`}>
@@ -224,15 +285,8 @@ export default function Home() {
                 Rerun
               </button>
             </div>
-            <button
-              className={`text-button primary-export-button${activeDrawer === "export" ? " active" : ""}`}
-              onClick={() => setActiveDrawer((current) => (current === "export" ? null : "export"))}
-              type="button"
-            >
-              Export Training Bundle
-            </button>
           </div>
-          <div className={`content-split ${viewMode === "dataset" ? "dataset-mode" : ""}`}>
+          <div className="content-split">
             <div className="viewer-column">
               <EpisodeViewer
                 annotations={annotationRows}
@@ -244,40 +298,50 @@ export default function Home() {
               />
               <TimelinePanel
                 annotations={annotationRows}
+                clipEnd={clipEnd}
+                clipStart={clipStart}
+                fps={fps}
                 frameCount={selectedEpisode.length}
                 onCreateSegment={handleCreateSegment}
                 onDeleteSegment={handleDeleteSegment}
                 onMergeSegments={handleMergeSegments}
                 onSelectFrame={handleSelectFrame}
+                onSetClipEnd={setClipEnd}
+                onSetClipStart={setClipStart}
                 onSplitSegment={handleSplitSegment}
                 onUpdateSegment={handleUpdateSegment}
                 selectedFrame={selectedFrameIndex}
               />
             </div>
-            {viewMode === "annotation" ? (
-              <AnnotationEditor
-                annotationHistory={annotationHistoryRows}
-                onNextPendingEpisode={handleSelectNextPendingEpisode}
-                episodeLabelHistory={episodeLabelHistoryRows}
-                annotations={annotationRows}
-                episode={selectedEpisode}
-                onCreateSegment={handleCreateSegment}
-                onAssignAnnotation={handleAssignAnnotation}
-                onDeleteSegment={handleDeleteSegment}
-                onRunVlmLabel={handleRunVlmLabel}
-                onUpdateEpisodeLabels={handleUpdateEpisodeLabels}
-                onUpdateSelectedFrameLabel={handleUpdateSelectedFrameLabel}
-                onUpdateSelectedFrameBadFlag={handleUpdateSelectedFrameBadFlag}
-                onUpdateSegment={handleUpdateSegment}
-                onUpdateReviewStatus={handleUpdateReviewStatus}
-                selectedFrame={selectedFrameIndex}
-                selectedFrameRecord={selectedFrameRecord}
-                selectedFrameStatus={selectedFrameStatus}
-                reviewerUserId={reviewerUserId}
-                vlmJob={vlmJob}
-                vlmResponses={vlmResponses}
-              />
-            ) : null}
+            <AnnotationEditor
+              annotationHistory={annotationHistoryRows}
+              clipEnd={clipEnd}
+              clipStart={clipStart}
+              compact={workMode === "view"}
+              onNextPendingEpisode={handleSelectNextPendingEpisode}
+              onSetClipEnd={setClipEnd}
+              onSetClipStart={setClipStart}
+              onSetSelectedSkillId={setSelectedSkillId}
+              episodeLabelHistory={episodeLabelHistoryRows}
+              annotations={annotationRows}
+              episode={selectedEpisode}
+              onCreateSegment={handleCreateSegment}
+              onAssignAnnotation={handleAssignAnnotation}
+              onDeleteSegment={handleDeleteSegment}
+              onRunVlmLabel={handleRunVlmLabel}
+              onUpdateEpisodeLabels={handleUpdateEpisodeLabels}
+              onUpdateSelectedFrameLabel={handleUpdateSelectedFrameLabel}
+              onUpdateSelectedFrameBadFlag={handleUpdateSelectedFrameBadFlag}
+              onUpdateSegment={handleUpdateSegment}
+              onUpdateReviewStatus={handleUpdateReviewStatus}
+              selectedFrame={selectedFrameIndex}
+              selectedFrameRecord={selectedFrameRecord}
+              selectedFrameStatus={selectedFrameStatus}
+              selectedSkillId={selectedSkillId}
+              reviewerUserId={reviewerUserId}
+              vlmJob={vlmJob}
+              vlmResponses={vlmResponses}
+            />
           </div>
           {activeDrawer ? (
             <BottomDrawer
@@ -364,5 +428,5 @@ function drawerTitle(tab: DrawerTab): string {
   if (tab === "rerun") {
     return "Rerun";
   }
-  return "Export Training Bundle";
+  return "Export";
 }

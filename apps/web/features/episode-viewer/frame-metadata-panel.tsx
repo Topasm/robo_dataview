@@ -14,8 +14,12 @@ type FrameMetadataPanelProps = {
 
 const QUICK_FRAME_LABELS = [
   { label: "Important", type: "important_frame", value: "important_frame" },
-  { label: "Occlusion", type: "occlusion", value: "occlusion" },
-  { label: "Contact", type: "gripper_contact", value: "gripper_contact" }
+  { label: "Bad", type: "bad_frame", value: "bad_frame" },
+  { label: "Slip", type: "foot_slip", value: "foot_slip" },
+  { label: "Fall", type: "fall_event", value: "fall_event" },
+  { label: "Contact", type: "foot_contact_issue", value: "foot_contact_issue" },
+  { label: "Collision", type: "collision", value: "collision" },
+  { label: "Intervention", type: "intervention", value: "intervention" }
 ];
 
 export function FrameMetadataPanel({
@@ -95,7 +99,7 @@ export function FrameMetadataPanel({
               style={{ flex: 1 }}
             >
               <CheckCircle2 size={14} />
-              Approve
+              OK
             </button>
           </div>
           <div className="frame-meta-grid">

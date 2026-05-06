@@ -26,15 +26,17 @@ export function DatasetBrowser({
     "hf://datasets/lance-format/lerobot-xvla-soft-fold/data";
   const [uri, setUri] = useState(defaultDatasetUri);
   const [isOpening, setIsOpening] = useState(false);
-  const reviewedPercent =
+  const checkedPercent =
     summary.episodeCount === 0 ? 0 : Math.round((summary.reviewedCount / summary.episodeCount) * 100);
   const pendingRows = reviewQueueRows.filter((annotation) => annotation.reviewStatus === "pending");
-  const assignedRows = pendingRows.filter((annotation) => annotation.assignedTo === reviewerUserId);
-  const generatedRows = pendingRows.filter(
+  const badRows = reviewQueueRows.filter(
+    (annotation) => annotation.labelType === "bad_range" || annotation.labelType === "bad_frame"
+  );
+  const autoRows = pendingRows.filter(
     (annotation) => annotation.source === "vlm" || annotation.source === "heuristic"
   );
   const queueRows = [
-    ...assignedRows,
+    ...pendingRows.filter((annotation) => annotation.assignedTo === reviewerUserId),
     ...pendingRows.filter((annotation) => annotation.assignedTo !== reviewerUserId)
   ].slice(0, 4);
   const coreTables =
@@ -92,12 +94,12 @@ export function DatasetBrowser({
 
       <section className="panel-section review-queue-section">
         <div className="section-title">
-          <span>Reviewer Queue</span>
+          <span>Work Queue</span>
         </div>
         <div className="review-queue-metrics">
-          <Metric label="Pending" value={pendingRows.length.toString()} />
-          <Metric label="Mine" value={assignedRows.length.toString()} />
-          <Metric label="Generated" value={generatedRows.length.toString()} />
+          <Metric label="Need Check" value={pendingRows.length.toString()} />
+          <Metric label="Bad" value={badRows.length.toString()} />
+          <Metric label="Auto" value={autoRows.length.toString()} />
         </div>
         <div className="review-queue-list">
           {queueRows.length === 0 ? (
@@ -122,15 +124,15 @@ export function DatasetBrowser({
 
       <section className="panel-section review-progress-section">
         <div className="section-title">
-          <span>Review Progress</span>
-          <span className="muted">{reviewedPercent}%</span>
+          <span>Dataset Progress</span>
+          <span className="muted">{checkedPercent}%</span>
         </div>
         <div className="progress-row">
-          <span>{summary.reviewedCount} reviewed</span>
+          <span>{summary.reviewedCount} checked</span>
           <span className="muted">{summary.episodeCount} total</span>
         </div>
         <div className="progress-track">
-          <div className="progress-fill" style={{ width: `${reviewedPercent}%` }} />
+          <div className="progress-fill" style={{ width: `${checkedPercent}%` }} />
         </div>
         <div className="review-counts">
           <StatusPill status="accepted" />

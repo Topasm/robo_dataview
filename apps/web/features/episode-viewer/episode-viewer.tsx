@@ -25,6 +25,7 @@ import {
 
 import { episodePreviewUrl, episodeVideoUrl, fetchEpisodeTimeseries } from "@/lib/api";
 import type { Episode, EpisodeTimeseries, SegmentAnnotation } from "@/lib/types";
+import { HUMANOID_SIGNAL_PRESETS, type SignalPreset } from "./signal-presets";
 
 type EpisodeViewerProps = {
   annotations: SegmentAnnotation[];
@@ -67,6 +68,7 @@ export function EpisodeViewer({
   const [timeseriesStatus, setTimeseriesStatus] = useState<"loading" | "ready" | "error">(
     "loading"
   );
+  const [activePreset, setActivePreset] = useState<string>("overview");
 
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   const animationRef = useRef<number | null>(null);
@@ -274,7 +276,7 @@ export function EpisodeViewer({
             {episode.caption || "(no caption)"} / {frameCount} frames / {fps} FPS
           </div>
           <div className="shortcut-hints">
-            <kbd>␣</kbd> play <kbd>←→</kbd> frame <kbd>M</kbd> bad <kbd>E</kbd> episodes <kbd>Esc</kbd> close
+            <kbd>␣</kbd> play <kbd>←→</kbd> frame <kbd>M</kbd> bad <kbd>1-4</kbd> status <kbd>B</kbd> bad range <kbd>S</kbd> slip <kbd>N</kbd> next
           </div>
         </div>
         <div className="toolbar-actions">
@@ -413,6 +415,30 @@ export function EpisodeViewer({
 
       {showSignals ? (
         <section className="state-action-panel">
+          <div className="frame-quick-labels" style={{ marginBottom: "8px" }}>
+            {HUMANOID_SIGNAL_PRESETS.map((preset: SignalPreset) => (
+              <button
+                key={preset.id}
+                className={`quick-label-button${activePreset === preset.id ? " active" : ""}`}
+                onClick={() => {
+                  setActivePreset(preset.id);
+                  if (preset.stateChannels.length > 0) {
+                    setStateChannel(preset.stateChannels[0]);
+                  } else {
+                    setStateChannel("norm");
+                  }
+                  if (preset.actionChannels.length > 0) {
+                    setActionChannel(preset.actionChannels[0]);
+                  } else {
+                    setActionChannel("norm");
+                  }
+                }}
+                type="button"
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
           <SignalPlot
             annotations={annotations}
             channel={stateChannel}

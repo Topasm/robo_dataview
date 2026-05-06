@@ -124,6 +124,7 @@ export function ExportStrip({
             Split {split ?? ""}
           </button>
         </div>
+        <div className="section-actions" style={{ flexDirection: "column", gap: "8px", alignItems: "stretch" }}>
         <button
           className="text-button primary-export-button"
           disabled={exportJobActive}
@@ -131,8 +132,25 @@ export function ExportStrip({
           type="button"
         >
           <Download size={15} />
-          Export Training Bundle
+          Export Skill Clips
         </button>
+        <details className="advanced-menu export-advanced-menu">
+          <summary>Augmentation Options</summary>
+          <div className="advanced-menu-content">
+            <label className="muted" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              Prefix Jitter:
+              <select disabled style={{ background: "transparent", border: "none", color: "inherit", outline: "none", appearance: "none" }}>
+                <option>Off</option>
+              </select>
+            </label>
+            <label className="muted" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              Copies per clip:
+              <select disabled style={{ background: "transparent", border: "none", color: "inherit", outline: "none", appearance: "none" }}>
+                <option>1</option>
+              </select>
+            </label>
+          </div>
+        </details>
         <details className="advanced-menu export-advanced-menu">
           <summary>More formats</summary>
           <div className="advanced-menu-content">
@@ -170,6 +188,7 @@ export function ExportStrip({
             </button>
           </div>
         </details>
+      </div>
       </div>
     </section>
   );

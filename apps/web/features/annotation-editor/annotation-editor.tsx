@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Bot, Check, Minus, Plus, Save, Trash2, UserCheck, UserX, X } from "lucide-react";
+import { Bot, Check, Minus, Plus, Save, Trash2, X } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
 import { FrameMetadataPanel } from "@/features/episode-viewer/frame-metadata-panel";
+import { HUMANOID_SKILLS, SKILL_LABEL_TYPE, skillByName } from "@/lib/skill-vocabulary";
 import type {
   Episode,
   EpisodeLabelHistoryRecord,
@@ -30,16 +31,20 @@ type EpisodeLabelDraft = {
   reviewStatus: ReviewStatus;
 };
 
-type InspectorTab = "frame" | "episode" | "segments";
+type InspectorTab = "skills" | "frame" | "episode";
 
 type AnnotationEditorProps = {
   episode: Episode;
   annotationHistory: AnnotationHistoryRecord[];
   episodeLabelHistory: EpisodeLabelHistoryRecord[];
   annotations: SegmentAnnotation[];
+  clipStart: number | null;
+  clipEnd: number | null;
+  compact?: boolean;
   selectedFrame: number;
   selectedFrameRecord: FrameRecord | null;
   selectedFrameStatus: "idle" | "loading" | "ready" | "error";
+  selectedSkillId: number;
   reviewerUserId: string;
   vlmJob: JobRecord | null;
   vlmResponses: VlmResponseRecord[];
@@ -47,6 +52,9 @@ type AnnotationEditorProps = {
   onCreateSegment: (draft: AnnotationDraft) => Promise<void>;
   onDeleteSegment: (annotationId: string) => Promise<void>;
   onRunVlmLabel: () => Promise<void>;
+  onSetClipStart: (frame: number | null) => void;
+  onSetClipEnd: (frame: number | null) => void;
+  onSetSelectedSkillId: (id: number) => void;
   onUpdateEpisodeLabels: (draft: EpisodeLabelDraft) => Promise<void>;
   onUpdateSelectedFrameLabel: (
     labelType: string,
@@ -59,21 +67,39 @@ type AnnotationEditorProps = {
   onNextPendingEpisode?: () => void;
 };
 
+const FAILURE_REASONS = [
+  "Fall", "Slip", "Collision", "Timeout", "Sensor", "Operator", "Other"
+];
+
+const QUICK_EPISODE_STATUSES = [
+  { label: "Keep", reviewStatus: "accepted" as ReviewStatus, quality: 1.0, success: true },
+  { label: "Usable", reviewStatus: "accepted" as ReviewStatus, quality: 0.7, success: true },
+  { label: "Bad", reviewStatus: "edited" as ReviewStatus, quality: 0.3, success: false },
+  { label: "Discard", reviewStatus: "rejected" as ReviewStatus, quality: 0.0, success: false }
+];
+
 export function AnnotationEditor({
   episode,
   annotationHistory,
   episodeLabelHistory,
   annotations,
+  clipStart,
+  clipEnd,
+  compact = false,
   selectedFrame,
   selectedFrameRecord,
   selectedFrameStatus,
-  reviewerUserId,
+  selectedSkillId,
+  // reviewerUserId not destructured — admin actions removed
   vlmJob,
   vlmResponses,
-  onAssignAnnotation,
+  // onAssignAnnotation available via props but not used in UI after admin actions removal
   onCreateSegment,
   onDeleteSegment,
   onRunVlmLabel,
+  onSetClipStart,
+  onSetClipEnd,
+  onSetSelectedSkillId,
   onUpdateEpisodeLabels,
   onUpdateSelectedFrameLabel,
   onUpdateSelectedFrameBadFlag,
@@ -93,7 +119,8 @@ export function AnnotationEditor({
   const [isSaving, setIsSaving] = useState(false);
   const [isBulkReviewing, setIsBulkReviewing] = useState(false);
   const [isRunningVlm, setIsRunningVlm] = useState(false);
-  const [activeTab, setActiveTab] = useState<InspectorTab>("frame");
+  const [activeTab, setActiveTab] = useState<InspectorTab>("skills");
+  const skillClips = annotations.filter((a) => a.labelType === SKILL_LABEL_TYPE);
   const generatedProposals = annotations
     .filter(
       (annotation) =>
@@ -101,11 +128,7 @@ export function AnnotationEditor({
         annotation.reviewStatus === "pending"
     )
     .sort((left, right) => left.startFrame - right.startFrame);
-  const pendingAnnotations = annotations.filter((annotation) => annotation.reviewStatus === "pending");
-  const claimablePendingAnnotations = pendingAnnotations.filter(
-    (annotation) => annotation.assignedTo !== reviewerUserId
-  );
-  const assignedAnnotations = annotations.filter((annotation) => annotation.assignedTo !== null);
+
   const isVlmJobActive = vlmJob ? !["succeeded", "failed"].includes(vlmJob.status) : false;
   const vlmProgressPercent = Math.round(Math.max(0, Math.min(1, vlmJob?.progress ?? 0)) * 100);
   const recentHistory = [...annotationHistory]
@@ -208,33 +231,6 @@ export function AnnotationEditor({
     }
   }
 
-  async function handleClaimPending() {
-    if (claimablePendingAnnotations.length === 0) {
-      return;
-    }
-    setIsBulkReviewing(true);
-    try {
-      for (const annotation of claimablePendingAnnotations) {
-        await onAssignAnnotation(annotation.id, reviewerUserId);
-      }
-    } finally {
-      setIsBulkReviewing(false);
-    }
-  }
-
-  async function handleClearAssignments() {
-    if (assignedAnnotations.length === 0) {
-      return;
-    }
-    setIsBulkReviewing(true);
-    try {
-      for (const annotation of assignedAnnotations) {
-        await onAssignAnnotation(annotation.id, null);
-      }
-    } finally {
-      setIsBulkReviewing(false);
-    }
-  }
 
   async function handleApplyGeneratedProposal(annotation: SegmentAnnotation) {
     const nextDraft = episodeDraftFromProposal(episodeDraft, annotation);
@@ -255,6 +251,13 @@ export function AnnotationEditor({
     <aside className="right-panel inspector-panel">
       <div className="inspector-tabs" role="tablist" aria-label="Inspector">
         <button
+          className={activeTab === "skills" ? "active" : ""}
+          onClick={() => setActiveTab("skills")}
+          type="button"
+        >
+          Skill Clips ({skillClips.length})
+        </button>
+        <button
           className={activeTab === "frame" ? "active" : ""}
           onClick={() => setActiveTab("frame")}
           type="button"
@@ -266,93 +269,138 @@ export function AnnotationEditor({
           onClick={() => setActiveTab("episode")}
           type="button"
         >
-          Episode
-        </button>
-        <button
-          className={activeTab === "segments" ? "active" : ""}
-          onClick={() => setActiveTab("segments")}
-          type="button"
-        >
-          Segments
+          Episode QA
         </button>
       </div>
+
+      {activeTab === "skills" ? (
+        <>
+          <section className="panel-section">
+            <div className="section-title">New Skill Clip</div>
+            <div className="segment-form">
+              <label>
+                Skill
+                <select
+                  onChange={(event) => onSetSelectedSkillId(Number(event.target.value))}
+                  value={selectedSkillId}
+                >
+                  {HUMANOID_SKILLS.map((skill) => (
+                    <option key={skill.id} value={skill.id}>
+                      {skill.id}: {skill.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Start
+                <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                  <input
+                    min={0}
+                    onChange={(event) => onSetClipStart(event.target.value === "" ? null : Number(event.target.value))}
+                    type="number"
+                    value={clipStart ?? ""}
+                    placeholder="press I"
+                    style={{ flex: 1 }}
+                  />
+                  <button className="icon-button compact" onClick={() => onSetClipStart(selectedFrame)} title="Set to current frame (I)" type="button">I</button>
+                </div>
+              </label>
+              <label>
+                End
+                <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                  <input
+                    min={0}
+                    onChange={(event) => onSetClipEnd(event.target.value === "" ? null : Number(event.target.value))}
+                    type="number"
+                    value={clipEnd ?? ""}
+                    placeholder="press O"
+                    style={{ flex: 1 }}
+                  />
+                  <button className="icon-button compact" onClick={() => onSetClipEnd(selectedFrame)} title="Set to current frame (O)" type="button">O</button>
+                </div>
+              </label>
+              <button
+                className="text-button segment-save-button"
+                disabled={isSaving || clipStart === null || clipEnd === null}
+                onClick={async () => {
+                  const skill = HUMANOID_SKILLS[selectedSkillId];
+                  if (!skill || clipStart === null || clipEnd === null) return;
+                  setIsSaving(true);
+                  try {
+                    await onCreateSegment({ labelType: SKILL_LABEL_TYPE, labelValue: skill.name, startFrame: Math.min(clipStart, clipEnd), endFrame: Math.max(clipStart, clipEnd) });
+                    onSetClipStart(null);
+                    onSetClipEnd(null);
+                  } finally {
+                    setIsSaving(false);
+                  }
+                }}
+                type="button"
+              >
+                <Plus size={15} />
+                Add Clip
+              </button>
+            </div>
+            <div className="shortcut-hints" style={{ marginTop: "8px" }}>
+              <kbd>I</kbd> start <kbd>O</kbd> end <kbd>0-9</kbd> skill <kbd>A</kbd> add
+            </div>
+          </section>
+
+          <section className="panel-section">
+            <div className="section-title">Skill Clips</div>
+            <div className="segment-list">
+              {skillClips.length === 0 ? <div className="empty-state compact-empty-state">No skill clips. Use I/O to mark boundaries.</div> : null}
+              {skillClips.map((clip) => {
+                const skill = skillByName(clip.labelValue);
+                return (
+                  <div className="segment-row" key={clip.id}>
+                    <div className="segment-edit-grid">
+                      <span style={{ fontWeight: 700, color: skill?.color ?? "var(--text)" }}>{skill?.label ?? clip.labelValue}</span>
+                      <span className="muted mono">f{clip.startFrame}–f{clip.endFrame}</span>
+                      <StatusPill status={clip.reviewStatus} />
+                    </div>
+                    <div className="segment-actions">
+                      <button className="icon-button compact" onClick={() => onUpdateReviewStatus(clip.id, "accepted")} title="Accept clip" type="button"><Check size={14} /></button>
+                      <button className="icon-button compact" onClick={() => onUpdateReviewStatus(clip.id, "rejected")} title="Reject clip" type="button"><X size={14} /></button>
+                      <button className="icon-button compact danger" onClick={() => onDeleteSegment(clip.id)} title="Delete clip" type="button"><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="panel-section">
+            <div className="section-title">Skill Coverage</div>
+            <div className="metrics-grid">
+              <div className="metric"><span>Clips</span><strong>{skillClips.length}</strong></div>
+              <div className="metric"><span>Accepted</span><strong>{skillClips.filter((c) => c.reviewStatus === "accepted").length}</strong></div>
+            </div>
+          </section>
+        </>
+      ) : null}
       {activeTab === "episode" ? (
         <>
       <section className="panel-section">
-        <div className="section-title">Episode Labels</div>
-        <div className="form-grid">
-          <label>
-            Caption
-            <textarea
-              onChange={(event) =>
-                setEpisodeDraft((current) => ({ ...current, caption: event.target.value }))
-              }
-              rows={3}
-              value={episodeDraft.caption}
-            />
-          </label>
-          <label>
-            Quality
-            <input
-              max={1}
-              min={0}
-              onChange={(event) =>
-                setEpisodeDraft((current) => ({
-                  ...current,
-                  qualityScore: event.target.value === "" ? null : Number(event.target.value)
-                }))
-              }
-              placeholder="unset"
-              step={0.01}
-              type="number"
-              value={episodeDraft.qualityScore ?? ""}
-            />
-          </label>
-          <label>
-            Split
-            <select
-              onChange={(event) =>
-                setEpisodeDraft((current) => ({
-                  ...current,
-                  split: event.target.value === "" ? null : event.target.value
-                }))
-              }
-              value={episodeDraft.split ?? ""}
+        <div className="section-title">Episode Status</div>
+        <div className="segmented-control">
+          {QUICK_EPISODE_STATUSES.map((item) => (
+            <button
+              key={item.label}
+              className={episodeDraft.reviewStatus === item.reviewStatus && episodeDraft.qualityScore === item.quality ? "active" : ""}
+              disabled={isSavingEpisode}
+              onClick={() => setEpisodeDraft((current) => ({
+                ...current,
+                reviewStatus: item.reviewStatus,
+                qualityScore: item.quality,
+                successLabel: item.success
+              }))}
+              type="button"
             >
-              <option value="">unassigned</option>
-              <option value="train">train</option>
-              <option value="val">val</option>
-              <option value="test">test</option>
-            </select>
-          </label>
-          <label>
-            Review
-            <select
-              onChange={(event) =>
-                setEpisodeDraft((current) => ({
-                  ...current,
-                  reviewStatus: event.target.value as ReviewStatus
-                }))
-              }
-              value={episodeDraft.reviewStatus}
-            >
-              <option value="pending">pending</option>
-              <option value="accepted">accepted</option>
-              <option value="rejected">rejected</option>
-              <option value="edited">edited</option>
-            </select>
-          </label>
-          <label>
-            Failure reason
-            <textarea
-              onChange={(event) =>
-                setEpisodeDraft((current) => ({ ...current, failureReason: event.target.value }))
-              }
-              rows={2}
-              value={episodeDraft.failureReason}
-            />
-          </label>
+              {item.label}
+            </button>
+          ))}
         </div>
+        <div className="section-title" style={{ marginTop: "12px" }}>Task Result</div>
         <div className="segmented-control">
           <button
             className={episodeDraft.successLabel === null ? "active" : ""}
@@ -376,9 +424,68 @@ export function AnnotationEditor({
             type="button"
           >
             <X size={14} />
-            Failure
+            Fail
           </button>
         </div>
+        <div className="section-title" style={{ marginTop: "12px" }}>Failure Reason</div>
+        <div className="frame-quick-labels">
+          {FAILURE_REASONS.map((reason) => (
+            <button
+              key={reason}
+              className={`quick-label-button${episodeDraft.failureReason.toLowerCase() === reason.toLowerCase() ? " active" : ""}`}
+              disabled={isSavingEpisode}
+              onClick={() => setEpisodeDraft((current) => ({
+                ...current,
+                failureReason: reason.toLowerCase(),
+                successLabel: false
+              }))}
+              type="button"
+            >
+              {reason}
+            </button>
+          ))}
+        </div>
+        {!compact ? (
+          <div className="form-grid" style={{ marginTop: "12px" }}>
+            <label>
+              Caption
+              <textarea
+                onChange={(event) =>
+                  setEpisodeDraft((current) => ({ ...current, caption: event.target.value }))
+                }
+                rows={2}
+                value={episodeDraft.caption}
+              />
+            </label>
+            <label>
+              Split
+              <select
+                onChange={(event) =>
+                  setEpisodeDraft((current) => ({
+                    ...current,
+                    split: event.target.value === "" ? null : event.target.value
+                  }))
+                }
+                value={episodeDraft.split ?? ""}
+              >
+                <option value="">unassigned</option>
+                <option value="train">train</option>
+                <option value="val">val</option>
+                <option value="test">test</option>
+              </select>
+            </label>
+            <label>
+              Failure detail
+              <textarea
+                onChange={(event) =>
+                  setEpisodeDraft((current) => ({ ...current, failureReason: event.target.value }))
+                }
+                rows={2}
+                value={episodeDraft.failureReason}
+              />
+            </label>
+          </div>
+        ) : null}
         <div className="episode-action-row">
           <button
             className="text-button episode-label-save secondary-text-button"
@@ -394,7 +501,7 @@ export function AnnotationEditor({
             className="text-button episode-label-reject"
             disabled={isSavingEpisode}
             onClick={async () => {
-              const rejectedDraft = { ...episodeDraft, reviewStatus: "rejected" as ReviewStatus, successLabel: false };
+              const rejectedDraft = { ...episodeDraft, reviewStatus: "rejected" as ReviewStatus, successLabel: false, qualityScore: 0 };
               setEpisodeDraft(rejectedDraft);
               setIsSavingEpisode(true);
               try {
@@ -405,16 +512,16 @@ export function AnnotationEditor({
               }
             }}
             type="button"
-            title="Mark as failure and advance to next episode"
+            title="Drop and advance to next episode"
           >
             <X size={15} />
-            Reject
+            Drop + Next
           </button>
           <button
             className="text-button episode-label-approve"
             disabled={isSavingEpisode}
             onClick={async () => {
-              const approvedDraft = { ...episodeDraft, reviewStatus: "accepted" as ReviewStatus, successLabel: true };
+              const approvedDraft = { ...episodeDraft, reviewStatus: "accepted" as ReviewStatus, successLabel: true, qualityScore: 1.0 };
               setEpisodeDraft(approvedDraft);
               setIsSavingEpisode(true);
               try {
@@ -425,10 +532,10 @@ export function AnnotationEditor({
               }
             }}
             type="button"
-            title="Mark as success and advance to next episode"
+            title="Keep and advance to next episode"
           >
             <Check size={15} />
-            Approve
+            Keep + Next
           </button>
         </div>
       </section>
@@ -448,7 +555,7 @@ export function AnnotationEditor({
         </>
       ) : null}
 
-      {activeTab === "segments" ? (
+      {activeTab === "episode" && !compact ? (
         <>
           <PanelDisclosure title="New Segment">
             <div className="segment-form">
@@ -463,6 +570,10 @@ export function AnnotationEditor({
                   <option value="bad_range">bad_range</option>
                   <option value="important_frame">important_frame</option>
                   <option value="failure_event">failure_event</option>
+                  <option value="foot_slip">foot_slip</option>
+                  <option value="fall_event">fall_event</option>
+                  <option value="collision">collision</option>
+                  <option value="foot_contact_issue">foot_contact_issue</option>
                 </select>
               </label>
               <label>
@@ -531,6 +642,10 @@ export function AnnotationEditor({
                       <option value="bad_range">bad_range</option>
                       <option value="important_frame">important_frame</option>
                       <option value="failure_event">failure_event</option>
+                      <option value="foot_slip">foot_slip</option>
+                      <option value="fall_event">fall_event</option>
+                      <option value="collision">collision</option>
+                      <option value="foot_contact_issue">foot_contact_issue</option>
                       <option value="episode_caption">episode_caption</option>
                       <option value="success_label">success_label</option>
                       <option value="failure_reason">failure_reason</option>
@@ -565,7 +680,7 @@ export function AnnotationEditor({
                     <button
                       className="icon-button compact"
                       onClick={() => onUpdateReviewStatus(annotation.id, "accepted")}
-                      title="Accept segment"
+                      title="Keep segment"
                       type="button"
                     >
                       <Check size={14} />
@@ -573,7 +688,7 @@ export function AnnotationEditor({
                     <button
                       className="icon-button compact"
                       onClick={() => onUpdateReviewStatus(annotation.id, "rejected")}
-                      title="Reject segment"
+                      title="Drop segment"
                       type="button"
                     >
                       <X size={14} />
@@ -590,31 +705,7 @@ export function AnnotationEditor({
                 </div>
               ))}
             </div>
-            <details className="advanced-menu" style={{ marginTop: "8px" }}>
-              <summary>Admin actions</summary>
-              <div className="advanced-menu-content">
-                <div className="review-action-grid">
-                  <button
-                    className="text-button compact-text-button secondary-text-button"
-                    disabled={isBulkReviewing || claimablePendingAnnotations.length === 0}
-                    onClick={() => void handleClaimPending()}
-                    type="button"
-                  >
-                    <UserCheck size={14} />
-                    Claim
-                  </button>
-                  <button
-                    className="text-button compact-text-button secondary-text-button"
-                    disabled={isBulkReviewing || assignedAnnotations.length === 0}
-                    onClick={() => void handleClearAssignments()}
-                    type="button"
-                  >
-                    <UserX size={14} />
-                    Unassign
-                  </button>
-                </div>
-              </div>
-            </details>
+
           </PanelDisclosure>
 
           <PanelDisclosure
@@ -663,6 +754,7 @@ export function AnnotationEditor({
         </>
       ) : null}
 
+      {!compact ? (
       <details className="panel-section sidebar-details">
         <summary>
           <span>Advanced Details</span>
@@ -838,6 +930,7 @@ export function AnnotationEditor({
           </PanelDisclosure>
         </div>
       </details>
+      ) : null}
     </aside>
   );
 }
