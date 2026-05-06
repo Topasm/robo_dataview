@@ -13,6 +13,7 @@ from apps.api.schemas.common import ReviewStatus
 from apps.api.schemas.datasets import DatasetOpenRequest
 from apps.api.schemas.episodes import EpisodeDetail, EpisodeLabelUpdate
 from apps.api.schemas.search import FilterSearchRequest
+from apps.api.services import lance_store
 from apps.api.services.lance_store import LanceDatasetStore
 from apps.api.services.lerobot_io import write_lerobot_v3_snapshot
 
@@ -600,7 +601,10 @@ class LanceDatasetStoreTest(unittest.TestCase):
         self.assertTrue(health.ok)
         self.assertEqual(health.level, "deep")
         self.assertEqual(health.storage_model, "lance")
-        self.assertEqual([table.table for table in health.tables], ["frames", "episodes", "videos"])
+        self.assertEqual(
+            [table.table for table in health.tables],
+            ["episodes", "frames", "media", "videos", "cameras", "tasks", "splits"],
+        )
         self.assertTrue(
             any("non-contiguous" in warning for warning in health.warnings),
             health.warnings,
@@ -1091,6 +1095,14 @@ class LanceDatasetStoreTest(unittest.TestCase):
 
         self.assertEqual([result.episode_index for result in results], [2])
         self.assertEqual(results[0].match_type, "episode_filter")
+
+    def test_lance_filter_expression_skips_overlay_fields(self) -> None:
+        expression = lance_store._lance_filter_expression(
+            [("success_label", "==", True)],
+            ["episode_index", "success_label"],
+        )
+
+        self.assertIsNone(expression)
 
     def test_filter_search_supports_aliases_and_contains(self) -> None:
         store = LanceDatasetStore()

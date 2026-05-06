@@ -42,7 +42,7 @@ from packages.robot_schema import (
 NORM_SERIES_MAX_POINTS = 600
 EPISODE_LABEL_STORAGE_ROOT = Path("data/lance/episode_labels")
 DATASET_REGISTRY_PATH = Path("data/lance/dataset_registry.jsonl")
-TABLE_NAMES = ("frames", "episodes", "videos")
+TABLE_NAMES = ("episodes", "frames", "media", "videos", "cameras", "tasks", "splits")
 STATE_COLUMNS = ("observation_state", "observation.state", "state")
 ACTION_COLUMNS = ("actions", "action")
 TIMESTAMP_COLUMNS = ("timestamps", "timestamp")
@@ -72,6 +72,15 @@ EPISODE_SORT_FIELDS = {
     "caption",
     "failure_reason",
     "split",
+}
+EPISODE_OVERLAY_FIELDS = {
+    "success_label",
+    "quality_score",
+    "review_status",
+    "caption",
+    "failure_reason",
+    "split",
+    "language_instruction",
 }
 
 
@@ -963,6 +972,8 @@ def _lance_filter_expression(
     clauses: list[str] = []
     schema = set(schema_names)
     for field, operator, expected in filters:
+        if field in EPISODE_OVERLAY_FIELDS:
+            return None
         if field not in schema or operator == "contains":
             return None
         clause = _lance_filter_clause(field, operator, expected)
@@ -1953,7 +1964,11 @@ class LanceDatasetStore:
         required = {
             "episodes": ["episode_index"],
             "frames": ["episode_index", "frame_index"],
+            "media": [],
             "videos": [],
+            "cameras": [],
+            "tasks": [],
+            "splits": [],
         }
         health: list[DatasetTableHealth] = []
         for table_name in TABLE_NAMES:
@@ -1973,13 +1988,13 @@ class LanceDatasetStore:
                     table_warnings.append("no episode-level action array column")
                 if not has_video:
                     table_warnings.append("no episode-level video blob columns")
-            if table_name == "videos":
+            if table_name in {"media", "videos"}:
                 has_media_ref = (
                     _first_present_name(columns, VIDEO_BLOB_COLUMNS) is not None
                     or _first_present_name(columns, VIDEO_PATH_COLUMNS) is not None
                 )
                 if dataset is not None and not has_media_ref:
-                    table_warnings.append("no video blob/path column detected")
+                    table_warnings.append("no media blob/path column detected")
             health.append(
                 DatasetTableHealth(
                     table=table_name,
@@ -2468,10 +2483,10 @@ class LanceDatasetStore:
         return sorted(cameras)
 
     def _camera_names_from_videos_table(self, bundle: LanceBundle) -> list[str]:
-        videos = bundle.tables.get("videos")
+        table_name, videos = self._media_table(bundle)
         if videos is None or _count_rows(videos) == 0:
             return []
-        schema = bundle.schemas.get("videos", [])
+        schema = bundle.schemas.get(table_name, [])
         camera_name = _first_present_name(schema, VIDEO_CAMERA_COLUMNS)
         if camera_name is None:
             return []
@@ -2522,10 +2537,10 @@ class LanceDatasetStore:
         episode_index: int,
         camera: str,
     ) -> VideoSource | None:
-        videos = bundle.tables.get("videos")
+        table_name, videos = self._media_table(bundle)
         if videos is None or _count_rows(videos) == 0:
             return None
-        schema = bundle.schemas.get("videos", [])
+        schema = bundle.schemas.get(table_name, [])
         camera_name = _first_present_name(schema, VIDEO_CAMERA_COLUMNS)
         blob_name = _first_present_name(schema, VIDEO_BLOB_COLUMNS)
         path_name = _first_present_name(schema, VIDEO_PATH_COLUMNS)
@@ -2593,6 +2608,12 @@ class LanceDatasetStore:
             if file_source is not None:
                 return file_source
         return None
+
+    @staticmethod
+    def _media_table(bundle: LanceBundle) -> tuple[str, Any | None]:
+        if "media" in bundle.tables:
+            return "media", bundle.tables["media"]
+        return "videos", bundle.tables.get("videos")
 
     def _read_video_rows(
         self,

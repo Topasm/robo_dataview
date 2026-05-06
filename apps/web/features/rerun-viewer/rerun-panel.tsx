@@ -21,7 +21,8 @@ export function RerunPanel({ job, session, viewerUrl, onCreateSession }: RerunPa
   const effectiveViewerUrl = session?.viewerUrl ?? viewerUrl;
   const jobActive = job ? !["succeeded", "failed"].includes(job.status) : false;
   const progressPercent = Math.round(Math.max(0, Math.min(1, job?.progress ?? 0)) * 100);
-  const shouldShowViewer = isExpanded || session !== null || job !== null;
+  const hasRerunState = session !== null || job !== null;
+  const shouldShowViewer = isExpanded;
 
   return (
     <section className={`rerun-panel ${shouldShowViewer ? "rerun-panel-expanded" : ""}`}>
@@ -37,7 +38,7 @@ export function RerunPanel({ job, session, viewerUrl, onCreateSession }: RerunPa
           type="button"
         >
           <ExternalLink size={15} />
-          {shouldShowViewer ? "Hide Rerun" : "Inspect with Rerun"}
+          {isExpanded ? "Hide Rerun" : "Inspect with Rerun"}
         </button>
       </div>
       {shouldShowViewer ? (
@@ -46,7 +47,7 @@ export function RerunPanel({ job, session, viewerUrl, onCreateSession }: RerunPa
           Generate cached recording
         </button>
       ) : null}
-      {job ? (
+      {hasRerunState && job ? (
         <div className="rerun-session-status">
           <span className={`status-pill status-${job.status}`}>{job.status}</span>
           <span className="muted">
@@ -54,7 +55,7 @@ export function RerunPanel({ job, session, viewerUrl, onCreateSession }: RerunPa
           </span>
         </div>
       ) : null}
-      {session ? (
+      {hasRerunState && session ? (
         <div className="rerun-session-status">
           <span className={`status-pill status-${session.status}`}>{session.status}</span>
           {session.rrdUrl ? (

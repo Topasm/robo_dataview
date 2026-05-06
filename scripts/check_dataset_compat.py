@@ -129,11 +129,24 @@ def check_dataset(
     return result
 
 
-def _timeseries_frame_count(timeseries: dict[str, Any]) -> int:
+def _timeseries_frame_count(timeseries: Any) -> int:
+    frame_count = getattr(timeseries, "frame_count", None)
+    if frame_count is not None:
+        return int(frame_count or 0)
+    if hasattr(timeseries, "model_dump"):
+        row = timeseries.model_dump()
+    elif isinstance(timeseries, dict):
+        row = timeseries
+    else:
+        row = {
+            "timestamps": getattr(timeseries, "timestamps", None),
+            "state_norms": getattr(timeseries, "state_norms", None),
+            "action_norms": getattr(timeseries, "action_norms", None),
+        }
     return max(
-        _safe_len(timeseries.get("timestamps")),
-        _safe_len(timeseries.get("states")),
-        _safe_len(timeseries.get("actions")),
+        _safe_len(row.get("timestamps")),
+        _safe_len(row.get("state_norms")),
+        _safe_len(row.get("action_norms")),
     )
 
 
