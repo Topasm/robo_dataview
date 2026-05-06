@@ -504,6 +504,15 @@ def _norm_at(sequence: list[Any], index: int) -> float | None:
     return math.sqrt(sum(item * item for item in vector))
 
 
+def _vector_at(sequence: list[Any], index: int) -> list[float | None] | None:
+    if index < 0 or index >= len(sequence):
+        return None
+    vector = _numeric_vector(sequence[index])
+    if not vector:
+        return None
+    return [value if math.isfinite(value) else None for value in vector]
+
+
 def _timestamp_at(timestamps: list[Any], index: int) -> float | None:
     if index < 0 or index >= len(timestamps):
         return None
@@ -1555,6 +1564,8 @@ class LanceDatasetStore:
 
         state_norms = [_norm_at(states, index) for index in sample_indices]
         action_norms = [_norm_at(actions, index) for index in sample_indices]
+        state_values = [_vector_at(states, index) for index in sample_indices]
+        action_values = [_vector_at(actions, index) for index in sample_indices]
         sample_timestamps: list[float | None] | None = None
         if timestamps:
             sample_timestamps = [_timestamp_at(timestamps, index) for index in sample_indices]
@@ -1569,6 +1580,8 @@ class LanceDatasetStore:
             timestamps=sample_timestamps,
             state_norms=state_norms,
             action_norms=action_norms,
+            state_values=state_values,
+            action_values=action_values,
             state_dim=_vector_dim(states),
             action_dim=_vector_dim(actions),
         )

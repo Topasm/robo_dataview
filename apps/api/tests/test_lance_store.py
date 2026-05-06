@@ -1107,6 +1107,8 @@ class LanceDatasetStoreTest(unittest.TestCase):
         self.assertLessEqual(series.sample_count, 601)
         self.assertEqual(series.sample_indices[0], 0)
         self.assertEqual(series.sample_indices[-1], 1999)
+        self.assertEqual(series.state_values[0], [0.0, 1.0])
+        self.assertEqual(series.action_values[0], [1.0, 0.0])
 
     def test_list_frames_uses_sample_timeseries_fallback(self) -> None:
         store = LanceDatasetStore()

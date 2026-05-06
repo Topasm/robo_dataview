@@ -70,6 +70,8 @@ export type EpisodeTimeseries = {
   timestamps: (number | null)[] | null;
   stateNorms: (number | null)[];
   actionNorms: (number | null)[];
+  stateValues: ((number | null)[] | null)[];
+  actionValues: ((number | null)[] | null)[];
   stateDim: number | null;
   actionDim: number | null;
 };

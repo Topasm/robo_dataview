@@ -64,6 +64,8 @@ class EpisodeTimeseries(BaseModel):
     timestamps: list[float | None] | None = None
     state_norms: list[float | None]
     action_norms: list[float | None]
+    state_values: list[list[float | None] | None] = Field(default_factory=list)
+    action_values: list[list[float | None] | None] = Field(default_factory=list)
     state_dim: int | None = None
     action_dim: int | None = None
 

@@ -23,9 +23,10 @@ import {
 } from "lucide-react";
 
 import { episodePreviewUrl, episodeVideoUrl, fetchEpisodeTimeseries } from "@/lib/api";
-import type { Episode, EpisodeTimeseries } from "@/lib/types";
+import type { Episode, EpisodeTimeseries, SegmentAnnotation } from "@/lib/types";
 
 type EpisodeViewerProps = {
+  annotations: SegmentAnnotation[];
   episode: Episode;
   onFrameChange: (frameIndex: number) => void;
   selectedFrame: number;
@@ -33,12 +34,18 @@ type EpisodeViewerProps = {
 
 type CameraLayout = "focus" | "grid";
 type LoadStatus = "idle" | "ready" | "error";
+type PlotChannel = "norm" | number;
 
 const SYNC_DRIFT_SECONDS = 0.08;
 const STEP_FRAMES = 1;
 const JUMP_FRAMES = 30;
 
-export function EpisodeViewer({ episode, onFrameChange, selectedFrame }: EpisodeViewerProps) {
+export function EpisodeViewer({
+  annotations,
+  episode,
+  onFrameChange,
+  selectedFrame
+}: EpisodeViewerProps) {
   const cameraNames = episode.cameraNames;
   const fps = episode.fps > 0 ? episode.fps : 20;
   const frameCount = Math.max(1, episode.length || 0);
@@ -48,6 +55,8 @@ export function EpisodeViewer({ episode, onFrameChange, selectedFrame }: Episode
   const [activeCamera, setActiveCamera] = useState<string>(cameraNames[0] ?? "");
   const [currentFrame, setCurrentFrame] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [stateChannel, setStateChannel] = useState<PlotChannel>("norm");
+  const [actionChannel, setActionChannel] = useState<PlotChannel>("norm");
   const [videoStatus, setVideoStatus] = useState<Record<string, LoadStatus>>({});
   const [timeseries, setTimeseries] = useState<EpisodeTimeseries | null>(null);
   const [timeseriesStatus, setTimeseriesStatus] = useState<"loading" | "ready" | "error">(
@@ -356,24 +365,32 @@ export function EpisodeViewer({ episode, onFrameChange, selectedFrame }: Episode
       </section>
 
       <section className="state-action-panel">
-        <NormPlot
+        <SignalPlot
+          annotations={annotations}
+          channel={stateChannel}
           color="var(--accent)"
           dim={timeseries?.stateDim ?? null}
           frameCount={frameCount}
           markerFrame={currentFrame}
+          onChannelChange={setStateChannel}
           status={timeseriesStatus}
-          title="State norm"
-          values={timeseries?.stateNorms ?? null}
+          title="State"
+          vectorValues={timeseries?.stateValues ?? null}
+          normValues={timeseries?.stateNorms ?? null}
           valueIndices={timeseries?.sampleIndices ?? null}
         />
-        <NormPlot
+        <SignalPlot
+          annotations={annotations}
+          channel={actionChannel}
           color="var(--blue)"
           dim={timeseries?.actionDim ?? null}
           frameCount={frameCount}
           markerFrame={currentFrame}
+          onChannelChange={setActionChannel}
           status={timeseriesStatus}
-          title="Action norm"
-          values={timeseries?.actionNorms ?? null}
+          title="Action"
+          vectorValues={timeseries?.actionValues ?? null}
+          normValues={timeseries?.actionNorms ?? null}
           valueIndices={timeseries?.sampleIndices ?? null}
         />
         <div className="state-action-meta">
@@ -592,42 +609,77 @@ function CameraVideo({
 }
 
 type NormPlotProps = {
+  annotations: SegmentAnnotation[];
+  channel: PlotChannel;
   color: string;
   dim: number | null;
   frameCount: number;
   markerFrame: number;
+  onChannelChange: (channel: PlotChannel) => void;
   status: "loading" | "ready" | "error";
   title: string;
-  values: (number | null)[] | null;
+  vectorValues: ((number | null)[] | null)[] | null;
+  normValues: (number | null)[] | null;
   valueIndices: number[] | null;
 };
 
-function NormPlot({
+function SignalPlot({
+  annotations,
+  channel,
   color,
   dim,
   frameCount,
   markerFrame,
+  onChannelChange,
   status,
   title,
-  values,
+  vectorValues,
+  normValues,
   valueIndices
 }: NormPlotProps) {
   const dimText = dim === null ? "dim unknown" : `${dim} dim`;
+  const values = useMemo(
+    () => valuesForChannel(channel, normValues, vectorValues),
+    [channel, normValues, vectorValues]
+  );
   const points = useMemo(() => normalizePoints(values, valueIndices, frameCount), [
     values,
     valueIndices,
     frameCount
   ]);
+  const annotationBands = useMemo(
+    () => annotationsToBands(annotations, frameCount),
+    [annotations, frameCount]
+  );
   const markerX =
     frameCount > 1
       ? Math.max(0, Math.min(100, (markerFrame / (frameCount - 1)) * 100))
       : 0;
+  const activeValue = points ? valueAtFrame(values, valueIndices, markerFrame) : null;
 
   return (
     <div className="plot-panel">
       <div className="plot-title-row">
-        <span className="plot-title">{title}</span>
-        <span className="plot-dim">{dimText}</span>
+        <div className="plot-heading">
+          <span className="plot-title">{title}</span>
+          <span className="plot-dim">{dimText}</span>
+        </div>
+        <select
+          aria-label={`${title} channel`}
+          className="plot-channel-select"
+          onChange={(event) => {
+            const next = event.target.value;
+            onChannelChange(next === "norm" ? "norm" : Number(next));
+          }}
+          value={String(channel)}
+        >
+          <option value="norm">norm</option>
+          {Array.from({ length: Math.max(0, dim ?? 0) }, (_, index) => (
+            <option key={index} value={index}>
+              dim {index}
+            </option>
+          ))}
+        </select>
       </div>
       {status === "loading" ? (
         <div className="timeseries-empty">Loading timeseries</div>
@@ -640,6 +692,16 @@ function NormPlot({
           preserveAspectRatio="none"
           viewBox="0 0 100 100"
         >
+          {annotationBands.map((band) => (
+            <rect
+              className={`timeseries-annotation-band band-${band.reviewStatus} label-${band.labelType}`}
+              height={100}
+              key={band.id}
+              width={band.width}
+              x={band.x}
+              y={0}
+            />
+          ))}
           <line
             className="timeseries-axis"
             x1={0}
@@ -664,6 +726,7 @@ function NormPlot({
       {points ? (
         <div className="plot-range muted mono">
           <span>min {formatNumber(points.min)}</span>
+          <span>now {formatMaybeNumber(activeValue)}</span>
           <span>max {formatNumber(points.max)}</span>
         </div>
       ) : null}
@@ -685,6 +748,70 @@ type NormPoints = {
   min: number;
   max: number;
 };
+
+type AnnotationBand = {
+  id: string;
+  labelType: string;
+  reviewStatus: SegmentAnnotation["reviewStatus"];
+  width: number;
+  x: number;
+};
+
+function valuesForChannel(
+  channel: PlotChannel,
+  normValues: (number | null)[] | null,
+  vectorValues: ((number | null)[] | null)[] | null
+): (number | null)[] | null {
+  if (channel === "norm") {
+    return normValues;
+  }
+  if (!vectorValues || vectorValues.length === 0) {
+    return null;
+  }
+  return vectorValues.map((vector) => vector?.[channel] ?? null);
+}
+
+function annotationsToBands(annotations: SegmentAnnotation[], frameCount: number): AnnotationBand[] {
+  if (frameCount <= 1) {
+    return [];
+  }
+  return annotations
+    .filter((annotation) => annotation.reviewStatus !== "rejected")
+    .map((annotation) => {
+      const start = Math.max(0, Math.min(frameCount - 1, annotation.startFrame));
+      const end = Math.max(start, Math.min(frameCount - 1, annotation.endFrame));
+      const x = (start / (frameCount - 1)) * 100;
+      const width = Math.max(0.35, ((end - start + 1) / frameCount) * 100);
+      return {
+        id: annotation.id,
+        labelType: annotation.labelType,
+        reviewStatus: annotation.reviewStatus,
+        width,
+        x
+      };
+    });
+}
+
+function valueAtFrame(
+  values: (number | null)[] | null,
+  indices: number[] | null,
+  frame: number
+): number | null {
+  if (!values || values.length === 0) {
+    return null;
+  }
+  let bestIndex = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < values.length; index += 1) {
+    const sampleFrame = indices?.[index] ?? index;
+    const distance = Math.abs(sampleFrame - frame);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  }
+  return values[bestIndex] ?? null;
+}
 
 function normalizePoints(
   values: (number | null)[] | null,
@@ -742,4 +869,8 @@ function formatNumber(value: number) {
   return Math.abs(value) >= 100 || Number.isInteger(value)
     ? value.toFixed(0)
     : value.toFixed(3);
+}
+
+function formatMaybeNumber(value: number | null) {
+  return value === null ? "—" : formatNumber(value);
 }

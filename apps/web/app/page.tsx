@@ -128,6 +128,7 @@ export default function Home() {
           <div className="content-split">
             <div className="viewer-column">
               <EpisodeViewer
+                annotations={annotationRows}
                 episode={selectedEpisode}
                 onFrameChange={handleSelectFrame}
                 selectedFrame={selectedFrameIndex}
