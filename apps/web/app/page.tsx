@@ -27,6 +27,7 @@ export default function Home() {
     framePage,
     frameRows,
     frameRowsStatus,
+    mutationNotice,
     rerunJob,
     rerunSession,
     rerunViewerUrl,
@@ -56,6 +57,7 @@ export default function Home() {
     handleRunVlmLabel,
     handleSelectEpisode,
     handleSelectFrame,
+    handleDismissMutationNotice,
     handleSemanticSearch,
     handleSetFrameBrowserLimit,
     handleSetFrameBrowserStart,
@@ -98,6 +100,14 @@ export default function Home() {
             ? `API dataset: ${selectedSummary.name}`
             : "Sample data fallback"}
       </div>
+      {mutationNotice ? (
+        <div className="data-source-banner data-source-sample">
+          <span>{mutationNotice}</span>
+          <button className="text-button compact-text-button" onClick={handleDismissMutationNotice} type="button">
+            Dismiss
+          </button>
+        </div>
+      ) : null}
 
       <div className="workspace">
         <DatasetBrowser

@@ -213,14 +213,15 @@ class AnnotationStore:
         dataset_dir = self._dataset_dir(dataset_id)
         dataset_dir.mkdir(parents=True, exist_ok=True)
         records = self._dataset_records(dataset_id)
+        active_records = [record for record in records if record.deleted_at is None]
         jsonl_path = dataset_dir / "annotations.jsonl"
         lines = [json.dumps(self._json_row(record), sort_keys=True) for record in records]
         _atomic_write_text(jsonl_path, "\n".join(lines) + ("\n" if lines else ""))
-        self._mirror_current_lance(dataset_dir / "annotations_current.lance", records)
+        self._mirror_current_lance(dataset_dir / "annotations_current.lance", active_records)
         if self.write_legacy_lance_mirror:
             # Deprecated compatibility path for older tools that still expect a
             # single current-view annotations.lance table.
-            self._mirror_lance(dataset_dir / "annotations.lance", records)
+            self._mirror_lance(dataset_dir / "annotations.lance", active_records)
 
     def _dataset_records(self, dataset_id: str) -> list[AnnotationRecord]:
         records = [
@@ -386,6 +387,7 @@ class AnnotationStore:
             "source": record.source.value,
             "review_status": record.review_status.value,
         }
+
 
 def _env_flag(name: str, *, default: bool) -> bool:
     raw = os.environ.get(name)

@@ -308,8 +308,9 @@ DELETE /annotations/{annotation_id}?expected_revision=...
 `PATCH /annotations/{annotation_id}` and assignment updates accept optional
 `expected_revision`. When it does not match the current annotation revision, the
 API returns `409`. Deletes are soft deletes: default list calls hide the
-annotation, while the current Lance/JSONL record keeps `deleted_at`,
-`updated_by`, and the next `revision` for audit and concurrency.
+annotation, `annotations_current.lance` keeps only active records, and
+JSONL/history/events keep `deleted_at`, `updated_by`, and the next `revision`
+for audit and concurrency.
 
 `GET /annotations/history` returns immutable audit events for annotation
 creates, updates, assignment changes, review accept/reject decisions, and
@@ -571,11 +572,13 @@ For `format=lance`, the response contains `artifacts.lance_subset` when optional
 `episodes.lance`, `frames.lance`, `media.lance`/`videos.lance`, and accepted
 current annotations for selected episodes. Compatibility exports may still write
 deprecated `annotations.lance` for older tooling, but the canonical curation
-view is `annotations_current.lance`. If optional dependencies are missing, the
-export fails with a dependency message instead of returning an empty successful
-artifact. The validation report opens each Lance table when possible and checks
-table row counts against the export metadata; failed validation returns
-`status=failed`.
+view is `annotations_current.lance`; set
+`ROBOT_DATA_STUDIO_WRITE_LEGACY_ANNOTATIONS_LANCE=0` to stop writing the
+deprecated mirror for live annotation storage. If optional dependencies are
+missing, the export fails with a dependency message instead of returning an
+empty successful artifact. The validation report opens each Lance table when
+possible and checks table row counts against the export metadata; failed
+validation returns `status=failed`.
 
 For `format=jsonl`, the response contains `artifacts.jsonl` with
 `episodes.jsonl`, `captions.jsonl`, and accepted `annotations.jsonl`. For

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
+  ApiConflictError,
   assignAnnotation,
   createExportJob,
   createFilterPreset,
@@ -160,6 +161,7 @@ export function useStudioData() {
   >("idle");
   const [dataStatus, setDataStatus] = useState<"loading" | "api" | "sample">("loading");
   const [selectedDatasetHealth, setSelectedDatasetHealth] = useState<DatasetHealth | null>(null);
+  const [mutationNotice, setMutationNotice] = useState<string | null>(null);
 
   const selectedSummary =
     summaries.find((summary) => summary.datasetId === selectedDatasetId) ??
@@ -215,6 +217,24 @@ export function useStudioData() {
       setReviewQueueRows(annotations.filter((annotation) => annotation.datasetId === datasetId));
     }
   }, []);
+
+  const handleAnnotationMutationError = useCallback(
+    async (error: unknown, datasetId: string, episodeIndex: number) => {
+      if (!(error instanceof ApiConflictError)) {
+        return;
+      }
+      setMutationNotice("Annotation changed on the server. Refreshed the episode; review and retry.");
+      try {
+        const rows = await fetchAnnotations(datasetId, episodeIndex);
+        setAnnotationRows(rows);
+        await refreshAnnotationHistory(datasetId, episodeIndex);
+        await refreshReviewQueue(datasetId);
+      } catch {
+        // Keep the rollback state if the refresh also fails.
+      }
+    },
+    [refreshAnnotationHistory, refreshReviewQueue]
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -786,6 +806,7 @@ export function useStudioData() {
       await refreshReviewQueue(created.datasetId);
     } catch (error) {
       setAnnotationRows(previousAnnotations);
+      await handleAnnotationMutationError(error, selectedEpisode.datasetId, selectedEpisode.episodeIndex);
       throw error;
     }
   }
@@ -877,6 +898,11 @@ export function useStudioData() {
       await refreshReviewQueue(updated.datasetId);
     } catch (error) {
       setAnnotationRows(previousAnnotations);
+      await handleAnnotationMutationError(
+        error,
+        existing?.datasetId ?? selectedEpisode.datasetId,
+        existing?.episodeIndex ?? selectedEpisode.episodeIndex,
+      );
       throw error;
     }
   }
@@ -945,6 +971,7 @@ export function useStudioData() {
       await refreshReviewQueue(annotation.datasetId);
     } catch (error) {
       setAnnotationRows(previousAnnotations);
+      await handleAnnotationMutationError(error, annotation.datasetId, annotation.episodeIndex);
       throw error;
     }
   }
@@ -991,6 +1018,7 @@ export function useStudioData() {
       await refreshReviewQueue(left.datasetId);
     } catch (error) {
       setAnnotationRows(previousAnnotations);
+      await handleAnnotationMutationError(error, selectedEpisode.datasetId, selectedEpisode.episodeIndex);
       throw error;
     }
   }
@@ -1012,6 +1040,7 @@ export function useStudioData() {
       await refreshReviewQueue(updated.datasetId);
     } catch (error) {
       setAnnotationRows(previousAnnotations);
+      await handleAnnotationMutationError(error, selectedEpisode.datasetId, selectedEpisode.episodeIndex);
       throw error;
     }
   }
@@ -1033,6 +1062,7 @@ export function useStudioData() {
       await refreshReviewQueue(updated.datasetId);
     } catch (error) {
       setAnnotationRows(previousAnnotations);
+      await handleAnnotationMutationError(error, selectedEpisode.datasetId, selectedEpisode.episodeIndex);
       throw error;
     }
   }
@@ -1194,6 +1224,7 @@ export function useStudioData() {
     rerunViewerUrl,
     reviewQueueRows,
     reviewerUserId,
+    mutationNotice,
     searchResults,
     selectedEpisode,
     selectedEpisodeIndex,
@@ -1218,6 +1249,7 @@ export function useStudioData() {
     handleRunVlmLabel,
     handleSelectEpisode,
     handleSelectFrame,
+    handleDismissMutationNotice: () => setMutationNotice(null),
     handleSemanticSearch,
     handleSplitSegment,
     handleUpdateEpisodeLabels,

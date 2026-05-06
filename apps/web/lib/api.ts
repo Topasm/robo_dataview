@@ -34,6 +34,15 @@ const VLM_MAX_KEYFRAMES = Number(process.env.NEXT_PUBLIC_VLM_MAX_KEYFRAMES ?? "1
 const API_KEY = process.env.NEXT_PUBLIC_ROBOT_DATA_STUDIO_API_KEY ?? "";
 const REVIEW_USER = process.env.NEXT_PUBLIC_ROBOT_DATA_STUDIO_USER ?? "";
 
+export class ApiConflictError extends Error {
+  status = 409;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "ApiConflictError";
+  }
+}
+
 type DatasetRecordResponse = {
   dataset_id: string;
   name: string;
@@ -983,9 +992,26 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
   });
   if (!response.ok) {
-    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    const detail = await readErrorDetail(response);
+    const message = detail || `API request failed: ${response.status} ${response.statusText}`;
+    if (response.status === 409) {
+      throw new ApiConflictError(message);
+    }
+    throw new Error(message);
   }
   return response.json() as Promise<T>;
+}
+
+async function readErrorDetail(response: Response): Promise<string | null> {
+  try {
+    const payload = await response.json();
+    if (typeof payload?.detail === "string") {
+      return payload.detail;
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 function splitSseEvents(buffer: string): { items: string[]; remainder: string } {

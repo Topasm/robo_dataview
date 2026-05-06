@@ -226,11 +226,12 @@ single current annotation table.
 
 The API stores annotations under `data/lance/annotations/<dataset>/`. It always
 writes `annotations.jsonl` as a restart/debug copy during the transition. When
-`pyarrow` and `lance` are installed, the same current records, including
-soft-delete tombstones, are mirrored to `annotations_current.lance`. The legacy
-`annotations.lance` mirror is still enabled by default during the transition,
-but can be disabled with `ROBOT_DATA_STUDIO_WRITE_LEGACY_ANNOTATIONS_LANCE=0`.
-Default list APIs hide rows where `deleted_at` is set.
+`pyarrow` and `lance` are installed, active records are mirrored to
+`annotations_current.lance`; soft-delete tombstones stay in `annotations.jsonl`
+and the immutable event log. The legacy `annotations.lance` mirror is still
+enabled by default during the transition, but it is deprecated and can be
+disabled with `ROBOT_DATA_STUDIO_WRITE_LEGACY_ANNOTATIONS_LANCE=0`. Default list
+APIs hide rows where `deleted_at` is set.
 
 Every create, update, and delete also appends an immutable event to
 `history.jsonl` and mirrors dataset history to `annotation_events.lance` in the

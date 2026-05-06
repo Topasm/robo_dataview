@@ -370,8 +370,9 @@ Definition of done:
 - `annotations_current.lance` and `annotation_events.lance` are the canonical
   curation tables. The deprecated `annotations.lance` mirror is disabled by
   default after downstream consumers are migrated.
-- Annotation writes use expected revisions, soft-delete tombstones, and explicit
-  audit actions consistently across API, UI, and Lance mirrors.
+- Annotation writes use expected revisions, active-only current mirrors,
+  soft-delete tombstones in JSONL/events, and explicit audit actions
+  consistently across API, UI, and Lance mirrors.
 - The default search UI calls a unified `mode=auto` search endpoint; semantic,
   full-text, vector, and raw filter modes stay available under Advanced/API
   usage.

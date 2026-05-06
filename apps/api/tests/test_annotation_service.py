@@ -94,6 +94,43 @@ class AnnotationServiceTest(unittest.TestCase):
             self.assertEqual(row["source"], "human")
             self.assertEqual(row["review_status"], "pending")
 
+    def test_current_lance_mirror_receives_active_records_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = AnnotationStore(storage_root=Path(tmpdir), mirror_lance=False)
+            first = store.create(
+                AnnotationCreate(
+                    dataset_id="dataset-a",
+                    episode_index=0,
+                    start_frame=0,
+                    end_frame=3,
+                    label_type="phase",
+                    label_value="approach",
+                )
+            )
+            second = store.create(
+                AnnotationCreate(
+                    dataset_id="dataset-a",
+                    episode_index=0,
+                    start_frame=4,
+                    end_frame=8,
+                    label_type="phase",
+                    label_value="grasp",
+                )
+            )
+            with patch.object(store, "_mirror_current_lance") as current_mirror:
+                store.delete(first.annotation_id)
+
+            mirrored_records = current_mirror.call_args.args[1]
+            self.assertEqual([record.annotation_id for record in mirrored_records], [second.annotation_id])
+            jsonl_path = Path(store.storage_paths("dataset-a")["jsonl"])
+            rows = [
+                json.loads(line)
+                for line in jsonl_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            deleted_rows = [row for row in rows if row["annotation_id"] == first.annotation_id]
+            self.assertIsNotNone(deleted_rows[0]["deleted_at"])
+
     def test_annotation_store_records_history_jsonl_across_instances(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             storage_root = Path(tmpdir)

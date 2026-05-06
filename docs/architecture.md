@@ -224,7 +224,7 @@ Edit annotation
   -> web sends annotation mutation
   -> backend validates frame ranges and label payload
   -> JSONL restart/debug copy is updated
-  -> current annotation is mirrored to annotations_current.lance when available
+  -> active current annotations are mirrored to annotations_current.lance when available
   -> audit event is mirrored to annotation_events.lance when available
 
 Export subset

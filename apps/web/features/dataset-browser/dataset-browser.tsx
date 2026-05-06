@@ -44,12 +44,15 @@ export function DatasetBrowser({
   const mediaValue = getMediaHealthValue(mediaTable, legacyVideosTable, health?.cameraCount ?? 0);
   const presentCoreTableCount = coreTables.filter((table) => table.present).length;
   const tableIssues =
-    health?.tables.flatMap((table) =>
-      [
+    health?.tables.flatMap((table) => {
+      if (table.table === "videos" && mediaTable?.present) {
+        return [];
+      }
+      return [
         ...table.missingRequiredColumns.map((column) => `${table.table}: missing ${column}`),
         ...table.warnings.map((warning) => `${table.table}: ${warning}`)
-      ]
-    ) ?? [];
+      ];
+    }) ?? [];
   const healthIssues = [...(health?.errors ?? []), ...(health?.warnings ?? []), ...tableIssues];
   const healthErrorCount = health?.errors.length ?? 0;
   const hasHealthErrors = healthErrorCount > 0;
