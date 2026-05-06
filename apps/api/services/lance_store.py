@@ -1396,6 +1396,93 @@ class LanceMediaStore:
         return None
 
 
+class LanceFilterEngine:
+    def __init__(self, owner: Any) -> None:
+        self.owner = owner
+
+    def filter_episode_items(
+        self,
+        dataset_id: str,
+        query: str,
+        *,
+        limit: int | None = None,
+    ) -> list[EpisodeListItem]:
+        try:
+            filters = _parse_filter_query(query)
+        except ValueError:
+            return []
+        bundle = self.owner._bundles.get(dataset_id)
+        if bundle is not None:
+            pushed = self.filter_lance_episode_items(
+                dataset_id,
+                bundle,
+                filters,
+                limit=limit,
+            )
+            if pushed is not None:
+                return pushed
+
+        matched: list[EpisodeListItem] = []
+        offset = 0
+        batch_size = 1000
+        while limit is None or len(matched) < limit:
+            episodes = self.owner.list_episodes(dataset_id, limit=batch_size, offset=offset)
+            if not episodes:
+                break
+            matched.extend(
+                episode
+                for episode in episodes
+                if all(
+                    _matches_filter(episode, field, operator, expected)
+                    for field, operator, expected in filters
+                )
+            )
+            if len(episodes) < batch_size:
+                break
+            offset += len(episodes)
+        return matched if limit is None else matched[:limit]
+
+    def filter_lance_episode_items(
+        self,
+        dataset_id: str,
+        bundle: LanceBundle,
+        filters: list[tuple[str, str, Any]],
+        *,
+        limit: int | None,
+    ) -> list[EpisodeListItem] | None:
+        expression = _lance_filter_expression(filters, bundle.schemas["episodes"])
+        if expression is None:
+            return None
+        dataset = bundle.tables["episodes"]
+        if not hasattr(dataset, "scanner"):
+            return None
+        columns = _metadata_columns(bundle.schemas["episodes"], include_arrays=False)
+        try:
+            scanner = dataset.scanner(
+                columns=columns,
+                filter=expression,
+                limit=_count_rows(dataset),
+            )
+            rows = _rows_from_table(scanner.to_table())
+        except Exception:
+            return None
+        camera_names = self.owner._camera_names_for_bundle(bundle)
+        items: list[EpisodeListItem] = []
+        for row in rows:
+            payload = self.owner._apply_episode_overrides(
+                dataset_id,
+                self.owner._episode_payload(dataset_id, row, bundle.schemas["episodes"]),
+            )
+            payload["camera_names"] = camera_names
+            item = EpisodeListItem(**payload)
+            if all(
+                _matches_filter(item, field, operator, expected)
+                for field, operator, expected in filters
+            ):
+                items.append(item)
+        return items if limit is None else items[:limit]
+
+
 class LanceDatasetStore:
     """Thin service boundary for Lance-backed dataset access.
 
@@ -1429,6 +1516,7 @@ class LanceDatasetStore:
         self._episode_label_history: list[EpisodeLabelHistoryRecord] = []
         self.health = LanceHealthService(self)
         self.media = LanceMediaStore(self)
+        self.filter_engine = LanceFilterEngine(self)
         if self.persist_episode_labels:
             self._load_episode_label_overrides()
             self._load_episode_label_history()
@@ -1662,17 +1750,10 @@ class LanceDatasetStore:
 
         needs_materialized_page = filter_query or sort_by != "episode_index" or sort_order != "asc"
         if needs_materialized_page:
-            episodes = self._all_episode_items(dataset_id)
             if filter_query:
-                filters = _parse_filter_query(filter_query)
-                episodes = [
-                    episode
-                    for episode in episodes
-                    if all(
-                        _matches_filter(episode, field, operator, expected)
-                        for field, operator, expected in filters
-                    )
-                ]
+                episodes = self.filter_episode_items(dataset_id, filter_query)
+            else:
+                episodes = self._all_episode_items(dataset_id)
             episodes = _sort_episodes(episodes, sort_by=sort_by, sort_order=sort_order)
             total = len(episodes)
             items = episodes[offset : offset + limit]
@@ -1987,35 +2068,7 @@ class LanceDatasetStore:
         *,
         limit: int | None = None,
     ) -> list[EpisodeListItem]:
-        try:
-            filters = _parse_filter_query(query)
-        except ValueError:
-            return []
-        bundle = self._bundles.get(dataset_id)
-        if bundle is not None:
-            pushed = self._filter_lance_episode_items(dataset_id, bundle, filters, limit=limit)
-            if pushed is not None:
-                return pushed
-
-        matched: list[EpisodeListItem] = []
-        offset = 0
-        batch_size = 1000
-        while limit is None or len(matched) < limit:
-            episodes = self.list_episodes(dataset_id, limit=batch_size, offset=offset)
-            if not episodes:
-                break
-            matched.extend(
-                episode
-                for episode in episodes
-                if all(
-                    _matches_filter(episode, field, operator, expected)
-                    for field, operator, expected in filters
-                )
-            )
-            if len(episodes) < batch_size:
-                break
-            offset += len(episodes)
-        return matched if limit is None else matched[:limit]
+        return self.filter_engine.filter_episode_items(dataset_id, query, limit=limit)
 
     def _filter_lance_episode_items(
         self,
@@ -2025,37 +2078,12 @@ class LanceDatasetStore:
         *,
         limit: int | None,
     ) -> list[EpisodeListItem] | None:
-        expression = _lance_filter_expression(filters, bundle.schemas["episodes"])
-        if expression is None:
-            return None
-        dataset = bundle.tables["episodes"]
-        if not hasattr(dataset, "scanner"):
-            return None
-        columns = _metadata_columns(bundle.schemas["episodes"], include_arrays=False)
-        try:
-            scanner = dataset.scanner(
-                columns=columns,
-                filter=expression,
-                limit=_count_rows(dataset),
-            )
-            rows = _rows_from_table(scanner.to_table())
-        except Exception:
-            return None
-        camera_names = self._camera_names_for_bundle(bundle)
-        items: list[EpisodeListItem] = []
-        for row in rows:
-            payload = self._apply_episode_overrides(
-                dataset_id,
-                self._episode_payload(dataset_id, row, bundle.schemas["episodes"]),
-            )
-            payload["camera_names"] = camera_names
-            item = EpisodeListItem(**payload)
-            if all(
-                _matches_filter(item, field, operator, expected)
-                for field, operator, expected in filters
-            ):
-                items.append(item)
-        return items if limit is None else items[:limit]
+        return self.filter_engine.filter_lance_episode_items(
+            dataset_id,
+            bundle,
+            filters,
+            limit=limit,
+        )
 
     def _name_from_uri(self, uri: str) -> str:
         if uri.startswith("hf://datasets/"):

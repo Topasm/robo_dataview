@@ -65,8 +65,9 @@ apps/api
   FastAPI app
   In-memory service registries for datasets and exports; persisted job and
   Rerun session records under `data/app`
-  Lance dataset registry with extracted health and media service boundaries so
-  table validation and media/video lookup can evolve outside the core store
+  Lance dataset registry with extracted health, media, and filter service
+  boundaries so table validation, media/video lookup, and predicate pushdown can
+  evolve outside the core store
   SQLite-backed job metadata registry for restart-safe job lookups
   Transitional JSONL-backed annotation, embedding, version, and VLM response
   debug/restart copies

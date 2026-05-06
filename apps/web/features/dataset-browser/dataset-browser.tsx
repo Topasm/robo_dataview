@@ -39,6 +39,9 @@ export function DatasetBrowser({
   ].slice(0, 4);
   const coreTables =
     health?.tables.filter((table) => table.table === "episodes" || table.table === "frames") ?? [];
+  const mediaTable = health?.tables.find((table) => table.table === "media") ?? null;
+  const legacyVideosTable = health?.tables.find((table) => table.table === "videos") ?? null;
+  const mediaValue = getMediaHealthValue(mediaTable, legacyVideosTable, health?.cameraCount ?? 0);
   const presentCoreTableCount = coreTables.filter((table) => table.present).length;
   const tableIssues =
     health?.tables.flatMap((table) =>
@@ -123,6 +126,7 @@ export function DatasetBrowser({
           <div className="health-details">
             <HealthFact label="Storage" value={health.storageModel} />
             <HealthFact label="Core" value={`${presentCoreTableCount}/${coreTables.length}`} />
+            <HealthFact label="Media" value={mediaValue} />
           </div>
           {healthIssues.length > 0 ? (
             <div className="health-issues">
@@ -211,4 +215,29 @@ function HealthFact({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   );
+}
+
+function getMediaHealthValue(
+  mediaTable: DatasetHealth["tables"][number] | null,
+  legacyVideosTable: DatasetHealth["tables"][number] | null,
+  cameraCount: number
+) {
+  if (mediaTable?.present) {
+    const suffix = legacyVideosTable?.present ? " + legacy" : "";
+    return `${formatRowCount(mediaTable.rowCount)}${suffix}`;
+  }
+  if (legacyVideosTable?.present) {
+    return `legacy ${formatRowCount(legacyVideosTable.rowCount)}`;
+  }
+  if (cameraCount > 0) {
+    return "episode";
+  }
+  return "none";
+}
+
+function formatRowCount(value: number | null) {
+  if (value === null) {
+    return "ready";
+  }
+  return `${value.toLocaleString()} row${value === 1 ? "" : "s"}`;
 }
