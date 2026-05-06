@@ -94,7 +94,12 @@ function optimisticAnnotation(
     confidence: 1,
     reviewStatus: "accepted",
     createdBy: "local",
+    updatedBy: "local",
     assignedTo: null,
+    revision: 1,
+    deletedAt: null,
+    lockOwner: null,
+    lockExpiresAt: null,
     ...patch
   };
 }
@@ -862,7 +867,8 @@ export function useStudioData() {
         labelValue: draft.labelValue,
         startFrame: draft.startFrame,
         endFrame: draft.endFrame,
-        reviewStatus: "edited"
+        reviewStatus: "edited",
+        expectedRevision: existing?.revision
       });
       setAnnotationRows((current) =>
         sortAnnotations(current.map((annotation) => (annotation.id === annotationId ? updated : annotation)))
@@ -925,7 +931,7 @@ export function useStudioData() {
         confidence: 1,
         reviewStatus: "edited"
       });
-      await deleteAnnotation(annotation.id);
+      await deleteAnnotation(annotation.id, annotation.revision);
       setAnnotationRows((current) =>
         sortAnnotations([
           ...current.filter(
@@ -973,8 +979,8 @@ export function useStudioData() {
         confidence: Math.max(left.confidence, right.confidence),
         reviewStatus: "edited"
       });
-      await deleteAnnotation(left.id);
-      await deleteAnnotation(right.id);
+      await deleteAnnotation(left.id, left.revision);
+      await deleteAnnotation(right.id, right.revision);
       setAnnotationRows((current) =>
         sortAnnotations([
           ...current.filter((row) => row.id !== mergedOptimistic.id),
@@ -997,7 +1003,8 @@ export function useStudioData() {
       )
     );
     try {
-      const updated = await updateAnnotationReviewStatus(annotationId, status);
+      const existing = annotationRows.find((annotation) => annotation.id === annotationId);
+      const updated = await updateAnnotationReviewStatus(annotationId, status, existing?.revision);
       setAnnotationRows((current) =>
         current.map((annotation) => (annotation.id === annotationId ? updated : annotation))
       );
@@ -1017,7 +1024,8 @@ export function useStudioData() {
       )
     );
     try {
-      const updated = await assignAnnotation(annotationId, assignedTo);
+      const existing = annotationRows.find((annotation) => annotation.id === annotationId);
+      const updated = await assignAnnotation(annotationId, assignedTo, existing?.revision);
       setAnnotationRows((current) =>
         current.map((annotation) => (annotation.id === annotationId ? updated : annotation))
       );
@@ -1033,7 +1041,8 @@ export function useStudioData() {
     const previousAnnotations = annotationRows;
     setAnnotationRows((current) => current.filter((annotation) => annotation.id !== annotationId));
     try {
-      await deleteAnnotation(annotationId);
+      const existing = previousAnnotations.find((annotation) => annotation.id === annotationId);
+      await deleteAnnotation(annotationId, existing?.revision);
       await refreshAnnotationHistory(selectedEpisode.datasetId, selectedEpisode.episodeIndex);
       await refreshReviewQueue(selectedEpisode.datasetId);
     } catch (error) {

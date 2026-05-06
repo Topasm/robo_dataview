@@ -41,7 +41,8 @@ Python Workers
   Phase segmentation
   Thumbnail generation
   Validation
-  LeRobot/HF export
+  Lance subset/version export
+  Compatibility exporters: LeRobot/HF/JSONL/VLA
 ```
 
 ## Current Implementation Snapshot
@@ -64,6 +65,8 @@ apps/api
   FastAPI app
   In-memory service registries for datasets and exports; persisted job and
   Rerun session records under `data/app`
+  Lance dataset registry with extracted health and media service boundaries so
+  table validation and media/video lookup can evolve outside the core store
   SQLite-backed job metadata registry for restart-safe job lookups
   Transitional JSONL-backed annotation, embedding, version, and VLM response
   debug/restart copies
@@ -107,14 +110,14 @@ Implemented now:
   time-series fallback, annotation overlays, and bad-frame flags.
 - Selected-frame web metadata panel backed by the frame API.
 - Annotation-backed selected-frame exact-label mutation.
-- Annotation CRUD with range validation, persisted JSONL, web edit actions, and
-  midpoint split scaffolding.
+- Annotation CRUD with range validation, revision conflict checks, soft-delete
+  tombstones, persisted JSONL, web edit actions, and midpoint split scaffolding.
 - Episode-level label overlay updates for caption, success/failure, failure
   reason, quality, split, and review status, with optional
   `episode_labels.lance` mirroring.
 - Optional `annotations_current.lance`, `annotation_events.lance`,
-  compatibility `annotations.lance`, `episode_labels.lance`, `embeddings.lance`,
-  and `versions.lance` mirroring.
+  deprecated compatibility `annotations.lance`, `episode_labels.lance`,
+  `embeddings.lance`, and `versions.lance` mirroring.
 - Text-embedding semantic search with deterministic fallback, optional
   OpenAI-compatible text inference, and optional LanceDB table mirror/query when
   `lancedb` is installed.
@@ -219,13 +222,15 @@ Open episode
 Edit annotation
   -> web sends annotation mutation
   -> backend validates frame ranges and label payload
-  -> annotation is stored in annotations_current.lance
-  -> audit event is stored in annotation_events.lance
+  -> JSONL restart/debug copy is updated
+  -> current annotation is mirrored to annotations_current.lance when available
+  -> audit event is mirrored to annotation_events.lance when available
 
 Export subset
   -> filter query resolves selected episodes
   -> accepted annotations are applied
-  -> worker creates LeRobot/Lance/HF-compatible output
+  -> worker creates Lance subset/version output by default
+  -> compatibility exporters can create LeRobot/HF/JSONL/VLA outputs
   -> versions.lance records lineage
 ```
 

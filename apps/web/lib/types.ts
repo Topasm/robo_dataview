@@ -145,7 +145,12 @@ export type SegmentAnnotation = {
   confidence: number;
   reviewStatus: ReviewStatus;
   createdBy: string;
+  updatedBy: string;
   assignedTo: string | null;
+  revision: number;
+  deletedAt: string | null;
+  lockOwner: string | null;
+  lockExpiresAt: string | null;
 };
 
 export type AnnotationHistoryRecord = {

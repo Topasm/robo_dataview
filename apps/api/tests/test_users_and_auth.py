@@ -116,7 +116,7 @@ class UsersAndAuthTest(unittest.TestCase):
 
         self.assertEqual(created.created_by, "alice")
         self.assertEqual(assigned.assigned_to, "bob")
-        self.assertEqual([event.action for event in history], ["create", "update", "delete"])
+        self.assertEqual([event.action for event in history], ["create", "assign", "delete"])
         self.assertEqual([event.actor for event in history], ["alice", "lead", "alice"])
         self.assertEqual(history[1].after["assigned_to"], "bob")
 

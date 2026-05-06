@@ -16,7 +16,7 @@ state is mirrored into queryable Lance current/events tables.
 data/lance/annotations/<dataset>/annotations.jsonl
 data/lance/annotations/<dataset>/annotations_current.lance
 data/lance/annotations/<dataset>/annotation_events.lance
-data/lance/annotations/<dataset>/annotations.lance  # compatibility current-view mirror
+data/lance/annotations/<dataset>/annotations.lance  # deprecated compatibility mirror
 
 data/lance/embeddings/<dataset>/embeddings.jsonl
 data/lance/embeddings/<dataset>/embeddings.lance
@@ -221,19 +221,22 @@ The source-of-truth code definition lives in
 environment with PyArrow installed,
 `build_annotations_current_pyarrow_schema()` returns the schema used to create
 `annotations_current.lance`. `ANNOTATIONS_COLUMNS` and `annotations.lance`
-remain compatibility aliases for older tools that still expect a single current
-annotation table.
+remain deprecated compatibility aliases for older tools that still expect a
+single current annotation table.
 
 The API stores annotations under `data/lance/annotations/<dataset>/`. It always
 writes `annotations.jsonl` as a restart/debug copy during the transition. When
-`pyarrow` and `lance` are installed, the same current records are mirrored to
-`annotations_current.lance` and compatibility `annotations.lance` with the
-schema above.
+`pyarrow` and `lance` are installed, the same current records, including
+soft-delete tombstones, are mirrored to `annotations_current.lance`. The legacy
+`annotations.lance` mirror is still enabled by default during the transition,
+but can be disabled with `ROBOT_DATA_STUDIO_WRITE_LEGACY_ANNOTATIONS_LANCE=0`.
+Default list APIs hide rows where `deleted_at` is set.
 
 Every create, update, and delete also appends an immutable event to
 `history.jsonl` and mirrors dataset history to `annotation_events.lance` in the
 same dataset directory. History events include the annotation id, episode index,
-action, actor, timestamp, and before/after annotation snapshots so review
+action (`create`, `update`, `assign`, `accept`, `reject`, `delete`), actor,
+timestamp, and before/after annotation snapshots so review
 changes can be audited without mutating raw Lance tables.
 
 Allowed `source` values:

@@ -82,7 +82,12 @@ export const annotations: SegmentAnnotation[] = [
     confidence: 1,
     reviewStatus: "accepted",
     createdBy: "local",
-    assignedTo: null
+    updatedBy: "local",
+    assignedTo: null,
+    revision: 1,
+    deletedAt: null,
+    lockOwner: null,
+    lockExpiresAt: null
   },
   {
     id: "seg-grasp",
@@ -96,7 +101,12 @@ export const annotations: SegmentAnnotation[] = [
     confidence: 0.82,
     reviewStatus: "pending",
     createdBy: "vlm",
-    assignedTo: "local"
+    updatedBy: "vlm",
+    assignedTo: "local",
+    revision: 1,
+    deletedAt: null,
+    lockOwner: null,
+    lockExpiresAt: null
   },
   {
     id: "seg-fold",
@@ -110,7 +120,12 @@ export const annotations: SegmentAnnotation[] = [
     confidence: 1,
     reviewStatus: "accepted",
     createdBy: "local",
-    assignedTo: null
+    updatedBy: "local",
+    assignedTo: null,
+    revision: 1,
+    deletedAt: null,
+    lockOwner: null,
+    lockExpiresAt: null
   },
   {
     id: "seg-release",
@@ -124,7 +139,12 @@ export const annotations: SegmentAnnotation[] = [
     confidence: 0.64,
     reviewStatus: "pending",
     createdBy: "heuristic",
-    assignedTo: "local"
+    updatedBy: "heuristic",
+    assignedTo: "local",
+    revision: 1,
+    deletedAt: null,
+    lockOwner: null,
+    lockExpiresAt: null
   }
 ];
 

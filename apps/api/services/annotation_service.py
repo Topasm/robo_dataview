@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 from uuid import uuid4
@@ -13,7 +14,7 @@ from apps.api.schemas.annotations import (
     AnnotationRecord,
     AnnotationUpdate,
 )
-from apps.api.services.pydantic_compat import model_dump
+from apps.api.services.pydantic_compat import model_copy, model_dump
 from packages.robot_schema import (
     build_annotation_events_pyarrow_schema,
     build_annotations_current_pyarrow_schema,
@@ -24,6 +25,10 @@ from packages.robot_schema import (
 ANNOTATION_STORAGE_ROOT = Path("data/lance/annotations")
 
 
+class AnnotationConflictError(RuntimeError):
+    pass
+
+
 class AnnotationStore:
     def __init__(
         self,
@@ -31,10 +36,16 @@ class AnnotationStore:
         *,
         persist: bool = True,
         mirror_lance: bool = True,
+        write_legacy_lance_mirror: bool | None = None,
     ) -> None:
         self.storage_root = storage_root
         self.persist = persist
         self.mirror_lance = mirror_lance
+        self.write_legacy_lance_mirror = (
+            _env_flag("ROBOT_DATA_STUDIO_WRITE_LEGACY_ANNOTATIONS_LANCE", default=True)
+            if write_legacy_lance_mirror is None
+            else write_legacy_lance_mirror
+        )
         self._records: dict[str, AnnotationRecord] = {}
         self._history: list[AnnotationHistoryRecord] = []
         if self.persist:
@@ -46,6 +57,7 @@ class AnnotationStore:
             for record in self._records.values()
             if record.dataset_id == dataset_id
             and (episode_index is None or record.episode_index == episode_index)
+            and record.deleted_at is None
         ]
         return sorted(records, key=lambda record: (record.episode_index, record.start_frame))
 
@@ -72,12 +84,27 @@ class AnnotationStore:
         self._persist_dataset(record.dataset_id)
         return record
 
-    def update(self, annotation_id: str, payload: AnnotationUpdate) -> AnnotationRecord | None:
+    def update(
+        self,
+        annotation_id: str,
+        payload: AnnotationUpdate,
+        *,
+        action: str | None = None,
+    ) -> AnnotationRecord | None:
         existing = self._records.get(annotation_id)
-        if existing is None:
+        if existing is None or existing.deleted_at is not None:
             return None
         update_data = model_dump(payload, exclude_unset=True)
+        expected_revision = update_data.pop("expected_revision", None)
+        if (
+            expected_revision is not None
+            and int(expected_revision) != int(existing.revision)
+        ):
+            raise AnnotationConflictError(
+                f"annotation revision mismatch: expected {expected_revision}, current {existing.revision}"
+            )
         actor = str(update_data.pop("updated_by", None) or "local")
+        action = action or _annotation_update_action(update_data)
         merged = model_dump(existing)
         merged.update(update_data)
         if merged["end_frame"] < merged["start_frame"]:
@@ -91,7 +118,7 @@ class AnnotationStore:
             dataset_id=record.dataset_id,
             annotation_id=record.annotation_id,
             episode_index=record.episode_index,
-            action="update",
+            action=action,
             actor=actor,
             before=self._json_row(existing),
             after=self._json_row(record),
@@ -99,20 +126,44 @@ class AnnotationStore:
         self._persist_dataset(record.dataset_id)
         return record
 
-    def delete(self, annotation_id: str, *, actor: str = "local") -> bool:
-        existing = self._records.pop(annotation_id, None)
-        if existing is None:
+    def delete(
+        self,
+        annotation_id: str,
+        *,
+        actor: str = "local",
+        expected_revision: int | None = None,
+    ) -> bool:
+        existing = self._records.get(annotation_id)
+        if existing is None or existing.deleted_at is not None:
             return False
+        if (
+            expected_revision is not None
+            and int(expected_revision) != int(existing.revision)
+        ):
+            raise AnnotationConflictError(
+                f"annotation revision mismatch: expected {expected_revision}, current {existing.revision}"
+            )
+        now = datetime.now(timezone.utc)
+        record = model_copy(
+            existing,
+            update={
+                "deleted_at": now,
+                "updated_at": now,
+                "updated_by": actor,
+                "revision": existing.revision + 1,
+            },
+        )
+        self._records[annotation_id] = record
         self._append_history(
-            dataset_id=existing.dataset_id,
-            annotation_id=existing.annotation_id,
-            episode_index=existing.episode_index,
+            dataset_id=record.dataset_id,
+            annotation_id=record.annotation_id,
+            episode_index=record.episode_index,
             action="delete",
             actor=actor,
             before=self._json_row(existing),
             after=None,
         )
-        self._persist_dataset(existing.dataset_id)
+        self._persist_dataset(record.dataset_id)
         return True
 
     def list_history(
@@ -135,6 +186,7 @@ class AnnotationStore:
         return {
             "jsonl": str(dataset_dir / "annotations.jsonl"),
             "lance": str(dataset_dir / "annotations.lance"),
+            "legacy_lance": str(dataset_dir / "annotations.lance"),
             "current_lance": str(dataset_dir / "annotations_current.lance"),
             "events_lance": str(dataset_dir / "annotation_events.lance"),
             "history": str(dataset_dir / "history.jsonl"),
@@ -160,14 +212,28 @@ class AnnotationStore:
             return
         dataset_dir = self._dataset_dir(dataset_id)
         dataset_dir.mkdir(parents=True, exist_ok=True)
-        records = self.list(dataset_id=dataset_id, episode_index=None)
+        records = self._dataset_records(dataset_id)
         jsonl_path = dataset_dir / "annotations.jsonl"
         lines = [json.dumps(self._json_row(record), sort_keys=True) for record in records]
         _atomic_write_text(jsonl_path, "\n".join(lines) + ("\n" if lines else ""))
         self._mirror_current_lance(dataset_dir / "annotations_current.lance", records)
-        # Keep the original path during the transition so older tools/tests that
-        # expect annotations.lance still see the current view.
-        self._mirror_lance(dataset_dir / "annotations.lance", records)
+        if self.write_legacy_lance_mirror:
+            # Deprecated compatibility path for older tools that still expect a
+            # single current-view annotations.lance table.
+            self._mirror_lance(dataset_dir / "annotations.lance", records)
+
+    def _dataset_records(self, dataset_id: str) -> list[AnnotationRecord]:
+        records = [
+            record for record in self._records.values() if record.dataset_id == dataset_id
+        ]
+        return sorted(
+            records,
+            key=lambda record: (
+                record.episode_index,
+                record.start_frame,
+                record.annotation_id,
+            ),
+        )
 
     def _append_history(
         self,
@@ -321,8 +387,26 @@ class AnnotationStore:
             "review_status": record.review_status.value,
         }
 
+def _env_flag(name: str, *, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off", ""}
+
 
 annotation_store = AnnotationStore()
+
+
+def _annotation_update_action(update_data: dict[str, object]) -> str:
+    if set(update_data) == {"assigned_to"}:
+        return "assign"
+    review_status = update_data.get("review_status")
+    status_value = getattr(review_status, "value", review_status)
+    if status_value == "accepted":
+        return "accept"
+    if status_value == "rejected":
+        return "reject"
+    return "update"
 
 
 def _atomic_write_text(path: Path, text: str) -> None:

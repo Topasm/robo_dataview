@@ -1133,12 +1133,277 @@ class LanceDependencyError(RuntimeError):
     pass
 
 
+class LanceHealthService:
+    def __init__(self, owner: Any) -> None:
+        self.owner = owner
+
+    def get_health(self, dataset_id: str, *, level: str = "shallow") -> DatasetHealth | None:
+        if level not in {"shallow", "deep"}:
+            raise ValueError("health level must be 'shallow' or 'deep'")
+        record = self.owner._datasets.get(dataset_id)
+        if record is None:
+            return None
+        summary = self.owner._summaries.get(dataset_id)
+        bundle = self.owner._bundles.get(dataset_id)
+        warnings: list[str] = []
+        errors: list[str] = []
+        tables: list[DatasetTableHealth] = []
+
+        if record.status != "indexed" and record.status != "sample":
+            errors.append(record.message or f"dataset status is {record.status}")
+        if summary is None:
+            errors.append("dataset summary is missing")
+
+        if bundle is None:
+            storage_model = "sample_or_metadata"
+            if record.status == "indexed":
+                warnings.append("dataset is metadata-backed; Lance raw tables are not open")
+        else:
+            storage_model = "lance"
+            tables = self.table_health(bundle)
+            for table in tables:
+                for missing in table.missing_required_columns:
+                    errors.append(f"{table.table}.lance missing required column: {missing}")
+            if "episodes" not in bundle.tables:
+                errors.append("episodes.lance is missing")
+
+        episode_count = summary.episode_count if summary is not None else 0
+        frame_count = summary.frame_count if summary is not None else 0
+        camera_names = summary.camera_names if summary is not None else []
+        if episode_count <= 0:
+            errors.append("dataset has no episodes")
+        if not camera_names:
+            warnings.append("dataset has no detected cameras")
+
+        if level == "deep" and bundle is not None and episode_count > 0:
+            index_cache = self.owner._build_episode_row_offsets(bundle)
+            if len(index_cache) != episode_count:
+                warnings.append(
+                    "episode_index values are duplicated or unavailable for some rows"
+                )
+            if index_cache:
+                sorted_indices = sorted(index_cache)
+                expected = list(range(sorted_indices[0], sorted_indices[0] + len(sorted_indices)))
+                if sorted_indices != expected:
+                    warnings.append("episode_index is non-contiguous; row-offset cache is active")
+
+            sample_page = self.owner.list_episode_page(dataset_id, limit=min(10, episode_count), offset=0)
+            missing_timeseries = [
+                episode.episode_index
+                for episode in sample_page.items
+                if self.owner.get_episode_timeseries(dataset_id, episode.episode_index) is None
+            ]
+            if missing_timeseries:
+                warnings.append(
+                    "sample episodes without state/action timeseries: "
+                    + ", ".join(str(index) for index in missing_timeseries[:10])
+                )
+
+            sample_video_missing: list[str] = []
+            for episode in sample_page.items:
+                for camera in episode.camera_names[:3]:
+                    source = self.owner.get_video_source(dataset_id, episode.episode_index, camera)
+                    if source is None or source.size <= 0:
+                        sample_video_missing.append(f"ep{episode.episode_index}:{camera}")
+            if sample_video_missing:
+                warnings.append(
+                    "sample camera streams without readable video source: "
+                    + ", ".join(sample_video_missing[:10])
+                )
+
+        return DatasetHealth(
+            dataset_id=dataset_id,
+            ok=not errors,
+            status=record.status,
+            storage_model=storage_model,
+            level=level,
+            episode_count=episode_count,
+            frame_count=frame_count,
+            camera_count=len(camera_names),
+            tables=tables,
+            warnings=warnings,
+            errors=errors,
+        )
+
+    def table_health(self, bundle: "LanceBundle") -> list[DatasetTableHealth]:
+        required = {
+            "episodes": ["episode_index"],
+            "frames": ["episode_index", "frame_index"],
+            "media": [],
+            "videos": [],
+            "cameras": [],
+            "tasks": [],
+            "splits": [],
+        }
+        health: list[DatasetTableHealth] = []
+        for table_name in TABLE_NAMES:
+            dataset = bundle.tables.get(table_name)
+            columns = bundle.schemas.get(table_name, [])
+            missing_required = [
+                column for column in required.get(table_name, []) if column not in columns
+            ]
+            table_warnings: list[str] = []
+            if table_name == "episodes":
+                has_state = _first_present_name(columns, STATE_COLUMNS) is not None
+                has_action = _first_present_name(columns, ACTION_COLUMNS) is not None
+                has_video = any(_looks_like_video_blob_column(column) for column in columns)
+                if not has_state:
+                    table_warnings.append("no episode-level state array column")
+                if not has_action:
+                    table_warnings.append("no episode-level action array column")
+                if not has_video:
+                    table_warnings.append("no episode-level video blob columns")
+            if table_name in {"media", "videos"}:
+                has_media_ref = (
+                    _first_present_name(columns, VIDEO_BLOB_COLUMNS) is not None
+                    or _first_present_name(columns, VIDEO_PATH_COLUMNS) is not None
+                )
+                if dataset is not None and not has_media_ref:
+                    table_warnings.append("no media blob/path column detected")
+            health.append(
+                DatasetTableHealth(
+                    table=table_name,
+                    present=dataset is not None,
+                    row_count=_count_rows(dataset) if dataset is not None else None,
+                    columns=columns,
+                    missing_required_columns=missing_required,
+                    warnings=table_warnings,
+                )
+            )
+        return health
+
+
+class LanceMediaStore:
+    def __init__(self, owner: Any) -> None:
+        self.owner = owner
+
+    def media_table(self, bundle: "LanceBundle") -> tuple[str, Any | None]:
+        if "media" in bundle.tables:
+            return "media", bundle.tables["media"]
+        return "videos", bundle.tables.get("videos")
+
+    def camera_names_from_media_table(self, bundle: "LanceBundle") -> list[str]:
+        table_name, media = self.media_table(bundle)
+        if media is None or _count_rows(media) == 0:
+            return []
+        schema = bundle.schemas.get(table_name, [])
+        camera_name = _first_present_name(schema, VIDEO_CAMERA_COLUMNS)
+        if camera_name is None:
+            return []
+        rows = self.owner._read_video_rows(
+            media,
+            schema,
+            columns=[camera_name],
+            limit=_count_rows(media),
+        )
+        return sorted(
+            {
+                str(row[camera_name])
+                for row in rows
+                if row.get(camera_name) not in (None, "")
+            }
+        )
+
+    def video_blob_from_media_table(
+        self,
+        bundle: "LanceBundle",
+        episode_row: dict[str, Any] | None,
+        episode_index: int,
+        camera: str,
+    ) -> bytes | None:
+        source = self.video_source_from_media_table(bundle, episode_row, episode_index, camera)
+        if source is None:
+            return None
+        return source.read_all()
+
+    def video_source_from_media_table(
+        self,
+        bundle: "LanceBundle",
+        episode_row: dict[str, Any] | None,
+        episode_index: int,
+        camera: str,
+    ) -> VideoSource | None:
+        table_name, media = self.media_table(bundle)
+        if media is None or _count_rows(media) == 0:
+            return None
+        schema = bundle.schemas.get(table_name, [])
+        camera_name = _first_present_name(schema, VIDEO_CAMERA_COLUMNS)
+        blob_name = _first_present_name(schema, VIDEO_BLOB_COLUMNS)
+        path_name = _first_present_name(schema, VIDEO_PATH_COLUMNS)
+        if camera_name is None or (blob_name is None and path_name is None):
+            return None
+
+        can_take_blobs = blob_name is not None and hasattr(media, "take_blobs")
+        chunk_name = _first_present_name(schema, VIDEO_CHUNK_COLUMNS)
+        file_name = _first_present_name(schema, VIDEO_FILE_COLUMNS)
+        columns = _unique_columns(
+            schema,
+            [
+                "episode_index",
+                camera_name,
+                chunk_name,
+                file_name,
+                path_name,
+                None if can_take_blobs else blob_name,
+            ],
+        )
+        if "episode_index" in schema:
+            rows = self.owner._read_video_rows(
+                media,
+                schema,
+                columns=columns,
+                filter=f"episode_index = {episode_index}",
+                limit=_count_rows(media),
+                include_offsets=can_take_blobs,
+            )
+        else:
+            rows = self.owner._read_video_rows(
+                media,
+                schema,
+                columns=columns,
+                limit=_count_rows(media),
+                include_offsets=can_take_blobs,
+            )
+
+        shard_ref = _video_shard_ref(episode_row or {}, camera)
+        for row in rows:
+            if not _camera_matches(row.get(camera_name), camera):
+                continue
+            row_episode_index = _int_or_none(row.get("episode_index"))
+            if row_episode_index is not None and row_episode_index != episode_index:
+                continue
+            if row_episode_index is None and shard_ref is not None:
+                row_chunk = _int_or_none(row.get(chunk_name)) if chunk_name else None
+                row_file = _int_or_none(row.get(file_name)) if file_name else None
+                if row_chunk != shard_ref[0] or row_file != shard_ref[1]:
+                    continue
+            elif row_episode_index is None:
+                continue
+            if can_take_blobs and blob_name is not None:
+                source = self.owner._get_video_blob_source_by_offset(
+                    media,
+                    blob_name,
+                    _int_or_none(row.get("__row_offset")),
+                )
+                if source is not None:
+                    return source
+            blob = _blob_to_bytes(row.get(blob_name))
+            if blob is not None:
+                return VideoSource(size=len(blob), data=blob)
+            file_source = _video_file_source_from_row(bundle.base_uri, row, path_name)
+            if file_source is not None:
+                return file_source
+        return None
+
+
 class LanceDatasetStore:
     """Thin service boundary for Lance-backed dataset access.
 
     Lance itself is an optional dependency. When it is installed this service
-    indexes `frames.lance`, `episodes.lance`, and `videos.lance` from a dataset
-    root URI. A small sample fixture stays available for local UI development.
+    indexes canonical `episodes.lance`, `frames.lance`, and `media.lance`
+    tables from a dataset root URI, with `videos.lance` kept as a compatibility
+    media alias. A small sample fixture stays available for local UI
+    development.
     """
 
     def __init__(
@@ -1162,6 +1427,8 @@ class LanceDatasetStore:
         self._episode_row_offsets: dict[str, dict[int, int]] = {}
         self._episode_label_overrides: dict[str, dict[int, dict[str, Any]]] = {}
         self._episode_label_history: list[EpisodeLabelHistoryRecord] = []
+        self.health = LanceHealthService(self)
+        self.media = LanceMediaStore(self)
         if self.persist_episode_labels:
             self._load_episode_label_overrides()
             self._load_episode_label_history()
@@ -1344,92 +1611,7 @@ class LanceDatasetStore:
         return None
 
     def get_health(self, dataset_id: str, *, level: str = "shallow") -> DatasetHealth | None:
-        if level not in {"shallow", "deep"}:
-            raise ValueError("health level must be 'shallow' or 'deep'")
-        record = self._datasets.get(dataset_id)
-        if record is None:
-            return None
-        summary = self._summaries.get(dataset_id)
-        bundle = self._bundles.get(dataset_id)
-        warnings: list[str] = []
-        errors: list[str] = []
-        tables: list[DatasetTableHealth] = []
-
-        if record.status != "indexed" and record.status != "sample":
-            errors.append(record.message or f"dataset status is {record.status}")
-        if summary is None:
-            errors.append("dataset summary is missing")
-
-        if bundle is None:
-            storage_model = "sample_or_metadata"
-            if record.status == "indexed":
-                warnings.append("dataset is metadata-backed; Lance raw tables are not open")
-        else:
-            storage_model = "lance"
-            tables = self._table_health(bundle)
-            for table in tables:
-                for missing in table.missing_required_columns:
-                    errors.append(f"{table.table}.lance missing required column: {missing}")
-            if "episodes" not in bundle.tables:
-                errors.append("episodes.lance is missing")
-
-        episode_count = summary.episode_count if summary is not None else 0
-        frame_count = summary.frame_count if summary is not None else 0
-        camera_names = summary.camera_names if summary is not None else []
-        if episode_count <= 0:
-            errors.append("dataset has no episodes")
-        if not camera_names:
-            warnings.append("dataset has no detected cameras")
-
-        if level == "deep" and bundle is not None and episode_count > 0:
-            index_cache = self._build_episode_row_offsets(bundle)
-            if len(index_cache) != episode_count:
-                warnings.append(
-                    "episode_index values are duplicated or unavailable for some rows"
-                )
-            if index_cache:
-                sorted_indices = sorted(index_cache)
-                expected = list(range(sorted_indices[0], sorted_indices[0] + len(sorted_indices)))
-                if sorted_indices != expected:
-                    warnings.append("episode_index is non-contiguous; row-offset cache is active")
-
-            sample_page = self.list_episode_page(dataset_id, limit=min(10, episode_count), offset=0)
-            missing_timeseries = [
-                episode.episode_index
-                for episode in sample_page.items
-                if self.get_episode_timeseries(dataset_id, episode.episode_index) is None
-            ]
-            if missing_timeseries:
-                warnings.append(
-                    "sample episodes without state/action timeseries: "
-                    + ", ".join(str(index) for index in missing_timeseries[:10])
-                )
-
-            sample_video_missing: list[str] = []
-            for episode in sample_page.items:
-                for camera in episode.camera_names[:3]:
-                    source = self.get_video_source(dataset_id, episode.episode_index, camera)
-                    if source is None or source.size <= 0:
-                        sample_video_missing.append(f"ep{episode.episode_index}:{camera}")
-            if sample_video_missing:
-                warnings.append(
-                    "sample camera streams without readable video source: "
-                    + ", ".join(sample_video_missing[:10])
-                )
-
-        return DatasetHealth(
-            dataset_id=dataset_id,
-            ok=not errors,
-            status=record.status,
-            storage_model=storage_model,
-            level=level,
-            episode_count=episode_count,
-            frame_count=frame_count,
-            camera_count=len(camera_names),
-            tables=tables,
-            warnings=warnings,
-            errors=errors,
-        )
+        return self.health.get_health(dataset_id, level=level)
 
     def list_episodes(
         self,
@@ -1961,51 +2143,7 @@ class LanceDatasetStore:
         )
 
     def _table_health(self, bundle: LanceBundle) -> list[DatasetTableHealth]:
-        required = {
-            "episodes": ["episode_index"],
-            "frames": ["episode_index", "frame_index"],
-            "media": [],
-            "videos": [],
-            "cameras": [],
-            "tasks": [],
-            "splits": [],
-        }
-        health: list[DatasetTableHealth] = []
-        for table_name in TABLE_NAMES:
-            dataset = bundle.tables.get(table_name)
-            columns = bundle.schemas.get(table_name, [])
-            missing_required = [
-                column for column in required.get(table_name, []) if column not in columns
-            ]
-            table_warnings: list[str] = []
-            if table_name == "episodes":
-                has_state = _first_present_name(columns, STATE_COLUMNS) is not None
-                has_action = _first_present_name(columns, ACTION_COLUMNS) is not None
-                has_video = any(_looks_like_video_blob_column(column) for column in columns)
-                if not has_state:
-                    table_warnings.append("no episode-level state array column")
-                if not has_action:
-                    table_warnings.append("no episode-level action array column")
-                if not has_video:
-                    table_warnings.append("no episode-level video blob columns")
-            if table_name in {"media", "videos"}:
-                has_media_ref = (
-                    _first_present_name(columns, VIDEO_BLOB_COLUMNS) is not None
-                    or _first_present_name(columns, VIDEO_PATH_COLUMNS) is not None
-                )
-                if dataset is not None and not has_media_ref:
-                    table_warnings.append("no media blob/path column detected")
-            health.append(
-                DatasetTableHealth(
-                    table=table_name,
-                    present=dataset is not None,
-                    row_count=_count_rows(dataset) if dataset is not None else None,
-                    columns=columns,
-                    missing_required_columns=missing_required,
-                    warnings=table_warnings,
-                )
-            )
-        return health
+        return self.health.table_health(bundle)
 
     def _build_summary(self, record: DatasetRecord, bundle: LanceBundle) -> DatasetSummary:
         episodes = bundle.tables["episodes"]
@@ -2483,26 +2621,7 @@ class LanceDatasetStore:
         return sorted(cameras)
 
     def _camera_names_from_videos_table(self, bundle: LanceBundle) -> list[str]:
-        table_name, videos = self._media_table(bundle)
-        if videos is None or _count_rows(videos) == 0:
-            return []
-        schema = bundle.schemas.get(table_name, [])
-        camera_name = _first_present_name(schema, VIDEO_CAMERA_COLUMNS)
-        if camera_name is None:
-            return []
-        rows = self._read_video_rows(
-            videos,
-            schema,
-            columns=[camera_name],
-            limit=_count_rows(videos),
-        )
-        return sorted(
-            {
-                str(row[camera_name])
-                for row in rows
-                if row.get(camera_name) not in (None, "")
-            }
-        )
+        return self.media.camera_names_from_media_table(bundle)
 
     def _get_video_blob_from_videos_table(
         self,
@@ -2511,10 +2630,12 @@ class LanceDatasetStore:
         episode_index: int,
         camera: str,
     ) -> bytes | None:
-        source = self._get_video_source_from_videos_table(bundle, episode_row, episode_index, camera)
-        if source is None:
-            return None
-        return source.read_all()
+        return self.media.video_blob_from_media_table(
+            bundle,
+            episode_row,
+            episode_index,
+            camera,
+        )
 
     def _get_episode_blob_source_by_offset(
         self,
@@ -2537,83 +2658,12 @@ class LanceDatasetStore:
         episode_index: int,
         camera: str,
     ) -> VideoSource | None:
-        table_name, videos = self._media_table(bundle)
-        if videos is None or _count_rows(videos) == 0:
-            return None
-        schema = bundle.schemas.get(table_name, [])
-        camera_name = _first_present_name(schema, VIDEO_CAMERA_COLUMNS)
-        blob_name = _first_present_name(schema, VIDEO_BLOB_COLUMNS)
-        path_name = _first_present_name(schema, VIDEO_PATH_COLUMNS)
-        if camera_name is None or (blob_name is None and path_name is None):
-            return None
-
-        can_take_blobs = blob_name is not None and hasattr(videos, "take_blobs")
-        chunk_name = _first_present_name(schema, VIDEO_CHUNK_COLUMNS)
-        file_name = _first_present_name(schema, VIDEO_FILE_COLUMNS)
-        columns = _unique_columns(
-            schema,
-            [
-                "episode_index",
-                camera_name,
-                chunk_name,
-                file_name,
-                path_name,
-                None if can_take_blobs else blob_name,
-            ],
+        return self.media.video_source_from_media_table(
+            bundle,
+            episode_row,
+            episode_index,
+            camera,
         )
-        if "episode_index" in schema:
-            rows = self._read_video_rows(
-                videos,
-                schema,
-                columns=columns,
-                filter=f"episode_index = {episode_index}",
-                limit=_count_rows(videos),
-                include_offsets=can_take_blobs,
-            )
-        else:
-            rows = self._read_video_rows(
-                videos,
-                schema,
-                columns=columns,
-                limit=_count_rows(videos),
-                include_offsets=can_take_blobs,
-            )
-
-        shard_ref = _video_shard_ref(episode_row or {}, camera)
-        for row in rows:
-            if not _camera_matches(row.get(camera_name), camera):
-                continue
-            row_episode_index = _int_or_none(row.get("episode_index"))
-            if row_episode_index is not None and row_episode_index != episode_index:
-                continue
-            if row_episode_index is None and shard_ref is not None:
-                row_chunk = _int_or_none(row.get(chunk_name)) if chunk_name else None
-                row_file = _int_or_none(row.get(file_name)) if file_name else None
-                if row_chunk != shard_ref[0] or row_file != shard_ref[1]:
-                    continue
-            elif row_episode_index is None:
-                continue
-            if can_take_blobs and blob_name is not None:
-                source = self._get_video_blob_source_by_offset(
-                    videos,
-                    blob_name,
-                    _int_or_none(row.get("__row_offset")),
-                )
-                if source is not None:
-                    return source
-            blob = _blob_to_bytes(row.get(blob_name))
-            if blob is not None:
-                return VideoSource(size=len(blob), data=blob)
-            file_source = _video_file_source_from_row(bundle.base_uri, row, path_name)
-            if file_source is not None:
-                return file_source
-        return None
-
-    @staticmethod
-    def _media_table(bundle: LanceBundle) -> tuple[str, Any | None]:
-        if "media" in bundle.tables:
-            return "media", bundle.tables["media"]
-        return "videos", bundle.tables.get("videos")
 
     def _read_video_rows(
         self,

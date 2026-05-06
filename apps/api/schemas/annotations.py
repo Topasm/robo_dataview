@@ -54,11 +54,13 @@ class AnnotationUpdate(BaseModel):
     review_status: ReviewStatus | None = None
     assigned_to: str | None = None
     updated_by: str | None = None
+    expected_revision: int | None = Field(default=None, ge=1)
 
 
 class AnnotationAssignmentUpdate(BaseModel):
     assigned_to: str | None = None
     updated_by: str | None = None
+    expected_revision: int | None = Field(default=None, ge=1)
 
 
 class AnnotationRecord(BaseModel):

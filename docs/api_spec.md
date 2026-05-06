@@ -276,7 +276,7 @@ GET    /annotations/history?dataset_id=...&episode_index=...&annotation_id=...
 POST   /annotations
 PATCH  /annotations/{annotation_id}
 PATCH  /annotations/{annotation_id}/assignment
-DELETE /annotations/{annotation_id}
+DELETE /annotations/{annotation_id}?expected_revision=...
 ```
 
 `POST /annotations`
@@ -300,14 +300,21 @@ DELETE /annotations/{annotation_id}
 
 ```json
 {
-  "assigned_to": "reviewer-b"
+  "assigned_to": "reviewer-b",
+  "expected_revision": 3
 }
 ```
 
+`PATCH /annotations/{annotation_id}` and assignment updates accept optional
+`expected_revision`. When it does not match the current annotation revision, the
+API returns `409`. Deletes are soft deletes: default list calls hide the
+annotation, while the current Lance/JSONL record keeps `deleted_at`,
+`updated_by`, and the next `revision` for audit and concurrency.
+
 `GET /annotations/history` returns immutable audit events for annotation
-creates, updates, and deletes. Each event includes `action`, `actor`, `before`,
-`after`, and `created_at`. `episode_index` and `annotation_id` filters are
-optional.
+creates, updates, assignment changes, review accept/reject decisions, and
+deletes. Each event includes `action`, `actor`, `before`, `after`, and
+`created_at`. `episode_index` and `annotation_id` filters are optional.
 
 ## Search
 
@@ -563,9 +570,9 @@ For `format=lance`, the response contains `artifacts.lance_subset` when optional
 `pyarrow` and `lance` dependencies are installed. The subset contains
 `episodes.lance`, `frames.lance`, `media.lance`/`videos.lance`, and accepted
 current annotations for selected episodes. Compatibility exports may still write
-`annotations.lance` for older tooling, but the canonical curation view is
-`annotations_current.lance`. If optional dependencies are missing, the export
-fails with a dependency message instead of returning an empty successful
+deprecated `annotations.lance` for older tooling, but the canonical curation
+view is `annotations_current.lance`. If optional dependencies are missing, the
+export fails with a dependency message instead of returning an empty successful
 artifact. The validation report opens each Lance table when possible and checks
 table row counts against the export metadata; failed validation returns
 `status=failed`.

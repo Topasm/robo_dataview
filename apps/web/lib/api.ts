@@ -119,7 +119,12 @@ type AnnotationResponse = {
   confidence: number;
   review_status: ReviewStatus;
   created_by: string;
+  updated_by?: string | null;
   assigned_to: string | null;
+  revision?: number | null;
+  deleted_at?: string | null;
+  lock_owner?: string | null;
+  lock_expires_at?: string | null;
 };
 
 type AnnotationHistoryResponse = {
@@ -336,6 +341,7 @@ export type SegmentAnnotationUpdate = {
   labelValue?: string;
   reviewStatus?: ReviewStatus;
   assignedTo?: string | null;
+  expectedRevision?: number;
 };
 
 export type EpisodeLabelUpdate = {
@@ -633,10 +639,15 @@ export async function createSegmentAnnotation(
 export async function updateAnnotationReviewStatus(
   annotationId: string,
   reviewStatus: ReviewStatus,
+  expectedRevision?: number,
 ): Promise<SegmentAnnotation> {
+  const body: Record<string, number | string> = { review_status: reviewStatus };
+  if (expectedRevision !== undefined) {
+    body.expected_revision = expectedRevision;
+  }
   const row = await request<AnnotationResponse>(`/annotations/${annotationId}`, {
     method: "PATCH",
-    body: JSON.stringify({ review_status: reviewStatus })
+    body: JSON.stringify(body)
   });
   return toSegmentAnnotation(row);
 }
@@ -644,10 +655,15 @@ export async function updateAnnotationReviewStatus(
 export async function assignAnnotation(
   annotationId: string,
   assignedTo: string | null,
+  expectedRevision?: number,
 ): Promise<SegmentAnnotation> {
+  const body: Record<string, number | string | null> = { assigned_to: assignedTo };
+  if (expectedRevision !== undefined) {
+    body.expected_revision = expectedRevision;
+  }
   const row = await request<AnnotationResponse>(`/annotations/${annotationId}/assignment`, {
     method: "PATCH",
-    body: JSON.stringify({ assigned_to: assignedTo })
+    body: JSON.stringify(body)
   });
   return toSegmentAnnotation(row);
 }
@@ -675,6 +691,9 @@ export async function updateSegmentAnnotation(
   if (payload.assignedTo !== undefined) {
     body.assigned_to = payload.assignedTo;
   }
+  if (payload.expectedRevision !== undefined) {
+    body.expected_revision = payload.expectedRevision;
+  }
   const row = await request<AnnotationResponse>(`/annotations/${annotationId}`, {
     method: "PATCH",
     body: JSON.stringify(body)
@@ -682,8 +701,14 @@ export async function updateSegmentAnnotation(
   return toSegmentAnnotation(row);
 }
 
-export async function deleteAnnotation(annotationId: string): Promise<void> {
-  await request<{ status: string }>(`/annotations/${annotationId}`, {
+export async function deleteAnnotation(annotationId: string, expectedRevision?: number): Promise<void> {
+  const query = new URLSearchParams();
+  if (expectedRevision !== undefined) {
+    query.set("expected_revision", String(expectedRevision));
+  }
+  const queryString = query.toString();
+  const suffix = queryString ? `?${queryString}` : "";
+  await request<{ status: string }>(`/annotations/${annotationId}${suffix}`, {
     method: "DELETE"
   });
 }
@@ -1179,7 +1204,12 @@ function toSegmentAnnotation(raw: AnnotationResponse): SegmentAnnotation {
     confidence: raw.confidence,
     reviewStatus: raw.review_status,
     createdBy: raw.created_by,
-    assignedTo: raw.assigned_to
+    updatedBy: raw.updated_by ?? raw.created_by,
+    assignedTo: raw.assigned_to,
+    revision: raw.revision ?? 1,
+    deletedAt: raw.deleted_at ?? null,
+    lockOwner: raw.lock_owner ?? null,
+    lockExpiresAt: raw.lock_expires_at ?? null
   };
 }
 

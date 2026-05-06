@@ -4,10 +4,11 @@ import json
 import tempfile
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from apps.api.schemas.annotations import AnnotationCreate, AnnotationUpdate
 from apps.api.schemas.common import ReviewStatus
-from apps.api.services.annotation_service import AnnotationStore
+from apps.api.services.annotation_service import AnnotationConflictError, AnnotationStore
 
 
 class AnnotationServiceTest(unittest.TestCase):
@@ -41,10 +42,14 @@ class AnnotationServiceTest(unittest.TestCase):
             updated = third_store.list("sample-xvla-soft-fold", episode_index=0)[0]
             self.assertEqual(updated.label_value, "cloth_release")
             self.assertEqual(updated.review_status, ReviewStatus.edited)
+            self.assertEqual(updated.revision, 2)
 
             third_store.delete(created.annotation_id)
             fourth_store = AnnotationStore(storage_root=storage_root, mirror_lance=False)
             self.assertEqual(fourth_store.list("sample-xvla-soft-fold", episode_index=0), [])
+            persisted = fourth_store._records[created.annotation_id]
+            self.assertIsNotNone(persisted.deleted_at)
+            self.assertEqual(persisted.revision, 3)
 
     def test_storage_paths_include_jsonl_and_lance_locations(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -53,7 +58,20 @@ class AnnotationServiceTest(unittest.TestCase):
 
             self.assertTrue(paths["jsonl"].endswith("/annotations.jsonl"))
             self.assertTrue(paths["lance"].endswith("/annotations.lance"))
+            self.assertTrue(paths["legacy_lance"].endswith("/annotations.lance"))
+            self.assertTrue(paths["current_lance"].endswith("/annotations_current.lance"))
+            self.assertTrue(paths["events_lance"].endswith("/annotation_events.lance"))
             self.assertTrue(paths["history"].endswith("/history.jsonl"))
+
+    def test_legacy_lance_mirror_can_be_disabled_by_environment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(
+                "os.environ",
+                {"ROBOT_DATA_STUDIO_WRITE_LEGACY_ANNOTATIONS_LANCE": "0"},
+            ):
+                store = AnnotationStore(storage_root=Path(tmpdir), mirror_lance=False)
+
+            self.assertFalse(store.write_legacy_lance_mirror)
 
     def test_persisted_jsonl_uses_schema_column_names(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -124,6 +142,58 @@ class AnnotationServiceTest(unittest.TestCase):
             self.assertEqual(events[2].before["label_value"], "grasp")
             self.assertIsNone(events[2].after)
             self.assertEqual([row["action"] for row in rows], ["create", "update", "delete"])
+
+    def test_update_rejects_stale_expected_revision(self) -> None:
+        store = AnnotationStore(persist=False)
+        created = store.create(
+            AnnotationCreate(
+                dataset_id="dataset-a",
+                episode_index=0,
+                start_frame=0,
+                end_frame=1,
+                label_type="phase",
+                label_value="start",
+            )
+        )
+
+        updated = store.update(
+            created.annotation_id,
+            AnnotationUpdate(label_value="middle", expected_revision=1),
+        )
+        self.assertIsNotNone(updated)
+        assert updated is not None
+        self.assertEqual(updated.revision, 2)
+        with self.assertRaises(AnnotationConflictError):
+            store.update(
+                created.annotation_id,
+                AnnotationUpdate(label_value="late", expected_revision=1),
+            )
+
+    def test_review_and_assignment_actions_are_specific(self) -> None:
+        store = AnnotationStore(persist=False)
+        created = store.create(
+            AnnotationCreate(
+                dataset_id="dataset-a",
+                episode_index=0,
+                start_frame=0,
+                end_frame=1,
+                label_type="phase",
+                label_value="start",
+            )
+        )
+
+        store.update(
+            created.annotation_id,
+            AnnotationUpdate(review_status=ReviewStatus.accepted),
+        )
+        store.update(
+            created.annotation_id,
+            AnnotationUpdate(assigned_to="alice"),
+            action="assign",
+        )
+        events = store.list_history("dataset-a", annotation_id=created.annotation_id)
+
+        self.assertEqual([event.action for event in events], ["create", "accept", "assign"])
 
 
 if __name__ == "__main__":

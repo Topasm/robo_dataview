@@ -75,6 +75,9 @@ Working:
 - Current annotation schema includes `revision`, `updated_by`, `deleted_at`,
   `lock_owner`, and `lock_expires_at` fields so the next write-path refactor can
   move toward optimistic concurrency and explicit locks.
+- Annotation update/delete APIs accept optional `expected_revision`, return
+  conflict on stale writes, soft-delete current rows with `deleted_at`, and emit
+  specific audit actions for assign/accept/reject/delete.
 - Segment edit and midpoint split actions in the web UI.
 - Search filter endpoint.
 - Simple raw episode predicates are translated to Lance scanner filters when
@@ -347,6 +350,36 @@ Definition of done:
 - [x] Add object storage publishing for Rerun cache artifacts.
 - [x] Add object storage publishing for keyframe and preview cache artifacts.
 - [x] Add deployment docs.
+
+## M3: Core Simplification
+
+Goal:
+
+```text
+Keep the default user path small while moving optional compatibility and
+advanced functionality behind explicit service/plugin boundaries.
+```
+
+Definition of done:
+
+- `LanceDatasetStore` is mostly registry/open/reload state, while media lookup,
+  health validation, query/filter execution, and compatibility imports/exports
+  live in separate services.
+- `media.lance` is the canonical media table; `videos.lance` remains a legacy
+  alias and is summarized as compatibility state in health/UI surfaces.
+- `annotations_current.lance` and `annotation_events.lance` are the canonical
+  curation tables. The deprecated `annotations.lance` mirror is disabled by
+  default after downstream consumers are migrated.
+- Annotation writes use expected revisions, soft-delete tombstones, and explicit
+  audit actions consistently across API, UI, and Lance mirrors.
+- The default search UI calls a unified `mode=auto` search endpoint; semantic,
+  full-text, vector, and raw filter modes stay available under Advanced/API
+  usage.
+- LeRobot/HF/JSONL/VLA import/export and validation code is isolated under a
+  compatibility module, not mixed into the core Lance store.
+- Rerun, VLM provider details, embedding model controls, schema inspection, raw
+  job logs, and object-storage publishing stay out of the default episode review
+  path unless Advanced is opened.
 
 ## Recommended Immediate Order
 

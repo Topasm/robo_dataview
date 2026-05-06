@@ -7,7 +7,7 @@ from apps.api.schemas.annotations import (
     AnnotationRecord,
     AnnotationUpdate,
 )
-from apps.api.services.annotation_service import annotation_store
+from apps.api.services.annotation_service import AnnotationConflictError, annotation_store
 from apps.api.services.pydantic_compat import model_copy
 from apps.api.services.user_context import current_user_id
 
@@ -54,7 +54,10 @@ def update_annotation(
 ) -> AnnotationRecord:
     if payload.updated_by is None:
         payload = model_copy(payload, update={"updated_by": user_id})
-    record = annotation_store.update(annotation_id, payload)
+    try:
+        record = annotation_store.update(annotation_id, payload)
+    except AnnotationConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if record is None:
         raise HTTPException(status_code=404, detail="Annotation not found")
     return record
@@ -69,8 +72,12 @@ def assign_annotation(
     update = AnnotationUpdate(
         assigned_to=payload.assigned_to,
         updated_by=payload.updated_by or user_id,
+        expected_revision=payload.expected_revision,
     )
-    record = annotation_store.update(annotation_id, update)
+    try:
+        record = annotation_store.update(annotation_id, update, action="assign")
+    except AnnotationConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if record is None:
         raise HTTPException(status_code=404, detail="Annotation not found")
     return record
@@ -79,9 +86,19 @@ def assign_annotation(
 @router.delete("/annotations/{annotation_id}")
 def delete_annotation(
     annotation_id: str,
+    expected_revision: int | None = Query(default=None, ge=1),
     user_id: str = Depends(current_user_id),
 ) -> dict[str, str]:
-    deleted = annotation_store.delete(annotation_id, actor=user_id)
+    if not isinstance(expected_revision, int):
+        expected_revision = None
+    try:
+        deleted = annotation_store.delete(
+            annotation_id,
+            actor=user_id,
+            expected_revision=expected_revision,
+        )
+    except AnnotationConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not deleted:
         raise HTTPException(status_code=404, detail="Annotation not found")
     return {"status": "deleted"}
