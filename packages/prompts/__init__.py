@@ -23,10 +23,11 @@ _PROMPT_METADATA = {
         "filename": "episode_autolabel_v1.md",
         "version": "v1",
         "title": "Episode Auto-Label",
-        "description": "Caption, phases, success/failure, objects, and keyframes.",
+        "description": "Caption, phases/subtasks, success/failure, objects, and keyframes.",
         "expected_outputs": (
             "episode_caption",
             "phase",
+            "subtask",
             "success_label",
             "object_list",
             "important_frame",

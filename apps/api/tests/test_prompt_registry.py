@@ -13,6 +13,8 @@ class PromptRegistryTest(unittest.TestCase):
         self.assertEqual([item.prompt_id for item in prompts], ["episode_autolabel_v1"])
         self.assertEqual(prompt.version, "v1")
         self.assertIn("sampled frames", prompt.body)
+        self.assertIn("subtasks", prompt.body)
+        self.assertIn("subtask", prompt.expected_outputs)
         self.assertIn("important_frame", prompt.expected_outputs)
 
     def test_unknown_prompt_raises(self) -> None:

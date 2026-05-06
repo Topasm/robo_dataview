@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Bot, Check, GitBranch, Minus, Plus, Save, Trash2, UserCheck, UserX, X } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
@@ -132,6 +132,10 @@ export function AnnotationEditor({
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
     .slice(0, 8);
   const rationaleRows = vlmResponses.flatMap(responseRationaleRows).slice(0, 6);
+  const subtaskSummary = useMemo(
+    () => computeSubtaskSummary(annotations, episode.length),
+    [annotations, episode.length]
+  );
 
   useEffect(() => {
     setEpisodeDraft(toEpisodeDraft(episode));
@@ -253,6 +257,21 @@ export function AnnotationEditor({
       }
     } finally {
       setIsBulkReviewing(false);
+    }
+  }
+
+  async function handleApplyGeneratedProposal(annotation: SegmentAnnotation) {
+    const nextDraft = episodeDraftFromProposal(episodeDraft, annotation);
+    if (nextDraft === null) {
+      return;
+    }
+    setEpisodeDraft(nextDraft);
+    setIsSavingEpisode(true);
+    try {
+      await onUpdateEpisodeLabels(nextDraft);
+      await onUpdateReviewStatus(annotation.id, "accepted");
+    } finally {
+      setIsSavingEpisode(false);
     }
   }
 
@@ -393,6 +412,48 @@ export function AnnotationEditor({
       />
 
       <section className="panel-section">
+        <div className="section-title">Subtask Coverage</div>
+        <div className="subtask-summary-grid">
+          <div className="metric compact-metric">
+            <span>Coverage</span>
+            <strong>{subtaskSummary.coveragePercent.toFixed(0)}%</strong>
+          </div>
+          <div className="metric compact-metric">
+            <span>Gaps</span>
+            <strong>{subtaskSummary.gapCount}</strong>
+          </div>
+          <div className="metric compact-metric">
+            <span>Overlap</span>
+            <strong>{subtaskSummary.overlapCount}</strong>
+          </div>
+        </div>
+        <div className="subtask-bar" aria-label="Subtask timeline coverage">
+          {subtaskSummary.rows.map((row) => (
+            <span
+              className={`subtask-bar-segment subtask-${row.reviewStatus}`}
+              key={row.id}
+              style={{ left: `${row.leftPercent}%`, width: `${row.widthPercent}%` }}
+              title={`${row.label} f${row.startFrame}-${row.endFrame}`}
+            />
+          ))}
+        </div>
+        <div className="subtask-list">
+          {subtaskSummary.rows.length === 0 ? (
+            <div className="empty-state compact-empty-state">No phase or subtask annotations.</div>
+          ) : (
+            subtaskSummary.rows.slice(0, 6).map((row) => (
+              <div className="subtask-row" key={row.id}>
+                <span className="subtask-label">{row.label}</span>
+                <span className="muted mono">
+                  {row.kind} / {row.percent.toFixed(0)}% / f{row.startFrame}-{row.endFrame}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="panel-section">
         <div className="section-title">VLM Proposals</div>
         <button
           className="text-button vlm-run-button"
@@ -475,6 +536,16 @@ export function AnnotationEditor({
                   </div>
                 </div>
                 <div className="proposal-actions">
+                  {episodeDraftFromProposal(episodeDraft, annotation) !== null ? (
+                    <button
+                      className="icon-button compact"
+                      onClick={() => void handleApplyGeneratedProposal(annotation)}
+                      title="Apply to episode labels and accept"
+                      type="button"
+                    >
+                      <Save size={14} />
+                    </button>
+                  ) : null}
                   <button
                     className="icon-button compact"
                     onClick={() => onUpdateReviewStatus(annotation.id, "accepted")}
@@ -508,13 +579,14 @@ export function AnnotationEditor({
               value={draft.labelType}
             >
               <option value="phase">phase</option>
+              <option value="subtask">subtask</option>
               <option value="bad_range">bad_range</option>
               <option value="important_frame">important_frame</option>
               <option value="failure_event">failure_event</option>
             </select>
           </label>
           <label>
-            Phase
+            Label
             <input
               onChange={(event) => setDraft((current) => ({ ...current, labelValue: event.target.value }))}
               value={draft.labelValue}
@@ -592,11 +664,14 @@ export function AnnotationEditor({
                   value={(editingRows[annotation.id] ?? toDraft(annotation)).labelType}
                 >
                   <option value="phase">phase</option>
+                  <option value="subtask">subtask</option>
                   <option value="bad_range">bad_range</option>
                   <option value="important_frame">important_frame</option>
                   <option value="failure_event">failure_event</option>
                   <option value="episode_caption">episode_caption</option>
                   <option value="success_label">success_label</option>
+                  <option value="failure_reason">failure_reason</option>
+                  <option value="object_list">object_list</option>
                 </select>
                 <input
                   aria-label="Start frame"
@@ -829,6 +904,115 @@ type RationaleRow = {
   confidence: number | null;
   rationale: string | null;
 };
+
+type SubtaskSummaryRow = {
+  id: string;
+  kind: string;
+  label: string;
+  startFrame: number;
+  endFrame: number;
+  percent: number;
+  leftPercent: number;
+  widthPercent: number;
+  reviewStatus: ReviewStatus;
+};
+
+type SubtaskSummary = {
+  coveragePercent: number;
+  gapCount: number;
+  overlapCount: number;
+  rows: SubtaskSummaryRow[];
+};
+
+function episodeDraftFromProposal(
+  current: EpisodeLabelDraft,
+  annotation: SegmentAnnotation,
+): EpisodeLabelDraft | null {
+  const value = annotation.labelValue.trim();
+  if (!value) {
+    return null;
+  }
+  if (annotation.labelType === "episode_caption") {
+    return { ...current, caption: value };
+  }
+  if (annotation.labelType === "failure_reason") {
+    return { ...current, failureReason: value, successLabel: false };
+  }
+  if (annotation.labelType === "success_label") {
+    const normalized = value.toLowerCase();
+    if (["success", "succeeded", "true", "pass", "passed"].includes(normalized)) {
+      return { ...current, successLabel: true, failureReason: "" };
+    }
+    if (["failure", "failed", "false", "fail"].includes(normalized)) {
+      return { ...current, successLabel: false };
+    }
+    if (["unknown", "uncertain", "none", "null"].includes(normalized)) {
+      return { ...current, successLabel: null };
+    }
+  }
+  return null;
+}
+
+function computeSubtaskSummary(
+  annotations: SegmentAnnotation[],
+  frameCount: number,
+): SubtaskSummary {
+  const safeFrameCount = Math.max(1, frameCount);
+  const maxFrame = safeFrameCount - 1;
+  const rows = annotations
+    .filter(
+      (annotation) =>
+        annotation.reviewStatus !== "rejected" &&
+        ["phase", "subtask"].includes(annotation.labelType)
+    )
+    .sort((left, right) => left.startFrame - right.startFrame)
+    .map((annotation) => {
+      const startFrame = clampFrame(annotation.startFrame, maxFrame);
+      const endFrame = Math.max(startFrame, clampFrame(annotation.endFrame, maxFrame));
+      const length = endFrame - startFrame + 1;
+      return {
+        id: annotation.id,
+        kind: annotation.labelType,
+        label: annotation.labelValue,
+        startFrame,
+        endFrame,
+        percent: (length / safeFrameCount) * 100,
+        leftPercent: maxFrame > 0 ? (startFrame / maxFrame) * 100 : 0,
+        widthPercent: Math.max(0.35, (length / safeFrameCount) * 100),
+        reviewStatus: annotation.reviewStatus
+      };
+    });
+
+  let overlapCount = 0;
+  const merged: { startFrame: number; endFrame: number }[] = [];
+  for (const row of rows) {
+    const previous = merged[merged.length - 1];
+    if (!previous || row.startFrame > previous.endFrame + 1) {
+      merged.push({ startFrame: row.startFrame, endFrame: row.endFrame });
+      continue;
+    }
+    if (row.startFrame <= previous.endFrame) {
+      overlapCount += 1;
+    }
+    previous.endFrame = Math.max(previous.endFrame, row.endFrame);
+  }
+
+  const coveredFrames = merged.reduce(
+    (total, range) => total + range.endFrame - range.startFrame + 1,
+    0,
+  );
+  const gapCount = Math.max(0, merged.length - 1);
+  return {
+    coveragePercent: (coveredFrames / safeFrameCount) * 100,
+    gapCount,
+    overlapCount,
+    rows
+  };
+}
+
+function clampFrame(value: number, maxFrame: number): number {
+  return Math.max(0, Math.min(maxFrame, Math.round(value)));
+}
 
 function responseRationaleRows(response: VlmResponseRecord): RationaleRow[] {
   const raw = response.rawResponse;

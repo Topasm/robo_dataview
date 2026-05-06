@@ -157,6 +157,15 @@ class VlmProviderTest(unittest.TestCase):
                                                     "rationale": "The wrist camera shows approach motion.",
                                                 }
                                             ],
+                                            "subtasks": [
+                                                {
+                                                    "label": "edge_grasp",
+                                                    "start_frame": 9,
+                                                    "end_frame": 18,
+                                                    "confidence": 0.76,
+                                                    "rationale": "The gripper closes on the cloth edge.",
+                                                }
+                                            ],
                                             "important_frames": [
                                                 {
                                                     "frame_index": 5,
@@ -205,12 +214,15 @@ class VlmProviderTest(unittest.TestCase):
         messages = captured["body"]["messages"]
         user_content = messages[1]["content"]
         self.assertEqual(user_content[1]["type"], "image_url")
-        self.assertEqual(result.raw_response["proposal_count"], 5)
+        self.assertEqual(result.raw_response["proposal_count"], 6)
         self.assertEqual([proposal.label_type for proposal in result.proposals][:2], [
             "episode_caption",
-            "success_label",
+                "success_label",
         ])
         self.assertEqual(result.proposals[0].label_value, "Robot grasps the cloth edge.")
+        subtask = next(proposal for proposal in result.proposals if proposal.label_type == "subtask")
+        self.assertEqual(subtask.label_value, "edge_grasp")
+        self.assertEqual(subtask.start_frame, 9)
         self.assertEqual(result.proposals[-1].start_frame, 5)
         rationales = result.raw_response["parsed_rationales"]
         self.assertEqual(
@@ -219,6 +231,7 @@ class VlmProviderTest(unittest.TestCase):
         )
         self.assertEqual(rationales["success_label"]["confidence"], 0.88)
         self.assertEqual(rationales["phases"][0]["label"], "approach")
+        self.assertEqual(rationales["subtasks"][0]["label"], "edge_grasp")
         self.assertEqual(rationales["important_frames"][0]["frame_index"], 5)
         redacted_url = result.raw_response["request"]["messages"][1]["content"][1]["image_url"]["url"]
         self.assertEqual(redacted_url, "[image-data-url]")

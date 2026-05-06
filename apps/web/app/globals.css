@@ -1301,6 +1301,72 @@ button:disabled {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.subtask-summary-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.compact-metric {
+  min-height: 58px;
+  padding: 8px;
+}
+
+.subtask-bar {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  height: 26px;
+  margin-top: 10px;
+  overflow: hidden;
+  position: relative;
+}
+
+.subtask-bar-segment {
+  background: var(--blue);
+  bottom: 0;
+  opacity: 0.72;
+  position: absolute;
+  top: 0;
+}
+
+.subtask-pending {
+  background: var(--warning);
+}
+
+.subtask-accepted {
+  background: var(--accent-2);
+}
+
+.subtask-edited {
+  background: var(--blue);
+}
+
+.subtask-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.subtask-row {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 7px;
+}
+
+.subtask-label {
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rationale-list {
   display: grid;
   gap: 8px;

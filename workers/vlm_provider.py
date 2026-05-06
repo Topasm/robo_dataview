@@ -577,6 +577,7 @@ def _vlm_user_prompt(
             "- failure_reason: optional string or {text, confidence}",
             "- object_list: string or list[str]",
             "- phases: list of {label, start_frame, end_frame, confidence}",
+            "- subtasks: optional list of {label, start_frame, end_frame, confidence}",
             "- important_frames: list of frame indices or {frame_index, label, confidence}",
             "For any object value you may include rationale, reason, or evidence text.",
         ]
@@ -762,28 +763,22 @@ def _annotation_proposals_from_model_output(
             )
         )
 
-    phases = output.get("phases")
-    if isinstance(phases, list):
-        for phase in phases:
-            if not isinstance(phase, dict):
-                continue
-            label = str(phase.get("label") or phase.get("phase") or phase.get("name") or "").strip()
-            if not label:
-                continue
-            start_frame = _bounded_frame(phase.get("start_frame"), last_frame)
-            end_frame = _bounded_frame(phase.get("end_frame"), last_frame)
-            if end_frame < start_frame:
-                start_frame, end_frame = end_frame, start_frame
-            proposals.append(
-                AnnotationCreate(
-                    **base,
-                    start_frame=start_frame,
-                    end_frame=end_frame,
-                    label_type="phase",
-                    label_value=label,
-                    confidence=_confidence(phase.get("confidence")),
-                )
-            )
+    proposals.extend(
+        _temporal_segment_proposals(
+            base=base,
+            items=output.get("phases"),
+            label_type="phase",
+            last_frame=last_frame,
+        )
+    )
+    proposals.extend(
+        _temporal_segment_proposals(
+            base=base,
+            items=output.get("subtasks"),
+            label_type="subtask",
+            last_frame=last_frame,
+        )
+    )
 
     important_frames = output.get("important_frames")
     if isinstance(important_frames, list):
@@ -820,23 +815,15 @@ def _rationales_from_model_output(output: dict[str, object]) -> dict[str, object
 
     phases = output.get("phases")
     if isinstance(phases, list):
-        phase_metadata = []
-        for phase in phases:
-            if not isinstance(phase, dict):
-                continue
-            metadata = _metadata_from_value(phase)
-            if not metadata:
-                continue
-            label = _clean_text(phase.get("label") or phase.get("phase") or phase.get("name"))
-            if label:
-                metadata["label"] = label
-            if phase.get("start_frame") is not None:
-                metadata["start_frame"] = phase.get("start_frame")
-            if phase.get("end_frame") is not None:
-                metadata["end_frame"] = phase.get("end_frame")
-            phase_metadata.append(metadata)
+        phase_metadata = _temporal_segment_metadata(phases)
         if phase_metadata:
             rationales["phases"] = phase_metadata
+
+    subtasks = output.get("subtasks")
+    if isinstance(subtasks, list):
+        subtask_metadata = _temporal_segment_metadata(subtasks)
+        if subtask_metadata:
+            rationales["subtasks"] = subtask_metadata
 
     important_frames = output.get("important_frames")
     if isinstance(important_frames, list):
@@ -857,6 +844,57 @@ def _rationales_from_model_output(output: dict[str, object]) -> dict[str, object
             rationales["important_frames"] = frame_metadata
 
     return rationales
+
+
+def _temporal_segment_proposals(
+    *,
+    base: dict[str, object],
+    items: object,
+    label_type: str,
+    last_frame: int,
+) -> list[AnnotationCreate]:
+    if not isinstance(items, list):
+        return []
+    proposals: list[AnnotationCreate] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get("label") or item.get("phase") or item.get("name") or "").strip()
+        if not label:
+            continue
+        start_frame = _bounded_frame(item.get("start_frame"), last_frame)
+        end_frame = _bounded_frame(item.get("end_frame"), last_frame)
+        if end_frame < start_frame:
+            start_frame, end_frame = end_frame, start_frame
+        proposals.append(
+            AnnotationCreate(
+                **base,
+                start_frame=start_frame,
+                end_frame=end_frame,
+                label_type=label_type,
+                label_value=label,
+                confidence=_confidence(item.get("confidence")),
+            )
+        )
+    return proposals
+
+
+def _temporal_segment_metadata(items: list[object]) -> list[dict[str, object]]:
+    metadata_rows = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        metadata = _metadata_from_value(item)
+        label = _clean_text(item.get("label") or item.get("phase") or item.get("name"))
+        if label:
+            metadata["label"] = label
+        if item.get("start_frame") is not None:
+            metadata["start_frame"] = item.get("start_frame")
+        if item.get("end_frame") is not None:
+            metadata["end_frame"] = item.get("end_frame")
+        if metadata:
+            metadata_rows.append(metadata)
+    return metadata_rows
 
 
 def _metadata_from_value(value: object) -> dict[str, object]:
