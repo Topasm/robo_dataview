@@ -277,14 +277,8 @@ export function EpisodeViewer({
   return (
     <main className="main-viewer" ref={stageRef}>
       <div className="viewer-toolbar">
-        <div>
-          <div className="viewer-title">Episode #{episode.episodeIndex}</div>
-          <div className="muted">
-            {episode.caption || "(no caption)"} / {frameCount} frames / {fps} FPS
-          </div>
-          <div className="shortcut-hints">
-            <kbd>␣</kbd> play <kbd>←→</kbd> frame <kbd>M</kbd> bad <kbd>1-4</kbd> status <kbd>B</kbd> bad range <kbd>S</kbd> slip <kbd>N</kbd> next
-          </div>
+        <div className="muted viewer-meta">
+          {frameCount} frames · {fps} FPS
         </div>
         <div className="toolbar-actions">
           {onToggleSignals ? (
@@ -602,10 +596,17 @@ function GridCameras({
     );
   }
 
+  // Leader takes the large left column at full height; the remaining cameras
+  // stack on the right at half-height each (NLE picture-in-picture style).
+  const leaderCamera =
+    cameraNames.includes(activeCamera) ? activeCamera : cameraNames[0];
+  const secondaryCameras = cameraNames.filter((camera) => camera !== leaderCamera);
+  const orderedCameras = [leaderCamera, ...secondaryCameras];
+
   return (
-    <div className="camera-grid">
-      {cameraNames.map((camera) => {
-        const isLeader = camera === activeCamera;
+    <div className={`camera-grid grid-secondary-${secondaryCameras.length}`}>
+      {orderedCameras.map((camera) => {
+        const isLeader = camera === leaderCamera;
         const status = videoStatus[camera] ?? "idle";
         return (
           <button

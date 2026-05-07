@@ -96,30 +96,32 @@ export function DatasetBrowser({
         <div className="section-title">
           <span>Work Queue</span>
         </div>
-        <div className="review-queue-metrics">
-          <Metric label="Need Check" value={pendingRows.length.toString()} />
-          <Metric label="Bad" value={badRows.length.toString()} />
-          <Metric label="Auto" value={autoRows.length.toString()} />
-        </div>
-        <div className="review-queue-list">
-          {queueRows.length === 0 ? (
-            <div className="empty-state compact-empty-state">No pending annotations.</div>
-          ) : (
-            queueRows.map((annotation) => (
-              <button
-                className="review-queue-row"
-                key={annotation.id}
-                onClick={() => onSelectEpisode(annotation.episodeIndex)}
-                type="button"
-              >
-                <span className="review-queue-label">{annotation.labelValue}</span>
-                <span className="muted mono">
-                  ep {annotation.episodeIndex} / f{annotation.startFrame}-{annotation.endFrame}
-                </span>
-              </button>
-            ))
-          )}
-        </div>
+        {pendingRows.length === 0 && badRows.length === 0 && autoRows.length === 0 ? (
+          <div className="empty-state compact-empty-state">Queue clear.</div>
+        ) : (
+          <>
+            <div className="review-queue-metrics">
+              <Metric label="Need Check" value={pendingRows.length.toString()} />
+              <Metric label="Bad" value={badRows.length.toString()} />
+              <Metric label="Auto" value={autoRows.length.toString()} />
+            </div>
+            <div className="review-queue-list">
+              {queueRows.map((annotation) => (
+                <button
+                  className="review-queue-row"
+                  key={annotation.id}
+                  onClick={() => onSelectEpisode(annotation.episodeIndex)}
+                  type="button"
+                >
+                  <span className="review-queue-label">{annotation.labelValue}</span>
+                  <span className="muted mono">
+                    ep {annotation.episodeIndex} / f{annotation.startFrame}-{annotation.endFrame}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </section>
 
       <section className="panel-section review-progress-section">
@@ -134,12 +136,14 @@ export function DatasetBrowser({
         <div className="progress-track">
           <div className="progress-fill" style={{ width: `${checkedPercent}%` }} />
         </div>
-        <div className="review-counts">
-          <StatusPill status="accepted" />
-          <span>{summary.acceptedCount}</span>
-          <StatusPill status="rejected" />
-          <span>{summary.rejectedCount}</span>
-        </div>
+        {summary.acceptedCount > 0 || summary.rejectedCount > 0 ? (
+          <div className="review-counts">
+            <StatusPill status="accepted" />
+            <span>{summary.acceptedCount}</span>
+            <StatusPill status="rejected" />
+            <span>{summary.rejectedCount}</span>
+          </div>
+        ) : null}
       </section>
 
       <details className="panel-section sidebar-details">

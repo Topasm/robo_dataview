@@ -3,7 +3,8 @@ import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } fro
 
 import { findClipOverlaps, type ClipOverlap } from "@/lib/clip-validation";
 import { SKILL_LABEL_TYPE } from "@/lib/skill-vocabulary";
-import type { SegmentAnnotation } from "@/lib/types";
+import type { SegmentAnnotation, VlmResponseRecord } from "@/lib/types";
+import { buildRationaleMap, formatRationaleTooltip } from "@/lib/vlm-rationales";
 
 type SegmentDraft = {
   labelType: string;
@@ -30,6 +31,7 @@ type TimelinePanelProps = {
   onUpdateSegment: (annotationId: string, draft: SegmentDraft) => Promise<void>;
   selectedSegmentId?: string | null;
   selectedFrame: number;
+  vlmResponses?: VlmResponseRecord[];
 };
 
 type DragState = {
@@ -58,7 +60,8 @@ export function TimelinePanel({
   onSplitSegment,
   onUpdateSegment,
   selectedSegmentId = null,
-  selectedFrame
+  selectedFrame,
+  vlmResponses = []
 }: TimelinePanelProps) {
   const trackRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -98,6 +101,25 @@ export function TimelinePanel({
     [maxFrame]
   );
   const overlapsMap = useMemo(() => findClipOverlaps(annotations), [annotations]);
+  const rationaleMap = useMemo(() => buildRationaleMap(vlmResponses), [vlmResponses]);
+  // Map each pending skill clip's id to its 0-based index within its skill name,
+  // so we can pair the Nth pending grasp_part clip with the Nth grasp_part rationale.
+  const pendingClipRationaleIndex = useMemo(() => {
+    const counters = new Map<string, number>();
+    const result = new Map<string, number>();
+    const pendingSkillClips = annotations
+      .filter(
+        (row) =>
+          row.labelType === SKILL_LABEL_TYPE && row.reviewStatus === "pending"
+      )
+      .sort((a, b) => a.startFrame - b.startFrame);
+    for (const clip of pendingSkillClips) {
+      const next = counters.get(clip.labelValue) ?? 0;
+      result.set(clip.id, next);
+      counters.set(clip.labelValue, next + 1);
+    }
+    return result;
+  }, [annotations]);
 
   async function handleCreateMarker() {
     await onCreateSegment({
@@ -189,27 +211,35 @@ export function TimelinePanel({
           <div className="muted">Frame {activeFrame}</div>
         </div>
         <div className="timeline-actions">
-          <button className="text-button compact-text-button" onClick={handleCreateMarker} type="button">
-            <MapPin size={14} />
-            Marker
-          </button>
-          <button className="text-button compact-text-button" onClick={() => void handleCreateBadRange(0.5)} type="button">
-            <OctagonAlert size={14} />
-            Bad ±0.5s
-          </button>
-          <button className="text-button compact-text-button" onClick={() => void handleCreateBadRange(1)} type="button">
-            <OctagonAlert size={14} />
-            Bad ±1s
-          </button>
-          <button className="text-button compact-text-button" onClick={() => void handleCreateEvent("foot_slip")} type="button">
-            Slip
-          </button>
-          <button className="text-button compact-text-button" onClick={() => void handleCreateEvent("fall_event")} type="button">
-            Fall
-          </button>
-          <button className="text-button compact-text-button" onClick={() => void handleCreateEvent("collision")} type="button">
-            Collision
-          </button>
+          <span className="timeline-action-group" aria-label="Marker">
+            <button className="text-button compact-text-button" onClick={handleCreateMarker} type="button">
+              <MapPin size={14} />
+              Marker
+            </button>
+          </span>
+          <span className="timeline-action-divider" aria-hidden="true" />
+          <span className="timeline-action-group" aria-label="Bad ranges">
+            <button className="text-button compact-text-button" onClick={() => void handleCreateBadRange(0.5)} type="button">
+              <OctagonAlert size={14} />
+              Bad ±0.5s
+            </button>
+            <button className="text-button compact-text-button" onClick={() => void handleCreateBadRange(1)} type="button">
+              <OctagonAlert size={14} />
+              Bad ±1s
+            </button>
+          </span>
+          <span className="timeline-action-divider" aria-hidden="true" />
+          <span className="timeline-action-group" aria-label="Events">
+            <button className="text-button compact-text-button" onClick={() => void handleCreateEvent("foot_slip")} type="button">
+              Slip
+            </button>
+            <button className="text-button compact-text-button" onClick={() => void handleCreateEvent("fall_event")} type="button">
+              Fall
+            </button>
+            <button className="text-button compact-text-button" onClick={() => void handleCreateEvent("collision")} type="button">
+              Collision
+            </button>
+          </span>
           {onSetClipStart ? (
             <button className="text-button compact-text-button" onClick={() => onSetClipStart(activeFrame)} type="button" style={{ background: "#e4f5ed", borderColor: "#acd8c1" }}>
               Set Start
@@ -260,9 +290,15 @@ export function TimelinePanel({
                 const overlaps = overlapsMap.get(annotation.id) ?? [];
                 const hasOverlap = overlaps.length > 0;
                 const baseTitle = `${annotation.labelValue} (${bounds.startFrame}-${bounds.endFrame})`;
-                const segmentTitle = hasOverlap
-                  ? `${baseTitle}\n${formatOverlapTooltip(overlaps)}`
-                  : baseTitle;
+                const rationaleIndex = pendingClipRationaleIndex.get(annotation.id);
+                const rationaleTooltip =
+                  rationaleIndex !== undefined
+                    ? formatRationaleTooltip(rationaleMap.get(annotation.labelValue)?.[rationaleIndex])
+                    : null;
+                const titleParts = [baseTitle];
+                if (hasOverlap) titleParts.push(formatOverlapTooltip(overlaps));
+                if (rationaleTooltip) titleParts.push(rationaleTooltip);
+                const segmentTitle = titleParts.join("\n");
                 const segmentClassName = [
                   "timeline-segment",
                   `segment-${annotation.reviewStatus}`,

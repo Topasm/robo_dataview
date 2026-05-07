@@ -13,6 +13,8 @@ const STEPS: { kbd: string; text: string }[] = [
   { kbd: "1–9", text: "Tap a skill key — clip is created and accepted in one stroke" }
 ];
 
+// Note: STEPS[2].kbd is the letter "O" (mark out), not the digit "0" (which cancels draft).
+
 export function EmptyStateCoach({ onDismiss }: EmptyStateCoachProps) {
   return (
     <div className="empty-coach-overlay" aria-live="polite">

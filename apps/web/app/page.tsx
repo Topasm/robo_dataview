@@ -5,14 +5,14 @@ import { Database, Download, Settings } from "lucide-react";
 
 import { AnnotationMode } from "@/features/annotation-mode/annotation-mode";
 import { BrowseMode } from "@/features/browse-mode/browse-mode";
-import type { WorkspaceDrawerTab } from "@/lib/types";
+import { ExportModal } from "@/features/export-manager/export-modal";
 import { useStudioData } from "@/lib/use-studio-data";
 
 type ActiveTab = "browse" | "annotate";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("browse");
-  const [activeDrawer, setActiveDrawer] = useState<WorkspaceDrawerTab | null>(null);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const [showSignals, setShowSignals] = useState(false);
   const [clipStart, setClipStart] = useState<number | null>(null);
   const [clipEnd, setClipEnd] = useState<number | null>(null);
@@ -61,14 +61,14 @@ export default function Home() {
         event.preventDefault();
         if (cheatsheetOpen) {
           setCheatsheetOpen(false);
-        } else {
-          setActiveDrawer(null);
+        } else if (exportModalOpen) {
+          setExportModalOpen(false);
         }
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [cheatsheetOpen]);
+  }, [cheatsheetOpen, exportModalOpen]);
 
   return (
     <div className="studio-shell">
@@ -95,8 +95,8 @@ export default function Home() {
         </nav>
         <div className="top-bar-actions">
           <button
-            className={`text-button primary-export-button compact-text-button${activeDrawer === "export" ? " active" : ""}`}
-            onClick={() => setActiveDrawer((current) => (current === "export" ? null : "export"))}
+            className={`text-button primary-export-button compact-text-button${exportModalOpen ? " active" : ""}`}
+            onClick={() => setExportModalOpen((current) => !current)}
             type="button"
           >
             <Download size={15} />
@@ -145,6 +145,11 @@ export default function Home() {
           onOpenCheatsheet={openCheatsheet}
         />
       ) : null}
+      <ExportModal
+        open={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        studio={studio}
+      />
     </div>
   );
 }

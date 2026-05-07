@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RefreshCw, Wand2 } from "lucide-react";
+import { HelpCircle, RefreshCw, Wand2 } from "lucide-react";
 
 import { AnnotationEditor } from "@/features/annotation-editor/annotation-editor";
 import { AutoLabelDialog } from "@/features/annotation-mode/auto-label-dialog";
@@ -179,6 +179,15 @@ export function AnnotationMode({
               <RefreshCw size={16} />
               <span>Apply Last Episode</span>
             </button>
+            <button
+              type="button"
+              className="annotation-mode-header-button icon-only"
+              onClick={onOpenCheatsheet}
+              title="Keyboard shortcuts (?)"
+              aria-label="Keyboard shortcuts"
+            >
+              <HelpCircle size={16} />
+            </button>
           </div>
         </div>
         <div className="annotation-stage-preview">
@@ -228,24 +237,24 @@ export function AnnotationMode({
           onUpdateSegment={studio.handleUpdateSegment}
           selectedFrame={studio.selectedFrameIndex}
           selectedSegmentId={selectedClipId}
+          vlmResponses={studio.vlmResponses}
         />
-        <ShortcutChip enableBadFrameShortcuts={editor.enableBadFrameShortcuts} />
+        <ShortcutChip
+          enableBadFrameShortcuts={editor.enableBadFrameShortcuts}
+          onOpenCheatsheet={onOpenCheatsheet}
+        />
       </main>
       <aside className="annotation-inspector">
         <AnnotationEditor
-          annotationHistory={studio.annotationHistoryRows}
-          clipEnd={clipEnd}
-          clipStart={clipStart}
-          compact={false}
-          onSetClipEnd={onSetClipEnd}
-          onSetClipStart={onSetClipStart}
-          onSetSelectedSkillId={onSetSelectedSkillId}
           annotations={studio.annotationRows}
           episode={studio.selectedEpisode}
+          clipStart={clipStart}
+          clipEnd={clipEnd}
+          onSetClipStart={onSetClipStart}
+          onSetClipEnd={onSetClipEnd}
+          onSetSelectedSkillId={onSetSelectedSkillId}
           onCreateSegment={studio.handleCreateSegment}
-          onAssignAnnotation={studio.handleAssignAnnotation}
           onDeleteSegment={studio.handleDeleteSegment}
-          onRunVlmLabel={studio.handleRunVlmLabel}
           onSelectClip={onSetSelectedClipId}
           onUpdateSelectedFrameLabel={studio.handleUpdateSelectedFrameLabel}
           onUpdateSelectedFrameBadFlag={studio.handleUpdateSelectedFrameBadFlag}
@@ -256,9 +265,6 @@ export function AnnotationMode({
           selectedFrameStatus={studio.selectedFrameStatus}
           selectedClipId={selectedClipId}
           selectedSkillId={selectedSkillId}
-          reviewerUserId={studio.reviewerUserId}
-          vlmJob={studio.vlmJob}
-          vlmResponses={studio.vlmResponses}
         />
       </aside>
       <CheatsheetModal

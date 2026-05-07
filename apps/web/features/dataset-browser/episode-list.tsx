@@ -126,39 +126,43 @@ export function EpisodeList({
           <ArrowDownUp size={16} />
         </button>
       </div>
-      <div className="frame-quick-labels" style={{ marginBottom: "8px" }}>
-        {QUICK_FILTERS.map((f) => (
-          <button
-            key={f.key}
-            className={`quick-label-button${filter === f.key ? " active" : ""}`}
-            onClick={() => setFilter(f.key)}
-            type="button"
-          >
-            {f.label}
-          </button>
-        ))}
+      <div className="episode-list-filters">
+        <select
+          aria-label="Filter by review status"
+          className="episode-list-status-select"
+          onChange={(event) => setFilter(event.target.value as QuickFilter)}
+          value={filter}
+        >
+          {QUICK_FILTERS.map((f) => (
+            <option key={f.key} value={f.key}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+        <div className="episode-list-disposition-row">
+          <div className="episode-list-filter-pills">
+            {DISPOSITION_FILTERS.map((f) => (
+              <button
+                key={f.key}
+                className={`quick-label-button${dispositionFilter === f.key ? " active" : ""}`}
+                onClick={() => setDispositionFilter(f.key)}
+                type="button"
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <label className="episode-list-filter-toggle">
+            <input
+              type="checkbox"
+              checked={hideDeleted}
+              disabled={dispositionFilter === "deleted"}
+              onChange={(event) => setHideDeleted(event.target.checked)}
+            />
+            <span>Hide deleted</span>
+          </label>
+        </div>
       </div>
-      <div className="episode-list-filter-pills">
-        {DISPOSITION_FILTERS.map((f) => (
-          <button
-            key={f.key}
-            className={`quick-label-button${dispositionFilter === f.key ? " active" : ""}`}
-            onClick={() => setDispositionFilter(f.key)}
-            type="button"
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
-      <label className="episode-list-filter-toggle">
-        <input
-          type="checkbox"
-          checked={hideDeleted}
-          disabled={dispositionFilter === "deleted"}
-          onChange={(event) => setHideDeleted(event.target.checked)}
-        />
-        <span>Hide deleted</span>
-      </label>
       <div className="episode-table" role="table">
         <div className="episode-row episode-header" role="row">
           <span>Episode</span>
