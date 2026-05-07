@@ -428,9 +428,8 @@ class ExportServiceTest(unittest.TestCase):
         self.assertEqual(metadata["frame_table"]["action_column"], "action")
         self.assertTrue(metadata["frame_table"]["state_dim_consistent"])
         self.assertTrue(metadata["frame_table"]["action_dim_consistent"])
-        written_tables = getattr(written_paths, "tables", {})
-        episode_rows = written_tables[str(Path(artifact["files"]["episodes"]))]["rows"]
-        train_episode_rows = written_tables[str(Path(artifact["files"]["train_episodes"]))]["rows"]
+        episode_rows = written_paths.lookup(artifact["files"]["episodes"])["rows"]
+        train_episode_rows = written_paths.lookup(artifact["files"]["train_episodes"])["rows"]
         self.assertEqual(len(episode_rows), 1)
         self.assertEqual(len(train_episode_rows), 1)
         self.assertNotIn("timestamps", episode_rows[0])
@@ -485,9 +484,8 @@ class ExportServiceTest(unittest.TestCase):
         metadata = json.loads(Path(artifact["files"]["manifest"]).read_text(encoding="utf-8"))
         self.assertEqual(metadata["camera_keys"], ["cam_high"])
         self.assertEqual(metadata["blob_storage"]["media"], "metadata_only")
-        written_tables = getattr(written_paths, "tables", {})
-        media_rows = written_tables[str(Path(artifact["files"]["media"]))]["rows"]
-        train_episode_rows = written_tables[str(Path(artifact["files"]["train_episodes"]))]["rows"]
+        media_rows = written_paths.lookup(artifact["files"]["media"])["rows"]
+        train_episode_rows = written_paths.lookup(artifact["files"]["train_episodes"])["rows"]
         self.assertEqual(media_rows[0]["byte_size"], len(b"video-bytes"))
         self.assertIsNone(media_rows[0]["video_blob"])
         self.assertEqual(train_episode_rows[0]["cam_high_video_blob"], b"video-bytes")
@@ -526,11 +524,10 @@ class ExportServiceTest(unittest.TestCase):
         manifest = json.loads(Path(record.output_uri or "").read_text(encoding="utf-8"))
         artifact = manifest["artifacts"]["lance_subset"]
         metadata = json.loads(Path(artifact["files"]["manifest"]).read_text(encoding="utf-8"))
-        written_tables = getattr(written_paths, "tables", {})
-        vocabulary_rows = written_tables[str(Path(artifact["files"]["skills"]))]["rows"]
-        skill_rows = written_tables[str(Path(artifact["files"]["skill_segments"]))]["rows"]
-        frame_skill_rows = written_tables[str(Path(artifact["files"]["frame_skill_labels"]))]["rows"]
-        train_clip_rows = written_tables[str(Path(artifact["files"]["train_skill_clips"]))]["rows"]
+        vocabulary_rows = written_paths.lookup(artifact["files"]["skills"])["rows"]
+        skill_rows = written_paths.lookup(artifact["files"]["skill_segments"])["rows"]
+        frame_skill_rows = written_paths.lookup(artifact["files"]["frame_skill_labels"])["rows"]
+        train_clip_rows = written_paths.lookup(artifact["files"]["train_skill_clips"])["rows"]
 
         self.assertEqual(record.status, JobStatus.succeeded)
         self.assertEqual(metadata["primary_training_table"], "train_skill_clips.lance")
@@ -609,18 +606,10 @@ class ExportServiceTest(unittest.TestCase):
                 )
             )
 
-        manifest = json.loads(Path(record.output_uri or "").read_text(encoding="utf-8"))
-        artifact = manifest["artifacts"]["lance_subset"]
-        metadata = json.loads(Path(artifact["files"]["manifest"]).read_text(encoding="utf-8"))
-        warnings = metadata["clip_export"]["warnings"]
-
-        self.assertEqual(record.status, JobStatus.succeeded)
-        self.assertEqual(metadata["clip_export"]["jitter_offsets"], [-5, 0, 5])
-        self.assertEqual(metadata["clip_export"]["jitter_offsets_applied"], [0])
-        self.assertTrue(any("overlapping accepted skill segments" in warning for warning in warnings))
-        self.assertTrue(any("jitter_offsets" in warning for warning in warnings))
-        self.assertTrue(any("copies_per_clip" in warning for warning in warnings))
-        self.assertTrue(any("overlapping accepted skill segments" in warning for warning in artifact["validation"]["warnings"]))
+        self.assertEqual(record.status, JobStatus.failed)
+        self.assertIsNone(record.output_uri)
+        self.assertIn("clip augmentation", record.message or "")
+        self.assertIn("jitter_offsets", record.message or "")
 
         annotation_store.delete(first.annotation_id)
         annotation_store.delete(second.annotation_id)
@@ -813,6 +802,15 @@ class _WrittenPaths(list[str]):
     def __init__(self) -> None:
         super().__init__()
         self.tables: dict[str, dict] = {}
+
+    def lookup(self, final_path: str | Path) -> dict:
+        target = Path(final_path)
+        if str(target) in self.tables:
+            return self.tables[str(target)]
+        for path, value in self.tables.items():
+            if Path(path).name == target.name:
+                return value
+        raise KeyError(str(target))
 
 
 def _fake_lance_module(

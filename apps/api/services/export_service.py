@@ -119,7 +119,7 @@ class ExportStore:
             accepted_annotations = [
                 annotation
                 for annotation in annotation_store.list(record.dataset_id, episode_index=episode_index)
-                if annotation.review_status == ReviewStatus.accepted
+                if annotation.review_status in {ReviewStatus.accepted, ReviewStatus.edited}
             ]
             episode_records.append(episode)
             annotations_by_episode[episode_index] = accepted_annotations
@@ -212,6 +212,15 @@ class ExportStore:
                         },
                     )
             except LanceExportDependencyError as exc:
+                return model_copy(
+                    record,
+                    update={
+                        "status": JobStatus.failed,
+                        "output_uri": None,
+                        "message": str(exc),
+                    },
+                )
+            except (NotImplementedError, ValueError) as exc:
                 return model_copy(
                     record,
                     update={

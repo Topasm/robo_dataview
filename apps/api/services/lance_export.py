@@ -6,11 +6,13 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 from typing import Any
 
 from apps.api.schemas.annotations import AnnotationRecord
 from apps.api.schemas.episodes import EpisodeDetail
 from apps.api.schemas.frames import FrameRecord
+from apps.api.services.annotation_service import annotation_store
 from apps.api.services.pydantic_compat import model_dump
 from packages.robot_schema import (
     build_annotation_events_pyarrow_schema,
@@ -29,6 +31,21 @@ from packages.robot_schema import (
 
 
 LANCE_SUBSET_VERSION = "robot_data_studio_lance_subset_v2"
+LANCE_SUBSET_SCHEMA_VERSION = "1.0"
+CANONICAL_SKILL_NAMES = frozenset(
+    {
+        "approach",
+        "grasp_part",
+        "grasp_bolt",
+        "insert_bolt",
+        "place",
+        "push_button",
+        "grasp_drill",
+        "drill_trigger",
+        "bimanual_grasp",
+        "insert_tire",
+    }
+)
 MANIFEST_JSON_PATH = Path("manifest.json")
 METADATA_JSON_PATH = Path("metadata.json")
 EPISODES_LANCE_PATH = Path("episodes.lance")
@@ -74,8 +91,17 @@ def write_lance_subset(
             "Install optional pyarrow and lance dependencies to export Lance subsets."
         ) from exc
 
-    root = export_dir / "lance_subset"
-    root.mkdir(parents=True, exist_ok=True)
+    clip_export_for_validation = clip_export_options or {}
+    if bool(clip_export_for_validation.get("materialize_skill_clips")):
+        _validate_skill_vocabulary(annotations_by_episode, clip_export_for_validation)
+    _validate_clip_augmentation_unsupported(clip_export_for_validation)
+
+    final_root = export_dir / "lance_subset"
+    scratch_root = export_dir / f"lance_subset.tmp.{os.getpid()}"
+    if scratch_root.exists():
+        shutil.rmtree(scratch_root)
+    scratch_root.mkdir(parents=True, exist_ok=False)
+    root = scratch_root
 
     write_legacy = _env_flag(
         "ROBOT_DATA_STUDIO_WRITE_LEGACY_EXPORT_TABLES", default=False
@@ -83,6 +109,47 @@ def write_lance_subset(
     write_media_blobs = _env_flag(
         "ROBOT_DATA_STUDIO_EXPORT_MEDIA_BLOBS", default=False
     )
+
+    # Apply Sprint 2 episode disposition: deleted episodes are excluded from the
+    # bundle, flagged episodes are kept but surfaced as warnings. Disposition
+    # lives in annotation_store (dual-writes to JSONL + annotations_current.lance);
+    # raw episodes.lance is never mutated.
+    dispositions = annotation_store.list_episode_dispositions(dataset_id)
+    excluded_episode_indices: list[int] = []
+    flagged_episode_indices: list[int] = []
+    filtered_episodes: list[EpisodeDetail] = []
+    for episode in episodes:
+        info = dispositions.get(int(episode.episode_index))
+        disposition = info.get("disposition") if info else None
+        if disposition == "deleted":
+            excluded_episode_indices.append(int(episode.episode_index))
+            continue
+        if disposition == "flagged":
+            flagged_episode_indices.append(int(episode.episode_index))
+        filtered_episodes.append(episode)
+    if excluded_episode_indices:
+        kept_indices = {int(ep.episode_index) for ep in filtered_episodes}
+        annotations_by_episode = {
+            index: rows
+            for index, rows in annotations_by_episode.items()
+            if int(index) in kept_indices
+        }
+        frames_by_episode = {
+            index: rows
+            for index, rows in frames_by_episode.items()
+            if int(index) in kept_indices
+        }
+        if video_blobs_by_episode is not None:
+            video_blobs_by_episode = {
+                index: blobs
+                for index, blobs in video_blobs_by_episode.items()
+                if int(index) in kept_indices
+            }
+    episodes = filtered_episodes
+    disposition_warnings: list[str] = [
+        f"episode {index} is flagged but included in export"
+        for index in flagged_episode_indices
+    ]
 
     frame_rows = sorted(
         [
@@ -258,12 +325,20 @@ def write_lance_subset(
             table_paths["annotations"],
         )
 
+    _validate_camera_keys_consistency(camera_feature_keys, train_episode_rows)
+
     metadata = {
         "dataset_id": dataset_id,
         "format": LANCE_SUBSET_VERSION,
+        "schema_version": LANCE_SUBSET_SCHEMA_VERSION,
         "version_description": version_description,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "total_episodes": len(train_episode_rows),
+        "excluded_episode_count": len(excluded_episode_indices),
+        "flagged_episode_count": len(flagged_episode_indices),
+        "excluded_episode_indices": excluded_episode_indices,
+        "flagged_episode_indices": flagged_episode_indices,
+        "disposition_warnings": disposition_warnings,
         "total_frames": len(frame_rows),
         "total_media": len(media_rows),
         "total_skill_segments": len(skill_segment_rows),
@@ -332,20 +407,34 @@ def write_lance_subset(
         "canonical_tables": {name: path.name for name, path in canonical_paths.items()},
         "legacy_tables": {name: path.name for name, path in legacy_paths.items()},
     }
-    manifest_path = root / MANIFEST_JSON_PATH
-    metadata_path = root / METADATA_JSON_PATH
-    manifest_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
-    metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
-    validation = validate_lance_subset(root)
-    validation_path = root / "validation.json"
-    validation_path.write_text(json.dumps(validation, indent=2, sort_keys=True), encoding="utf-8")
+    try:
+        manifest_path = root / MANIFEST_JSON_PATH
+        metadata_path = root / METADATA_JSON_PATH
+        manifest_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
+        metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
+        validation = validate_lance_subset(root)
+        validation_path = root / "validation.json"
+        validation_path.write_text(json.dumps(validation, indent=2, sort_keys=True), encoding="utf-8")
+
+        if final_root.exists():
+            shutil.rmtree(final_root)
+        os.rename(str(scratch_root), str(final_root))
+    except BaseException:
+        if scratch_root.exists():
+            shutil.rmtree(scratch_root, ignore_errors=True)
+        raise
+
+    final_manifest_path = final_root / MANIFEST_JSON_PATH
+    final_metadata_path = final_root / METADATA_JSON_PATH
+    final_validation_path = final_root / "validation.json"
+    final_table_paths = {name: final_root / path.name for name, path in table_paths.items()}
 
     files: dict[str, str] = {
-        "manifest": str(manifest_path),
-        "metadata": str(metadata_path),
-        "validation": str(validation_path),
+        "manifest": str(final_manifest_path),
+        "metadata": str(final_metadata_path),
+        "validation": str(final_validation_path),
     }
-    files.update({name: str(path) for name, path in table_paths.items()})
+    files.update({name: str(path) for name, path in final_table_paths.items()})
 
     materialized: dict[str, int] = {
         "episode_rows": len(episode_metadata_rows),
@@ -365,7 +454,7 @@ def write_lance_subset(
 
     return {
         "format": LANCE_SUBSET_VERSION,
-        "root": str(root),
+        "root": str(final_root),
         "validation": validation,
         "files": files,
         "materialized": materialized,
@@ -465,10 +554,17 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
             for warning in clip_export.get("warnings", [])
             if warning
         )
+    disposition_warnings_list = (
+        metadata.get("disposition_warnings") if isinstance(metadata, dict) else None
+    )
+    if isinstance(disposition_warnings_list, list):
+        warnings.extend(str(warning) for warning in disposition_warnings_list if warning)
 
     return {
         "metadata_ok": not errors,
         "episode_count": int(metadata.get("total_episodes") or 0),
+        "excluded_episode_count": int(metadata.get("excluded_episode_count") or 0),
+        "flagged_episode_count": int(metadata.get("flagged_episode_count") or 0),
         "frame_count": int(metadata.get("total_frames") or 0),
         "media_count": int(metadata.get("total_media") or metadata.get("total_videos") or 0),
         "train_episode_count": int(metadata.get("total_episodes") or 0),
@@ -658,7 +754,7 @@ def _skill_segment_rows(
         for annotation in sorted(annotations, key=lambda row: (row.start_frame, row.end_frame)):
             if annotation.label_type != clip_label_type:
                 continue
-            if accepted_only and annotation.review_status.value != "accepted":
+            if accepted_only and annotation.review_status.value not in {"accepted", "edited"}:
                 continue
             metadata = dict(annotation.metadata or {})
             rows.append(
@@ -771,22 +867,68 @@ def _skill_segment_overlap_warnings(skill_segment_rows: list[dict[str, Any]]) ->
 
 
 def _unsupported_clip_augmentation_warnings(clip_export: dict[str, Any]) -> list[str]:
-    jitter_offsets = clip_export.get("jitter_offsets") or [0]
-    copies_per_clip = int(clip_export.get("copies_per_clip") or 1)
+    del clip_export
+    return []
+
+
+def _validate_clip_augmentation_unsupported(clip_export: dict[str, Any]) -> None:
+    raw_offsets = clip_export.get("jitter_offsets") or [0]
     try:
-        offsets = [int(offset) for offset in jitter_offsets]
+        offsets = [int(offset) for offset in raw_offsets]
     except (TypeError, ValueError):
         offsets = [0]
-    warnings: list[str] = []
-    if offsets != [0]:
-        warnings.append(
-            "non-zero jitter_offsets are not materialized yet; exported skill clips use [0]"
+    try:
+        copies_per_clip = int(clip_export.get("copies_per_clip") or 1)
+    except (TypeError, ValueError):
+        copies_per_clip = 1
+    if offsets != [0] or copies_per_clip != 1:
+        raise NotImplementedError(
+            "clip augmentation (jitter_offsets / copies_per_clip) is not yet implemented; "
+            "remove these options or wait for a future release"
         )
-    if copies_per_clip != 1:
-        warnings.append(
-            "copies_per_clip is not materialized yet; exported skill clips use one copy"
+
+
+def _validate_skill_vocabulary(
+    annotations_by_episode: dict[int, list[AnnotationRecord]],
+    clip_export: dict[str, Any],
+) -> None:
+    clip_label_type = str(clip_export.get("clip_label_type") or "skill")
+    accepted_only = bool(clip_export.get("accepted_clips_only", True))
+    offending: list[str] = []
+    for annotations in annotations_by_episode.values():
+        for annotation in annotations:
+            if annotation.label_type != clip_label_type:
+                continue
+            if accepted_only and annotation.review_status.value not in {"accepted", "edited"}:
+                continue
+            label_value = annotation.label_value
+            if label_value not in CANONICAL_SKILL_NAMES:
+                offending.append(label_value)
+    if offending:
+        unique = sorted(set(offending))
+        raise ValueError(
+            "skill annotations contain label_values outside the canonical "
+            f"10-skill vocabulary: {unique}; allowed values are "
+            f"{sorted(CANONICAL_SKILL_NAMES)}"
         )
-    return warnings
+
+
+def _validate_camera_keys_consistency(
+    camera_feature_keys: list[str],
+    train_episode_rows: list[dict[str, Any]],
+) -> None:
+    expected = {f"{key}_video_blob" for key in camera_feature_keys}
+    observed: set[str] = set()
+    for row in train_episode_rows:
+        for column in row.keys():
+            if column.endswith("_video_blob"):
+                observed.add(column)
+    if expected != observed:
+        raise ValueError(
+            "camera_keys disagrees with materialized *_video_blob columns: "
+            f"manifest camera_keys={sorted(camera_feature_keys)}, "
+            f"observed columns={sorted(observed)}"
+        )
 
 
 def _train_skill_clip_rows(
@@ -815,7 +957,7 @@ def _train_skill_clip_rows(
         for annotation in sorted(annotations, key=lambda row: (row.start_frame, row.end_frame)):
             if annotation.label_type != clip_label_type:
                 continue
-            if accepted_only and annotation.review_status.value != "accepted":
+            if accepted_only and annotation.review_status.value not in {"accepted", "edited"}:
                 continue
             start_frame = max(0, int(annotation.start_frame))
             end_frame = min(int(annotation.end_frame), max(frames_by_index))
