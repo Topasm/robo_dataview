@@ -148,15 +148,6 @@ export function TimelinePanel({
     });
   }
 
-  async function handleCreateEvent(type: string) {
-    await onCreateSegment({
-      labelType: type,
-      labelValue: type,
-      startFrame: activeFrame,
-      endFrame: activeFrame
-    });
-  }
-
   function handleTrackPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.target !== event.currentTarget) {
       return;
@@ -218,26 +209,15 @@ export function TimelinePanel({
             </button>
           </span>
           <span className="timeline-action-divider" aria-hidden="true" />
-          <span className="timeline-action-group" aria-label="Bad ranges">
-            <button className="text-button compact-text-button" onClick={() => void handleCreateBadRange(0.5)} type="button">
+          <span className="timeline-action-group" aria-label="Bad range">
+            <button
+              className="text-button compact-text-button"
+              onClick={() => void handleCreateBadRange(1)}
+              title="Mark a 1-second bad range around the current frame"
+              type="button"
+            >
               <OctagonAlert size={14} />
-              Bad ±0.5s
-            </button>
-            <button className="text-button compact-text-button" onClick={() => void handleCreateBadRange(1)} type="button">
-              <OctagonAlert size={14} />
-              Bad ±1s
-            </button>
-          </span>
-          <span className="timeline-action-divider" aria-hidden="true" />
-          <span className="timeline-action-group" aria-label="Events">
-            <button className="text-button compact-text-button" onClick={() => void handleCreateEvent("foot_slip")} type="button">
-              Slip
-            </button>
-            <button className="text-button compact-text-button" onClick={() => void handleCreateEvent("fall_event")} type="button">
-              Fall
-            </button>
-            <button className="text-button compact-text-button" onClick={() => void handleCreateEvent("collision")} type="button">
-              Collision
+              Bad range
             </button>
           </span>
           {onSetClipStart ? (

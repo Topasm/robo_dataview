@@ -14,12 +14,7 @@ type FrameMetadataPanelProps = {
 
 const QUICK_FRAME_LABELS = [
   { label: "Important", type: "important_frame", value: "important_frame" },
-  { label: "Bad", type: "bad_frame", value: "bad_frame" },
-  { label: "Slip", type: "foot_slip", value: "foot_slip" },
-  { label: "Fall", type: "fall_event", value: "fall_event" },
-  { label: "Contact", type: "foot_contact_issue", value: "foot_contact_issue" },
-  { label: "Collision", type: "collision", value: "collision" },
-  { label: "Intervention", type: "intervention", value: "intervention" }
+  { label: "Bad", type: "bad_frame", value: "bad_frame" }
 ];
 
 export function FrameMetadataPanel({
