@@ -110,16 +110,18 @@ export function CheatsheetModal({
 
   return (
     <div
-      className="cheatsheet-overlay"
+      className="modal-overlay"
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
         }
       }}
     >
-      <div className="cheatsheet-modal" role="dialog" aria-label="Keyboard shortcuts">
-        <header className="cheatsheet-header">
-          <h2>Keyboard shortcuts</h2>
+      <div className="modal-panel modal-panel--cheatsheet" role="dialog" aria-label="Keyboard shortcuts">
+        <header className="modal-header">
+          <div className="modal-header-title">
+            <h2>Keyboard shortcuts</h2>
+          </div>
           <button
             type="button"
             className="btn btn--ghost btn--icon"
@@ -129,7 +131,7 @@ export function CheatsheetModal({
             <X size={16} />
           </button>
         </header>
-        <div className="cheatsheet-body">
+        <div className="modal-body cheatsheet-body">
           {groups.map((group) => (
             <section key={group.title} className="cheatsheet-group">
               <h3>{group.title}</h3>
@@ -151,7 +153,7 @@ export function CheatsheetModal({
             </section>
           ))}
         </div>
-        <footer className="cheatsheet-footer">
+        <footer className="modal-footer cheatsheet-footer">
           <label className="cheatsheet-toggle">
             <input
               type="checkbox"

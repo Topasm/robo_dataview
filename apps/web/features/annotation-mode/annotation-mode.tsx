@@ -98,29 +98,68 @@ export function AnnotationMode({
     currentSkillClipCount === 0 &&
     !editor.isCoachDismissed(studio.selectedEpisode.datasetId, studio.selectedEpisode.episodeIndex);
 
+  const [applyLastConfirm, setApplyLastConfirm] = useState<
+    { existingCount: number } | null
+  >(null);
+
+  const performApplyLastEpisode = useCallback(
+    async (replaceExisting: boolean) => {
+      const last = editor.lastEpisodeBoundaries;
+      if (!last) {
+        return;
+      }
+      if (replaceExisting) {
+        const existing = studio.annotationRows.filter(
+          (row) =>
+            row.datasetId === studio.selectedEpisode.datasetId &&
+            row.episodeIndex === studio.selectedEpisode.episodeIndex &&
+            row.labelType === SKILL_LABEL_TYPE
+        );
+        await Promise.all(existing.map((row) => studio.handleDeleteSegment(row.id)));
+      }
+      const targetFrameCount = Math.max(1, studio.selectedEpisode.length);
+      const lastMaxFrame = Math.max(1, last.frameCount - 1);
+      const targetMaxFrame = Math.max(0, targetFrameCount - 1);
+      for (const clip of last.clips) {
+        const startRatio = clip.startFrame / lastMaxFrame;
+        const endRatio = clip.endFrame / lastMaxFrame;
+        const start = Math.max(0, Math.min(targetMaxFrame, Math.round(startRatio * targetMaxFrame)));
+        const end = Math.max(start, Math.min(targetMaxFrame, Math.round(endRatio * targetMaxFrame)));
+        await studio.handleCreateSegment({
+          labelType: SKILL_LABEL_TYPE,
+          labelValue: clip.skillName,
+          startFrame: start,
+          endFrame: end,
+          reviewStatus: "accepted",
+          metadata: { skillId: clip.skillId, qualityScore: null, successLabel: null }
+        });
+      }
+    },
+    [editor.lastEpisodeBoundaries, studio]
+  );
+
   const handleApplyLastEpisode = useCallback(() => {
     const last = editor.lastEpisodeBoundaries;
-    if (!last) {
+    if (!last) return;
+    const existing = studio.annotationRows.filter(
+      (row) =>
+        row.datasetId === studio.selectedEpisode.datasetId &&
+        row.episodeIndex === studio.selectedEpisode.episodeIndex &&
+        row.labelType === SKILL_LABEL_TYPE
+    );
+    if (existing.length > 0) {
+      // Open confirm dialog — user picks Replace vs Append.
+      setApplyLastConfirm({ existingCount: existing.length });
       return;
     }
-    const targetFrameCount = Math.max(1, studio.selectedEpisode.length);
-    const lastMaxFrame = Math.max(1, last.frameCount - 1);
-    const targetMaxFrame = Math.max(0, targetFrameCount - 1);
-    for (const clip of last.clips) {
-      const startRatio = clip.startFrame / lastMaxFrame;
-      const endRatio = clip.endFrame / lastMaxFrame;
-      const start = Math.max(0, Math.min(targetMaxFrame, Math.round(startRatio * targetMaxFrame)));
-      const end = Math.max(start, Math.min(targetMaxFrame, Math.round(endRatio * targetMaxFrame)));
-      void studio.handleCreateSegment({
-        labelType: SKILL_LABEL_TYPE,
-        labelValue: clip.skillName,
-        startFrame: start,
-        endFrame: end,
-        reviewStatus: "accepted",
-        metadata: { skillId: clip.skillId, qualityScore: null, successLabel: null }
-      });
-    }
-  }, [editor.lastEpisodeBoundaries, studio]);
+    void performApplyLastEpisode(false);
+  }, [
+    editor.lastEpisodeBoundaries,
+    performApplyLastEpisode,
+    studio.annotationRows,
+    studio.selectedEpisode.datasetId,
+    studio.selectedEpisode.episodeIndex
+  ]);
 
   const applyLastDisabled =
     !editor.lastEpisodeBoundaries ||
@@ -275,6 +314,7 @@ export function AnnotationMode({
           selectedFrameStatus={studio.selectedFrameStatus}
           selectedClipId={selectedClipId}
           selectedSkillId={selectedSkillId}
+          vlmResponses={studio.vlmResponses}
         />
       </aside>
       <CheatsheetModal
@@ -288,6 +328,67 @@ export function AnnotationMode({
         onClose={() => setAutoLabelOpen(false)}
         studio={studio}
       />
+      {applyLastConfirm ? (
+        <div
+          className="modal-overlay"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setApplyLastConfirm(null);
+            }
+          }}
+        >
+          <div className="modal-panel" role="dialog" aria-label="Apply last episode confirm">
+            <header className="modal-header">
+              <div className="modal-header-title">
+                <RefreshCw size={18} />
+                <h2>Apply last episode</h2>
+              </div>
+            </header>
+            <div className="modal-body">
+              <p>
+                This episode already has{" "}
+                <strong>{applyLastConfirm.existingCount}</strong> skill clip
+                {applyLastConfirm.existingCount === 1 ? "" : "s"}. Replace them with{" "}
+                <strong>{editor.lastEpisodeBoundaries?.clips.length ?? 0}</strong> clip
+                {(editor.lastEpisodeBoundaries?.clips.length ?? 0) === 1 ? "" : "s"} from
+                episode #{editor.lastEpisodeBoundaries?.episodeIndex} (frame ratio
+                normalized), or append (may overlap)?
+              </p>
+            </div>
+            <footer className="modal-footer">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setApplyLastConfirm(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  void performApplyLastEpisode(false);
+                  setApplyLastConfirm(null);
+                }}
+                title="Add the new clips alongside existing ones (may produce overlaps)"
+              >
+                Append
+              </button>
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={() => {
+                  void performApplyLastEpisode(true);
+                  setApplyLastConfirm(null);
+                }}
+                title="Delete the existing skill clips, then add the applied ones"
+              >
+                Replace
+              </button>
+            </footer>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

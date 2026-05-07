@@ -61,7 +61,39 @@ CORS is locked to `localhost:3000` / `127.0.0.1:30xx` — adjust in `main.py` if
 
 ## Web Orchestration
 
-`apps/web/lib/use-studio-data.ts` is the central hook for fetching/mutating studio state — it owns the optimistic-UI patterns and SSE streaming for VLM/export/Rerun jobs. `lib/api.ts` is the typed fetch layer; `lib/types.ts` mirrors API schemas. Feature panels under `features/` (dataset-browser, episode-viewer, annotation-editor, search-filter, rerun-viewer, export-manager) consume the hook rather than calling the API directly. Sample fixtures in `lib/sample-data.ts` keep the UI bootable before a dataset is opened.
+`apps/web/lib/use-studio-data.ts` is the central hook for fetching/mutating studio state — it owns the optimistic-UI patterns and SSE streaming for VLM/export/Rerun jobs. `lib/api.ts` is the typed fetch layer; `lib/types.ts` mirrors API schemas. Feature panels under `features/` consume the hook rather than calling the API directly. Sample fixtures in `lib/sample-data.ts` keep the UI bootable before a dataset is opened.
+
+### Page structure (2 tabs)
+
+`apps/web/app/page.tsx` is a thin shell — header (Browse/Annotate tabs + Export button + cheatsheet) and a banner — that mounts one of two workspaces:
+
+- `features/browse-mode/browse-mode.tsx` — triage: `DatasetBrowser` + `EpisodeList` sidebar | `EpisodeViewer initialLayout="stack"` (cam_head on top + wrist row beneath) + `EpisodeCharts` (recharts state/action lines with skill-clip `ReferenceArea` overlays + click/hover-to-seek) + `EpisodeActionBar` (Keep/Delete/Flag + "Annotate this episode →"). Disposition is soft-only (`label_type=episode_disposition` annotation; `episodes.lance` never mutated).
+- `features/annotation-mode/annotation-mode.tsx` — NLE-style cutter: `IconRail` | (annotation header + `EpisodeViewer` preview + `SkillHotBar` 0–9 + `StatusHud` + `EpisodeCharts` (compact) + `TimelinePanel` + `ShortcutChip`) | `AnnotationEditor` (3-tab inspector: Clip / Frame / Coverage). `AutoLabelDialog`, `CheatsheetModal`, and Apply-Last confirm are mounted here.
+
+### Keymap split
+
+Two hooks own the keyboard contract:
+
+- `lib/use-browse-shortcuts.ts` — Browse: `Space ←/→ ↑/↓ K/X/F Enter` (disposition + open-in-Annotate).
+- `lib/use-annotate-shortcuts.ts` — Annotate: `I/O` (in/out markers), `1–9` (select skill **and** in one stroke create+accept the I→O clip; if a pending VLM clip is selected instead, reassign skill + accept), `0` (cancel draft), `Backspace` (delete selected clip). `M/B` (bad-frame, bad-range) are opt-in via `useAnnotationEditor.enableBadFrameShortcuts` (persisted to localStorage; toggled in the cheatsheet footer). `?` toggles the cheatsheet, `Esc` closes modals — both live at the page level.
+
+### Skill vocabulary contract (do not break)
+
+The 10 canonical skills are the source of truth across the whole pipeline (`packages/robot_schema/humanoid_skills.json` → `apps/web/lib/skill-vocabulary.ts`). The same string is used as DataView `label_value`, `train_skill_clips.lance` `skill_name`, Skill Registry key, Robot CLI command, and the per-skill checkpoint directory. New skills must be added everywhere or nowhere. Each skill carries a stable color used by the timeline lane, skill hot bar, status HUD, episode chart `ReferenceArea` band, and inspector chip — all reads go through `skillByName`/`skillById`.
+
+### Design tokens & component conventions
+
+`apps/web/app/globals.css` defines the design system at the top of `:root` — spacing (`--space-1..6`), radius (`--radius-sm/md/lg/pill`), font sizes (`--text-xs..xl`), surfaces (`--bg`, `--surface`, `--surface-2`, `--surface-3`, `--video-bg`), state tints (`--accent`, `--accent-2`, `--warning`, `--danger`, plus `*-soft` and `*-soft-border` siblings via `color-mix`), shadows, and `--scrim`. Prefer these over hard-coded values in new CSS.
+
+Buttons use a small system: `.btn` baseline + `.btn--primary | --ghost | --danger | --warning`, plus size/shape modifiers `.btn--sm | --icon | --pill`. Modals use `.modal-overlay` + `.modal-panel` with `.modal-header / .modal-body / .modal-footer` (and a `.modal-panel--cheatsheet` / `.export-modal-panel` width modifier). Specialized variants (`.icon-rail-button`, `.skill-chip`) are kept where they have unique requirements (badge positioning, dynamic `--skill-color`).
+
+### Charts (lazy)
+
+`features/browse-mode/episode-charts.tsx` renders state/action timeseries via `recharts` with playhead `ReferenceLine`, accepted skill clips as colored `ReferenceArea` bands, and click/hover-to-seek. The component is wrapped in `episode-charts-async.tsx` via `next/dynamic({ssr: false})` so the ~110 KB recharts chunk only ships when the user actually opens Browse or Annotate.
+
+### Sidebar / scroll invariants
+
+`.studio-shell` is `height: 100vh; overflow: hidden;` and grids the workspace into a tight column. `.left-panel`, `.right-panel`, and `.episode-table-wrap` use `overflow-y: auto; overflow-x: hidden;` — a horizontal scrollbar in a sidebar is always a layout bug. Episode rows shrink down to a 4-column subset (Episode / Task / Frames / Status) below 1024 px so they fit narrow rails.
 
 ## Testing Notes
 

@@ -1,10 +1,17 @@
-import { useEffect, useState } from "react";
-import { Check, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Check, Sparkles, Trash2, X } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
 import { FrameMetadataPanel } from "@/features/episode-viewer/frame-metadata-panel";
 import { HUMANOID_SKILLS, SKILL_LABEL_TYPE, skillByName } from "@/lib/skill-vocabulary";
-import type { Episode, FrameRecord, ReviewStatus, SegmentAnnotation } from "@/lib/types";
+import type {
+  Episode,
+  FrameRecord,
+  ReviewStatus,
+  SegmentAnnotation,
+  VlmResponseRecord
+} from "@/lib/types";
+import { buildRationaleMap } from "@/lib/vlm-rationales";
 
 type AnnotationDraft = {
   labelType: string;
@@ -27,6 +34,7 @@ type AnnotationEditorProps = {
   selectedFrameStatus: "idle" | "loading" | "ready" | "error";
   selectedClipId: string | null;
   selectedSkillId: number;
+  vlmResponses?: VlmResponseRecord[];
   onCreateSegment: (draft: AnnotationDraft) => Promise<void>;
   onDeleteSegment: (annotationId: string) => Promise<void>;
   onSetClipStart: (frame: number | null) => void;
@@ -60,6 +68,7 @@ export function AnnotationEditor({
   selectedFrameStatus,
   selectedClipId,
   selectedSkillId,
+  vlmResponses = [],
   onCreateSegment,
   onDeleteSegment,
   onSetClipStart,
@@ -74,6 +83,32 @@ export function AnnotationEditor({
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<InspectorTab>("skills");
   const skillClips = annotations.filter((a) => a.labelType === SKILL_LABEL_TYPE);
+
+  // VLM rationales by skill name → matched to pending clips by start-frame order.
+  const rationaleMap = useMemo(() => buildRationaleMap(vlmResponses), [vlmResponses]);
+  const pendingClipRationaleIndex = useMemo(() => {
+    const counters = new Map<string, number>();
+    const result = new Map<string, number>();
+    const pending = skillClips
+      .filter((row) => row.reviewStatus === "pending")
+      .sort((a, b) => a.startFrame - b.startFrame);
+    for (const clip of pending) {
+      const next = counters.get(clip.labelValue) ?? 0;
+      result.set(clip.id, next);
+      counters.set(clip.labelValue, next + 1);
+    }
+    return result;
+  }, [skillClips]);
+
+  const selectedClip = selectedClipId
+    ? skillClips.find((row) => row.id === selectedClipId) ?? null
+    : null;
+  const selectedClipRationale =
+    selectedClip && selectedClip.reviewStatus === "pending"
+      ? rationaleMap.get(selectedClip.labelValue)?.[
+          pendingClipRationaleIndex.get(selectedClip.id) ?? 0
+        ]
+      : undefined;
 
   // Clamping clipEnd against the episode length is handled by the parent's
   // I/O markers + 1-9 keymap. This effect just keeps stale state safe when
@@ -191,6 +226,77 @@ export function AnnotationEditor({
               </button>
             </div>
           </section>
+
+          {selectedClip && selectedClip.reviewStatus === "pending" ? (
+            <section className="panel-section vlm-review-card">
+              <div className="vlm-review-card-header">
+                <Sparkles size={14} />
+                <span>VLM Proposal</span>
+                {selectedClipRationale?.confidence !== undefined &&
+                selectedClipRationale.confidence !== null ? (
+                  <span className="vlm-review-card-confidence">
+                    <span
+                      className="vlm-review-card-confidence-bar"
+                      style={{
+                        width: `${Math.max(0, Math.min(1, selectedClipRationale.confidence)) * 100}%`
+                      }}
+                    />
+                    <span className="vlm-review-card-confidence-value mono">
+                      {selectedClipRationale.confidence.toFixed(2)}
+                    </span>
+                  </span>
+                ) : null}
+              </div>
+              <div className="vlm-review-card-body">
+                <div className="vlm-review-card-clip">
+                  <span
+                    className="vlm-review-card-skill"
+                    style={{
+                      color: skillByName(selectedClip.labelValue)?.color ?? "var(--text)"
+                    }}
+                  >
+                    {skillByName(selectedClip.labelValue)?.label ?? selectedClip.labelValue}
+                  </span>
+                  <span className="muted mono">
+                    f{selectedClip.startFrame}–f{selectedClip.endFrame}
+                  </span>
+                </div>
+                {selectedClipRationale?.rationale ? (
+                  <p className="vlm-review-card-rationale">
+                    {selectedClipRationale.rationale}
+                  </p>
+                ) : (
+                  <p className="vlm-review-card-rationale muted">
+                    No rationale provided. Press 1–9 to assign a skill (auto-accepts) or ⌫ to reject.
+                  </p>
+                )}
+              </div>
+              <div className="vlm-review-card-actions">
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  onClick={() => onUpdateReviewStatus(selectedClip.id, "accepted")}
+                >
+                  <Check size={14} />
+                  <span>Accept</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--danger"
+                  onClick={() => {
+                    void onDeleteSegment(selectedClip.id);
+                    onSelectClip(null);
+                  }}
+                >
+                  <X size={14} />
+                  <span>Reject</span>
+                </button>
+                <span className="muted vlm-review-card-hint">
+                  or press 1–9 to reassign skill + accept
+                </span>
+              </div>
+            </section>
+          ) : null}
 
           <section className="panel-section">
             <div className="section-title">Skill Clips</div>

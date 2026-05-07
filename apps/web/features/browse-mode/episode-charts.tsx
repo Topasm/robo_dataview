@@ -24,6 +24,8 @@ type EpisodeChartsProps = {
   onSelectFrame?: (frame: number) => void;
   /** "compact" trims chart heights for use inside Annotate mode beside the timeline. */
   variant?: "default" | "compact";
+  /** When true, hovering along a chart updates the global frame index (camera + HUD follow). */
+  hoverSeek?: boolean;
 };
 
 type ChartRow = {
@@ -44,7 +46,8 @@ export function EpisodeCharts({
   annotations,
   selectedFrame,
   onSelectFrame,
-  variant = "default"
+  variant = "default",
+  hoverSeek = true
 }: EpisodeChartsProps) {
   const [timeseries, setTimeseries] = useState<EpisodeTimeseries | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -138,14 +141,20 @@ export function EpisodeCharts({
     );
   }
 
-  function handleClick(payload: { activeLabel?: string | number } | null) {
+  function seekFromPayload(payload: { activeLabel?: string | number } | null) {
     if (!onSelectFrame || !payload) return;
     const v = payload.activeLabel;
     if (v == null) return;
     const frame = typeof v === "number" ? v : Number(v);
     if (!Number.isFinite(frame)) return;
-    onSelectFrame(Math.max(0, Math.min(lastFrame, Math.round(frame))));
+    const clamped = Math.max(0, Math.min(lastFrame, Math.round(frame)));
+    if (clamped !== selectedFrame) {
+      onSelectFrame(clamped);
+    }
   }
+
+  const handleClick = seekFromPayload;
+  const handleMove = hoverSeek ? seekFromPayload : undefined;
 
   return (
     <div className={`episode-charts variant-${variant}`}>
@@ -163,6 +172,7 @@ export function EpisodeCharts({
         currentFrame={selectedFrame}
         lastFrame={lastFrame}
         onClick={handleClick}
+        onMove={handleMove}
       />
       <ChartCard
         title="Action"
@@ -178,6 +188,7 @@ export function EpisodeCharts({
         currentFrame={selectedFrame}
         lastFrame={lastFrame}
         onClick={handleClick}
+        onMove={handleMove}
       />
     </div>
   );
@@ -203,7 +214,8 @@ function ChartCard({
   skillBands,
   currentFrame,
   lastFrame,
-  onClick
+  onClick,
+  onMove
 }: {
   title: string;
   chartHeight: number;
@@ -215,6 +227,7 @@ function ChartCard({
   currentFrame: number;
   lastFrame: number;
   onClick: (payload: { activeLabel?: string | number } | null) => void;
+  onMove?: (payload: { activeLabel?: string | number } | null) => void;
 }) {
   return (
     <section className="episode-chart-card">
@@ -230,6 +243,7 @@ function ChartCard({
             data={data}
             margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
             onClick={onClick}
+            onMouseMove={onMove}
           >
             <CartesianGrid stroke="var(--border)" strokeDasharray="2 2" vertical={false} />
             <XAxis

@@ -3206,51 +3206,7 @@ kbd {
   font-size: 10px;
 }
 
-/* --- Cheatsheet modal --- */
-
-.cheatsheet-overlay {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(20, 33, 38, 0.45);
-  z-index: 1000;
-}
-
-.cheatsheet-modal {
-  width: min(720px, 92vw);
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 20px 50px rgb(20 33 38 / 0.25);
-  overflow: hidden;
-}
-
-.cheatsheet-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--border);
-}
-
-.cheatsheet-header h2 {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: 600;
-}
-
-.cheatsheet-body {
-  padding: 16px 18px;
-  overflow-y: auto;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 18px;
-}
+/* --- Cheatsheet modal (uses .modal-* baseline + .cheatsheet-body grid layout) --- */
 
 .cheatsheet-group h3 {
   margin: 0 0 8px;
@@ -3332,6 +3288,49 @@ kbd {
   }
 
   .annotation-inspector {
+    display: none;
+  }
+
+  /* Camera areas slim down to leave room for charts. */
+  .camera-preview.layout-grid,
+  .camera-preview.layout-stack {
+    max-height: 50vh;
+  }
+}
+
+@media (max-width: 1024px) {
+  /* Tighten sidebars + drop chart heights on smaller laptop screens. */
+  .browse-mode-shell {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .camera-preview.layout-grid,
+  .camera-preview.layout-stack {
+    max-height: 42vh;
+  }
+
+  .episode-charts {
+    padding: var(--space-1) var(--space-2);
+  }
+
+  /* Episode list fits in narrower sidebar. */
+  .episode-row {
+    grid-template-columns: 50px 32px 44px minmax(0, 1fr);
+    padding: 0 var(--space-2);
+  }
+
+  .episode-row > :nth-child(n + 5) {
+    display: none;
+  }
+}
+
+@media (max-width: 800px) {
+  /* Below typical laptop: hide left sidebar entirely; keep main stage usable. */
+  .browse-mode-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .browse-mode-side {
     display: none;
   }
 }
@@ -3590,6 +3589,16 @@ kbd {
 .modal-panel.export-modal-panel {
   width: min(880px, 92vw);
   max-height: 85vh;
+}
+
+.modal-panel.modal-panel--cheatsheet {
+  width: min(720px, 92vw);
+}
+
+.modal-body.cheatsheet-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-4);
 }
 
 .export-modal-body {
@@ -4127,4 +4136,96 @@ button.shortcut-chip-item.shortcut-chip-button:hover .shortcut-chip-label {
 .btn--pill {
   border-radius: var(--radius-pill);
   padding: var(--space-1) var(--space-3);
+}
+
+/* ===========================================================
+ * VLM Review Card (pending skill clip detail in Inspector)
+ * =========================================================== */
+
+.vlm-review-card {
+  border: 1px solid var(--accent-soft-border);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.vlm-review-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.vlm-review-card-confidence {
+  position: relative;
+  flex: 1;
+  height: 6px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+
+.vlm-review-card-confidence-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--accent);
+  border-radius: var(--radius-pill);
+}
+
+.vlm-review-card-confidence-value {
+  position: absolute;
+  right: var(--space-1);
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--text);
+  background: var(--surface);
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+}
+
+.vlm-review-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.vlm-review-card-clip {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.vlm-review-card-skill {
+  font-weight: 600;
+  font-size: var(--text-md);
+}
+
+.vlm-review-card-rationale {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.vlm-review-card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.vlm-review-card-hint {
+  font-size: 11px;
+  margin-left: auto;
 }
