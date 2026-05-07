@@ -1,86 +1,37 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Database, Download, Settings } from "lucide-react";
 
-import { AnnotationEditor } from "@/features/annotation-editor/annotation-editor";
-import { DatasetBrowser } from "@/features/dataset-browser/dataset-browser";
-import { EpisodeList } from "@/features/dataset-browser/episode-list";
-import { EpisodeViewer } from "@/features/episode-viewer/episode-viewer";
-import { FrameTablePanel } from "@/features/episode-viewer/frame-table-panel";
-import { TimelinePanel } from "@/features/episode-viewer/timeline-panel";
-import { ExportStrip } from "@/features/export-manager/export-strip";
-import { RerunPanel } from "@/features/rerun-viewer/rerun-panel";
-import { SearchFilterBar } from "@/features/search-filter/search-filter-bar";
-import { HUMANOID_SKILLS, SKILL_LABEL_TYPE } from "@/lib/skill-vocabulary";
+import { AnnotationMode } from "@/features/annotation-mode/annotation-mode";
+import { BrowseMode } from "@/features/browse-mode/browse-mode";
+import type { WorkspaceDrawerTab } from "@/lib/types";
 import { useStudioData } from "@/lib/use-studio-data";
 
-type DrawerTab = "episodes" | "frames" | "rerun" | "export";
+type ActiveTab = "browse" | "annotate";
 
 export default function Home() {
-  const [workMode, setWorkMode] = useState<"view" | "segment">("view");
-  const [activeDrawer, setActiveDrawer] = useState<DrawerTab | null>(null);
+  const [activeTab, setActiveTab] = useState<ActiveTab>("browse");
+  const [activeDrawer, setActiveDrawer] = useState<WorkspaceDrawerTab | null>(null);
   const [showSignals, setShowSignals] = useState(false);
   const [clipStart, setClipStart] = useState<number | null>(null);
   const [clipEnd, setClipEnd] = useState<number | null>(null);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedSkillId, setSelectedSkillId] = useState<number>(0);
+  const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
+
+  const studio = useStudioData();
   const {
-    annotationHistoryRows,
-    annotationRows,
     dataStatus,
-    episodeRows,
-    exportJob,
-    exportRecord,
-    filterPresets,
-    frameBrowserLimit,
-    frameBrowserStart,
-    framePage,
-    frameRows,
-    frameRowsStatus,
-    mutationNotice,
-    rerunJob,
-    rerunSession,
-    rerunViewerUrl,
-    reviewQueueRows,
-    reviewerUserId,
-    searchResults,
-    selectedEpisode,
-    selectedEpisodeIndex,
-    selectedDatasetHealth,
-    selectedFrameIndex,
-    selectedFrameRecord,
-    selectedFrameStatus,
-    selectedSummary,
-    vlmJob,
-    vlmResponses,
-    handleAssignAnnotation,
-    handleCreateExport,
-    handleCreateFilterPreset,
-    handleCreateRerunSession,
-    handleCreateSegment,
-    handleDeleteSegment,
-    handleDeleteFilterPreset,
-    handleFilterSearch,
-    handleFullTextSearch,
-    handleMergeSegments,
-    handleOpenDataset,
-    handleRunVlmLabel,
-    handleSelectEpisode,
-    handleSelectFrame,
     handleDismissMutationNotice,
-    handleSemanticSearch,
-    handleSetFrameBrowserLimit,
-    handleSetFrameBrowserStart,
-    handleSplitSegment,
-    handleUpdateFrameBadFlag,
-    handleUpdateSelectedFrameLabel,
-    handleUpdateSelectedFrameBadFlag,
-    handleUpdateSegment,
-    handleUpdateReviewStatus
-  } = useStudioData();
-  const lastFrame = Math.max(0, (selectedEpisode?.length ?? 1) - 1);
-  const fps = selectedEpisode?.fps > 0 ? selectedEpisode.fps : 20;
+    mutationNotice,
+    selectedEpisode,
+    selectedSummary
+  } = studio;
+
+  const toggleSignals = useCallback(() => setShowSignals((current) => !current), []);
+  const openCheatsheet = useCallback(() => setCheatsheetOpen(true), []);
+  const closeCheatsheet = useCallback(() => setCheatsheetOpen(false), []);
 
   useEffect(() => {
     setClipStart(null);
@@ -88,13 +39,8 @@ export default function Home() {
     setSelectedClipId(null);
   }, [selectedEpisode.datasetId, selectedEpisode.episodeIndex]);
 
-  const handleSelectNextPendingEpisode = useCallback(() => {
-    const nextPending = episodeRows.find(ep => ep.reviewStatus === "pending" && ep.episodeIndex !== selectedEpisodeIndex);
-    if (nextPending) {
-      handleSelectEpisode(nextPending.episodeIndex);
-    }
-  }, [episodeRows, selectedEpisodeIndex, handleSelectEpisode]);
-
+  // Cross-tab globals only (`?` cheatsheet, Esc). Tab-specific keymaps live in
+  // useBrowseShortcuts / useAnnotateShortcuts inside their mode components.
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       const target = event.target;
@@ -106,98 +52,23 @@ export default function Home() {
       if (isTyping) {
         return;
       }
-      // --- Navigation / playback ---
-      if (event.key === "ArrowLeft") {
+      if (event.key === "?" || (event.shiftKey && event.key === "/")) {
         event.preventDefault();
-        handleSelectFrame(Math.max(0, selectedFrameIndex - (event.shiftKey ? 10 : 1)));
-      } else if (event.key === "ArrowRight") {
+        setCheatsheetOpen((current) => !current);
+        return;
+      }
+      if (event.key === "Escape") {
         event.preventDefault();
-        handleSelectFrame(Math.min(lastFrame, selectedFrameIndex + (event.shiftKey ? 10 : 1)));
-      } else if (event.key === "Escape") {
-        event.preventDefault();
-        setActiveDrawer(null);
-      // --- Skill clip boundary ---
-      } else if (event.key.toLowerCase() === "i") {
-        event.preventDefault();
-        setClipStart(selectedFrameIndex);
-      } else if (event.key.toLowerCase() === "o") {
-        event.preventDefault();
-        setClipEnd(selectedFrameIndex);
-      } else if (event.key.toLowerCase() === "a" && clipStart !== null && clipEnd !== null) {
-        event.preventDefault();
-        const skill = HUMANOID_SKILLS[selectedSkillId];
-        if (skill) {
-          const start = Math.min(clipStart, clipEnd);
-          const end = Math.max(clipStart, clipEnd);
-          void handleCreateSegment({
-            labelType: SKILL_LABEL_TYPE,
-            labelValue: skill.name,
-            startFrame: start,
-            endFrame: end,
-            metadata: { skillId: skill.id, qualityScore: null, successLabel: null }
-          });
-          setClipStart(null);
-          setClipEnd(null);
+        if (cheatsheetOpen) {
+          setCheatsheetOpen(false);
+        } else {
+          setActiveDrawer(null);
         }
-      } else if (event.key === "Enter") {
-        event.preventDefault();
-        if (selectedClipId !== null) {
-          void handleUpdateReviewStatus(selectedClipId, "accepted");
-        }
-      } else if (event.key === "Backspace" || event.key === "Delete") {
-        event.preventDefault();
-        if (selectedClipId !== null) {
-          void handleDeleteSegment(selectedClipId);
-          setSelectedClipId(null);
-        }
-      // --- Skill ID selection (0-9) ---
-      } else if (event.key >= "0" && event.key <= "9") {
-        event.preventDefault();
-        const id = Number(event.key);
-        if (id < HUMANOID_SKILLS.length) {
-          setSelectedSkillId(id);
-        }
-      // --- Frame tools ---
-      } else if (event.key.toLowerCase() === "m") {
-        event.preventDefault();
-        void handleUpdateSelectedFrameBadFlag(!(selectedFrameRecord?.isBadFrame ?? false));
-      } else if (event.key.toLowerCase() === "b") {
-        event.preventDefault();
-        const radius = Math.max(1, Math.round(fps / 2));
-        void handleCreateSegment({ labelType: "bad_range", labelValue: "bad_range", startFrame: Math.max(0, selectedFrameIndex - radius), endFrame: Math.min(lastFrame, selectedFrameIndex + radius) });
-      // --- Drawer toggles ---
-      } else if (event.key.toLowerCase() === "e") {
-        event.preventDefault();
-        setActiveDrawer((current) => (current === "episodes" ? null : "episodes"));
-      } else if (event.key.toLowerCase() === "f") {
-        event.preventDefault();
-        setActiveDrawer((current) => (current === "frames" ? null : "frames"));
-      } else if (event.key.toLowerCase() === "r") {
-        event.preventDefault();
-        setActiveDrawer((current) => (current === "rerun" ? null : "rerun"));
-      } else if (event.key.toLowerCase() === "n") {
-        event.preventDefault();
-        handleSelectNextPendingEpisode();
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [
-    clipEnd,
-    clipStart,
-    fps,
-    handleCreateSegment,
-    handleDeleteSegment,
-    handleSelectFrame,
-    handleSelectNextPendingEpisode,
-    handleUpdateSelectedFrameBadFlag,
-    handleUpdateReviewStatus,
-    lastFrame,
-    selectedClipId,
-    selectedFrameIndex,
-    selectedFrameRecord?.isBadFrame,
-    selectedSkillId
-  ]);
+  }, [cheatsheetOpen]);
 
   return (
     <div className="studio-shell">
@@ -208,18 +79,18 @@ export default function Home() {
         </div>
         <nav className="top-nav">
           <button
-            className={`nav-button ${workMode === "view" ? "active" : ""}`}
-            onClick={() => setWorkMode("view")}
+            className={`nav-button ${activeTab === "browse" ? "active" : ""}`}
+            onClick={() => setActiveTab("browse")}
             type="button"
           >
-            View
+            Browse
           </button>
           <button
-            className={`nav-button ${workMode === "segment" ? "active" : ""}`}
-            onClick={() => setWorkMode("segment")}
+            className={`nav-button ${activeTab === "annotate" ? "active" : ""}`}
+            onClick={() => setActiveTab("annotate")}
             type="button"
           >
-            Segment
+            Annotate
           </button>
         </nav>
         <div className="top-bar-actions">
@@ -253,200 +124,27 @@ export default function Home() {
         </div>
       ) : null}
 
-      <div className="workspace">
-        <DatasetBrowser
-          onOpenDataset={handleOpenDataset}
-          onSelectEpisode={handleSelectEpisode}
-          reviewQueueRows={reviewQueueRows}
-          reviewerUserId={reviewerUserId}
-          health={selectedDatasetHealth}
-          summary={selectedSummary}
+      {activeTab === "browse" ? (
+        <BrowseMode studio={studio} onSwitchToAnnotate={() => setActiveTab("annotate")} />
+      ) : null}
+      {activeTab === "annotate" ? (
+        <AnnotationMode
+          studio={studio}
+          showSignals={showSignals}
+          onToggleSignals={toggleSignals}
+          clipStart={clipStart}
+          clipEnd={clipEnd}
+          onSetClipStart={setClipStart}
+          onSetClipEnd={setClipEnd}
+          selectedClipId={selectedClipId}
+          onSetSelectedClipId={setSelectedClipId}
+          selectedSkillId={selectedSkillId}
+          onSetSelectedSkillId={setSelectedSkillId}
+          cheatsheetOpen={cheatsheetOpen}
+          onCloseCheatsheet={closeCheatsheet}
+          onOpenCheatsheet={openCheatsheet}
         />
-        <div className="center-column">
-          <SearchFilterBar
-            filterPresets={filterPresets}
-            onCreateFilterPreset={handleCreateFilterPreset}
-            onDeleteFilterPreset={handleDeleteFilterPreset}
-            onFilterSearch={handleFilterSearch}
-            onFullTextSearch={handleFullTextSearch}
-            onSelectResult={handleSelectEpisode}
-            onSemanticSearch={handleSemanticSearch}
-            results={searchResults}
-          />
-          <div className="review-action-bar">
-            <div className="drawer-buttons">
-              <button
-                className={`text-button compact-text-button${activeDrawer === "episodes" ? " active" : ""}`}
-                onClick={() => setActiveDrawer((current) => (current === "episodes" ? null : "episodes"))}
-                type="button"
-              >
-                Episodes ({episodeRows.length})
-              </button>
-              <button
-                className={`text-button compact-text-button${activeDrawer === "frames" ? " active" : ""}`}
-                onClick={() => setActiveDrawer((current) => (current === "frames" ? null : "frames"))}
-                type="button"
-              >
-                Frames
-              </button>
-              <button
-                className={`text-button compact-text-button${showSignals ? " active" : ""}`}
-                onClick={() => setShowSignals((current) => !current)}
-                type="button"
-              >
-                Signals
-              </button>
-              <button
-                className={`text-button compact-text-button${activeDrawer === "rerun" ? " active" : ""}`}
-                onClick={() => setActiveDrawer((current) => (current === "rerun" ? null : "rerun"))}
-                type="button"
-              >
-                Rerun
-              </button>
-            </div>
-          </div>
-          <div className="content-split">
-            <div className="viewer-column">
-              <EpisodeViewer
-                annotations={annotationRows}
-                episode={selectedEpisode}
-                onFrameChange={handleSelectFrame}
-                selectedFrame={selectedFrameIndex}
-                onToggleSignals={() => setShowSignals((current) => !current)}
-                showSignals={showSignals}
-              />
-              <TimelinePanel
-                annotations={annotationRows}
-                clipEnd={clipEnd}
-                clipStart={clipStart}
-                fps={fps}
-                frameCount={selectedEpisode.length}
-                onCreateSegment={handleCreateSegment}
-                onDeleteSegment={handleDeleteSegment}
-                onSelectSegment={setSelectedClipId}
-                onMergeSegments={handleMergeSegments}
-                onSelectFrame={handleSelectFrame}
-                onSetClipEnd={setClipEnd}
-                onSetClipStart={setClipStart}
-                onSplitSegment={handleSplitSegment}
-                onUpdateSegment={handleUpdateSegment}
-                selectedFrame={selectedFrameIndex}
-                selectedSegmentId={selectedClipId}
-              />
-            </div>
-            <AnnotationEditor
-              annotationHistory={annotationHistoryRows}
-              clipEnd={clipEnd}
-              clipStart={clipStart}
-              compact={workMode === "view"}
-              onSetClipEnd={setClipEnd}
-                onSetClipStart={setClipStart}
-                onSetSelectedSkillId={setSelectedSkillId}
-                annotations={annotationRows}
-                episode={selectedEpisode}
-                onCreateSegment={handleCreateSegment}
-                onAssignAnnotation={handleAssignAnnotation}
-                onDeleteSegment={handleDeleteSegment}
-                onRunVlmLabel={handleRunVlmLabel}
-                onSelectClip={setSelectedClipId}
-                onUpdateSelectedFrameLabel={handleUpdateSelectedFrameLabel}
-              onUpdateSelectedFrameBadFlag={handleUpdateSelectedFrameBadFlag}
-              onUpdateSegment={handleUpdateSegment}
-              onUpdateReviewStatus={handleUpdateReviewStatus}
-              selectedFrame={selectedFrameIndex}
-              selectedFrameRecord={selectedFrameRecord}
-              selectedFrameStatus={selectedFrameStatus}
-              selectedClipId={selectedClipId}
-              selectedSkillId={selectedSkillId}
-              reviewerUserId={reviewerUserId}
-              vlmJob={vlmJob}
-              vlmResponses={vlmResponses}
-            />
-          </div>
-          {activeDrawer ? (
-            <BottomDrawer
-              onClose={() => setActiveDrawer(null)}
-              title={drawerTitle(activeDrawer)}
-            >
-              {activeDrawer === "episodes" ? (
-                <EpisodeList
-                  compact
-                  episodes={episodeRows}
-                  onSelectEpisode={handleSelectEpisode}
-                  selectedEpisodeIndex={selectedEpisodeIndex}
-                />
-              ) : null}
-              {activeDrawer === "frames" ? (
-                <FrameTablePanel
-                  frameCount={framePage?.frameCount ?? selectedEpisode.length}
-                  frameLimit={frameBrowserLimit}
-                  frameStart={frameBrowserStart}
-                  frames={frameRows}
-                  onFrameLimitChange={handleSetFrameBrowserLimit}
-                  onFrameStartChange={handleSetFrameBrowserStart}
-                  onSelectFrame={handleSelectFrame}
-                  onSetBadFrame={handleUpdateFrameBadFlag}
-                  returnedCount={framePage?.returnedCount ?? frameRows.length}
-                  selectedFrame={selectedFrameIndex}
-                  status={frameRowsStatus}
-                />
-              ) : null}
-              {activeDrawer === "rerun" ? (
-                <RerunPanel
-                  job={rerunJob}
-                  onCreateSession={handleCreateRerunSession}
-                  session={rerunSession}
-                  viewerUrl={rerunViewerUrl}
-                />
-              ) : null}
-              {activeDrawer === "export" ? (
-                <ExportStrip
-                  episodeIndex={selectedEpisode.episodeIndex}
-                  exportJob={exportJob}
-                  exportRecord={exportRecord}
-                  onCreateExport={handleCreateExport}
-                  split={selectedEpisode.split}
-                />
-              ) : null}
-            </BottomDrawer>
-          ) : null}
-        </div>
-      </div>
+      ) : null}
     </div>
   );
-}
-
-function BottomDrawer({
-  children,
-  onClose,
-  title
-}: {
-  children: ReactNode;
-  onClose: () => void;
-  title: string;
-}) {
-  return (
-    <section className="bottom-drawer">
-      <div className="bottom-drawer-header">
-        <div className="section-title">{title}</div>
-        <button className="text-button compact-text-button" onClick={onClose} type="button">
-          Close
-        </button>
-      </div>
-      <div className="bottom-drawer-body">{children}</div>
-    </section>
-  );
-}
-
-function drawerTitle(tab: DrawerTab): string {
-  if (tab === "episodes") {
-    return "Episodes";
-  }
-  if (tab === "frames") {
-    return "Frame Browser";
-  }
-  if (tab === "rerun") {
-    return "Rerun";
-  }
-  return "Export";
 }

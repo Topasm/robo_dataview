@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+from typing import Any
 from uuid import uuid4
 
 from apps.api.schemas.annotations import (
@@ -14,12 +15,16 @@ from apps.api.schemas.annotations import (
     AnnotationRecord,
     AnnotationUpdate,
 )
+from apps.api.schemas.common import AnnotationSource, ReviewStatus
 from apps.api.services.pydantic_compat import model_copy, model_dump
 from packages.robot_schema import (
     build_annotation_events_pyarrow_schema,
     build_annotations_current_pyarrow_schema,
     build_annotations_pyarrow_schema,
 )
+
+
+EPISODE_DISPOSITION_LABEL_TYPE = "episode_disposition"
 
 
 ANNOTATION_STORAGE_ROOT = Path("data/lance/annotations")
@@ -182,6 +187,104 @@ class AnnotationStore:
             and (episode_index is None or event.episode_index == episode_index)
             and (annotation_id is None or event.annotation_id == annotation_id)
         ]
+
+    def upsert_episode_disposition(
+        self,
+        *,
+        dataset_id: str,
+        episode_index: int,
+        disposition: str | None,
+        reason: str | None,
+        actor: str = "local",
+    ) -> dict[str, Any] | None:
+        existing = self._find_active_disposition(dataset_id, episode_index)
+        if disposition is None:
+            if existing is None:
+                return None
+            self.delete(existing.annotation_id, actor=actor)
+            return None
+
+        metadata = {"reason": reason} if reason is not None else {}
+        if existing is not None:
+            updated = self.update(
+                existing.annotation_id,
+                AnnotationUpdate(
+                    label_value=disposition,
+                    metadata=metadata,
+                    updated_by=actor,
+                ),
+                action="disposition_update",
+            )
+            if updated is None:
+                return None
+            return {
+                "disposition": updated.label_value,
+                "reason": (updated.metadata or {}).get("reason"),
+                "disposition_updated_at": updated.updated_at,
+            }
+
+        created = self.create(
+            AnnotationCreate(
+                dataset_id=dataset_id,
+                episode_index=episode_index,
+                start_frame=0,
+                end_frame=0,
+                label_type=EPISODE_DISPOSITION_LABEL_TYPE,
+                label_value=disposition,
+                source=AnnotationSource.human,
+                review_status=ReviewStatus.accepted,
+                metadata=metadata,
+                created_by=actor,
+            )
+        )
+        return {
+            "disposition": created.label_value,
+            "reason": (created.metadata or {}).get("reason"),
+            "disposition_updated_at": created.updated_at,
+        }
+
+    def list_episode_dispositions(
+        self,
+        dataset_id: str,
+    ) -> dict[int, dict[str, Any]]:
+        latest: dict[int, AnnotationRecord] = {}
+        for record in self._records.values():
+            if record.dataset_id != dataset_id:
+                continue
+            if record.label_type != EPISODE_DISPOSITION_LABEL_TYPE:
+                continue
+            if record.deleted_at is not None:
+                continue
+            existing = latest.get(record.episode_index)
+            if existing is None or record.updated_at > existing.updated_at:
+                latest[record.episode_index] = record
+        return {
+            episode_index: {
+                "disposition": record.label_value,
+                "reason": (record.metadata or {}).get("reason"),
+                "disposition_updated_at": record.updated_at,
+            }
+            for episode_index, record in latest.items()
+        }
+
+    def _find_active_disposition(
+        self,
+        dataset_id: str,
+        episode_index: int,
+    ) -> AnnotationRecord | None:
+        latest: AnnotationRecord | None = None
+        for record in self._records.values():
+            if record.dataset_id != dataset_id:
+                continue
+            if record.episode_index != episode_index:
+                continue
+            if record.label_type != EPISODE_DISPOSITION_LABEL_TYPE:
+                continue
+            if record.deleted_at is not None:
+                continue
+            if latest is None or record.updated_at > latest.updated_at:
+                latest = record
+        return latest
 
     def storage_paths(self, dataset_id: str) -> dict[str, str]:
         dataset_dir = self._dataset_dir(dataset_id)

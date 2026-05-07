@@ -1,9 +1,20 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Self
 
 from pydantic import BaseModel, Field
 
+try:
+    from pydantic import model_validator
+except ImportError:  # Pydantic v1 compatibility for system Python test environments.
+    model_validator = None
+    from pydantic import root_validator
+else:
+    root_validator = None
+
 from apps.api.schemas.common import ReviewStatus
+
+
+_ALLOWED_DISPOSITIONS = {"kept", "deleted", "flagged"}
 
 
 class EpisodeListItem(BaseModel):
@@ -23,6 +34,9 @@ class EpisodeListItem(BaseModel):
     camera_names: list[str] = Field(default_factory=list)
     duration_seconds: float | None = None
     language_instruction: str | None = None
+    disposition: str | None = None
+    disposition_reason: str | None = None
+    disposition_updated_at: datetime | None = None
 
 
 class EpisodeListPage(BaseModel):
@@ -79,6 +93,33 @@ class EpisodeLabelUpdate(BaseModel):
     review_status: ReviewStatus | None = None
     language_instruction: str | None = None
     updated_by: str | None = None
+
+
+class EpisodeDispositionUpdate(BaseModel):
+    disposition: str | None = None
+    reason: str | None = None
+    updated_by: str | None = None
+
+    if model_validator is not None:
+
+        @model_validator(mode="after")
+        def validate_disposition(self) -> Self:
+            if self.disposition is not None and self.disposition not in _ALLOWED_DISPOSITIONS:
+                raise ValueError(
+                    "disposition must be one of 'kept', 'deleted', 'flagged' or null"
+                )
+            return self
+
+    else:
+
+        @root_validator(skip_on_failure=True)  # type: ignore[misc]
+        def validate_disposition(cls, values: dict[str, Any]) -> dict[str, Any]:
+            disposition = values.get("disposition")
+            if disposition is not None and disposition not in _ALLOWED_DISPOSITIONS:
+                raise ValueError(
+                    "disposition must be one of 'kept', 'deleted', 'flagged' or null"
+                )
+            return values
 
 
 class EpisodeLabelHistoryRecord(BaseModel):

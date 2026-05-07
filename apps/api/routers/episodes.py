@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from apps.api.schemas.episodes import (
     EpisodeDetail,
+    EpisodeDispositionUpdate,
     EpisodeLabelHistoryRecord,
     EpisodeLabelUpdate,
     EpisodeListItem,
@@ -12,6 +13,7 @@ from apps.api.schemas.episodes import (
     EpisodeTimeseries,
     StateActionSummary,
 )
+from apps.api.services.annotation_service import annotation_store
 from apps.api.services.lance_store import store
 from apps.api.services.episode_preview_service import (
     EpisodePreviewUnavailable,
@@ -24,6 +26,34 @@ from apps.api.services.user_context import current_user_id
 router = APIRouter(tags=["episodes"])
 
 
+def _attach_disposition(
+    episodes: list[EpisodeListItem],
+    dataset_id: str,
+) -> list[EpisodeListItem]:
+    if not episodes:
+        return episodes
+    dispositions = annotation_store.list_episode_dispositions(dataset_id)
+    if not dispositions:
+        return episodes
+    enriched: list[EpisodeListItem] = []
+    for episode in episodes:
+        info = dispositions.get(episode.episode_index)
+        if info is None:
+            enriched.append(episode)
+            continue
+        enriched.append(
+            model_copy(
+                episode,
+                update={
+                    "disposition": info.get("disposition"),
+                    "disposition_reason": info.get("reason"),
+                    "disposition_updated_at": info.get("disposition_updated_at"),
+                },
+            )
+        )
+    return enriched
+
+
 @router.get("/episodes", response_model=list[EpisodeListItem])
 def list_episodes(
     dataset_id: str = Query(...),
@@ -34,7 +64,7 @@ def list_episodes(
     filter_query: str | None = Query(default=None),
 ) -> list[EpisodeListItem]:
     try:
-        return store.list_episodes(
+        items = store.list_episodes(
             dataset_id,
             limit=limit,
             offset=offset,
@@ -44,6 +74,7 @@ def list_episodes(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _attach_disposition(items, dataset_id)
 
 
 @router.get("/episodes/page", response_model=EpisodeListPage)
@@ -56,7 +87,7 @@ def list_episode_page(
     filter_query: str | None = Query(default=None),
 ) -> EpisodeListPage:
     try:
-        return store.list_episode_page(
+        page = store.list_episode_page(
             dataset_id,
             limit=limit,
             offset=offset,
@@ -66,6 +97,8 @@ def list_episode_page(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    enriched_items = _attach_disposition(list(page.items), dataset_id)
+    return model_copy(page, update={"items": enriched_items})
 
 
 @router.get("/episodes/{episode_index}", response_model=EpisodeDetail)
@@ -73,7 +106,8 @@ def episode_detail(episode_index: int, dataset_id: str = Query(...)) -> EpisodeD
     episode = store.get_episode(dataset_id, episode_index)
     if episode is None:
         raise HTTPException(status_code=404, detail="Episode not found")
-    return episode
+    enriched = _attach_disposition([episode], dataset_id)
+    return enriched[0]
 
 
 @router.patch("/episodes/{episode_index}/labels", response_model=EpisodeDetail)
@@ -88,7 +122,30 @@ def update_episode_labels(
     episode = store.update_episode_labels(dataset_id, episode_index, payload)
     if episode is None:
         raise HTTPException(status_code=404, detail="Episode not found")
-    return episode
+    enriched = _attach_disposition([episode], dataset_id)
+    return enriched[0]
+
+
+@router.patch("/episodes/{episode_index}/disposition", response_model=EpisodeDetail)
+def update_episode_disposition(
+    episode_index: int,
+    payload: EpisodeDispositionUpdate,
+    dataset_id: str = Query(...),
+    user_id: str = Depends(current_user_id),
+) -> EpisodeDetail:
+    episode = store.get_episode(dataset_id, episode_index)
+    if episode is None:
+        raise HTTPException(status_code=404, detail="Episode not found")
+    actor = payload.updated_by or user_id
+    annotation_store.upsert_episode_disposition(
+        dataset_id=dataset_id,
+        episode_index=episode_index,
+        disposition=payload.disposition,
+        reason=payload.reason,
+        actor=actor,
+    )
+    enriched = _attach_disposition([episode], dataset_id)
+    return enriched[0]
 
 
 @router.get(

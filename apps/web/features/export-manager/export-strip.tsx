@@ -1,9 +1,17 @@
-import { Download, PackageCheck } from "lucide-react";
-import { useState } from "react";
+import { AlertTriangle, Download, PackageCheck } from "lucide-react";
+import { useMemo, useState } from "react";
 
-import type { ExportFormat, ExportRecord, JobRecord, SkillExportOptions } from "@/lib/types";
+import { countOverlappingPairs } from "@/lib/clip-validation";
+import type {
+  ExportFormat,
+  ExportRecord,
+  JobRecord,
+  SegmentAnnotation,
+  SkillExportOptions
+} from "@/lib/types";
 
 type ExportStripProps = {
+  annotations: SegmentAnnotation[];
   episodeIndex: number;
   exportJob: JobRecord | null;
   exportRecord: ExportRecord | null;
@@ -16,12 +24,14 @@ type ExportStripProps = {
 };
 
 export function ExportStrip({
+  annotations,
   episodeIndex,
   exportJob,
   exportRecord,
   onCreateExport,
   split
 }: ExportStripProps) {
+  const overlapCount = useMemo(() => countOverlappingPairs(annotations), [annotations]);
   const [scope, setScope] = useState<"episode" | "split">("episode");
   const exportJobActive = exportJob ? !["succeeded", "failed"].includes(exportJob.status) : false;
   const exportProgressPercent = Math.round(Math.max(0, Math.min(1, exportJob?.progress ?? 0)) * 100);
@@ -130,6 +140,14 @@ export function ExportStrip({
           </button>
         </div>
         <div className="section-actions" style={{ flexDirection: "column", gap: "8px", alignItems: "stretch" }}>
+        {overlapCount > 0 ? (
+          <div className="export-overlap-warning" role="status">
+            <AlertTriangle size={13} />
+            <span>
+              {overlapCount} overlapping skill clip pair{overlapCount === 1 ? "" : "s"} — server validation will report.
+            </span>
+          </div>
+        ) : null}
         <button
           className="text-button primary-export-button"
           disabled={exportJobActive}

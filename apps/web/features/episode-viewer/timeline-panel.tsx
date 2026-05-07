@@ -1,6 +1,7 @@
-import { GitBranch, MapPin, Merge, OctagonAlert, Trash2 } from "lucide-react";
+import { AlertTriangle, GitBranch, MapPin, Merge, OctagonAlert, Trash2 } from "lucide-react";
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
+import { findClipOverlaps, type ClipOverlap } from "@/lib/clip-validation";
 import { SKILL_LABEL_TYPE } from "@/lib/skill-vocabulary";
 import type { SegmentAnnotation } from "@/lib/types";
 
@@ -96,6 +97,7 @@ export function TimelinePanel({
     () => [0, 0.25, 0.5, 0.75, 1].map((ratio) => Math.round(maxFrame * ratio)),
     [maxFrame]
   );
+  const overlapsMap = useMemo(() => findClipOverlaps(annotations), [annotations]);
 
   async function handleCreateMarker() {
     await onCreateSegment({
@@ -255,12 +257,27 @@ export function TimelinePanel({
                   0.8,
                   ((bounds.endFrame - bounds.startFrame + 1) / safeFrameCount) * 100
                 );
+                const overlaps = overlapsMap.get(annotation.id) ?? [];
+                const hasOverlap = overlaps.length > 0;
+                const baseTitle = `${annotation.labelValue} (${bounds.startFrame}-${bounds.endFrame})`;
+                const segmentTitle = hasOverlap
+                  ? `${baseTitle}\n${formatOverlapTooltip(overlaps)}`
+                  : baseTitle;
+                const segmentClassName = [
+                  "timeline-segment",
+                  `segment-${annotation.reviewStatus}`,
+                  `label-${annotation.labelType}`,
+                  hasOverlap ? "has-overlap" : null,
+                  selectedSegmentId === annotation.id ? "selected" : null
+                ]
+                  .filter(Boolean)
+                  .join(" ");
                 return (
                   <div
-                    className={`timeline-segment segment-${annotation.reviewStatus} label-${annotation.labelType}${selectedSegmentId === annotation.id ? " selected" : ""}`}
+                    className={segmentClassName}
                     key={annotation.id}
                     style={{ left: `${left}%`, width: `${width}%` }}
-                    title={`${annotation.labelValue} (${bounds.startFrame}-${bounds.endFrame})`}
+                    title={segmentTitle}
                   >
                     <button
                       aria-label="Drag segment start"
@@ -285,6 +302,11 @@ export function TimelinePanel({
                     >
                       {annotation.labelValue}
                     </button>
+                    {hasOverlap ? (
+                      <span className="timeline-overlap-warning" aria-hidden="true">
+                        <AlertTriangle size={11} />
+                      </span>
+                    ) : null}
                     <span className="timeline-segment-controls">
                       <button
                         aria-label="Split segment"
@@ -340,6 +362,19 @@ export function TimelinePanel({
       </div>
     </section>
   );
+}
+
+function formatOverlapTooltip(overlaps: ClipOverlap[]): string {
+  if (overlaps.length === 0) {
+    return "";
+  }
+  const summary = overlaps
+    .map((overlap) => `${overlap.otherSkill} f${overlap.otherStart}-f${overlap.otherEnd}`)
+    .join(", ");
+  if (overlaps.length === 1) {
+    return `Overlaps with ${summary}`;
+  }
+  return `Overlaps with ${overlaps.length} clips: ${summary}`;
 }
 
 function canMerge(left: SegmentAnnotation, right: SegmentAnnotation | null): right is SegmentAnnotation {

@@ -28,6 +28,7 @@ import {
   fullTextSearch,
   openDataset,
   semanticSearch,
+  setEpisodeDisposition,
   streamJobEvents,
   updateSegmentAnnotation,
   updateAnnotationReviewStatus,
@@ -40,6 +41,7 @@ import type {
   DatasetHealth,
   DatasetSummary,
   Episode,
+  EpisodeDisposition,
   ExportRecord,
   ExportFormat,
   FilterPreset,
@@ -994,6 +996,45 @@ export function useStudioData() {
     }
   }
 
+  async function handleSetEpisodeDisposition(
+    episodeIndex: number,
+    disposition: EpisodeDisposition | null,
+    reason: string | null,
+  ): Promise<void> {
+    const previousRows = episodeRows;
+    const datasetId = selectedEpisode.datasetId;
+    const optimisticPatch: Pick<
+      Episode,
+      "disposition" | "dispositionReason" | "dispositionUpdatedAt"
+    > = {
+      disposition,
+      dispositionReason: disposition === null ? null : reason,
+      dispositionUpdatedAt: new Date().toISOString()
+    };
+    setEpisodeRows((current) =>
+      current.map((episode) =>
+        episode.episodeIndex === episodeIndex && episode.datasetId === datasetId
+          ? { ...episode, ...optimisticPatch }
+          : episode
+      )
+    );
+    try {
+      const updated = await setEpisodeDisposition(datasetId, episodeIndex, disposition, reason);
+      setEpisodeRows((current) =>
+        current.map((episode) =>
+          episode.episodeIndex === episodeIndex && episode.datasetId === datasetId
+            ? { ...episode, ...updated }
+            : episode
+        )
+      );
+    } catch (error) {
+      setEpisodeRows(previousRows);
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setMutationNotice(`Failed to update episode disposition: ${message}`);
+      throw error;
+    }
+  }
+
   async function handleAssignAnnotation(annotationId: string, assignedTo: string | null) {
     const previousAnnotations = annotationRows;
     setAnnotationRows((current) =>
@@ -1213,6 +1254,7 @@ export function useStudioData() {
     handleSelectFrame,
     handleDismissMutationNotice: () => setMutationNotice(null),
     handleSemanticSearch,
+    handleSetEpisodeDisposition,
     handleSplitSegment,
     handleUpdateFrameBadFlag,
     handleSetFrameBrowserLimit,

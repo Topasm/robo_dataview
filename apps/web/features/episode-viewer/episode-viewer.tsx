@@ -34,6 +34,8 @@ type EpisodeViewerProps = {
   selectedFrame: number;
   onToggleSignals?: () => void;
   showSignals?: boolean;
+  enableInternalKeymap?: boolean;
+  initialLayout?: "focus" | "grid";
 };
 
 type CameraLayout = "focus" | "grid";
@@ -50,14 +52,16 @@ export function EpisodeViewer({
   onFrameChange,
   selectedFrame,
   onToggleSignals,
-  showSignals = false
+  showSignals = false,
+  enableInternalKeymap = true,
+  initialLayout = "focus"
 }: EpisodeViewerProps) {
   const cameraNames = episode.cameraNames;
   const fps = episode.fps > 0 ? episode.fps : 20;
   const frameCount = Math.max(1, episode.length || 0);
   const lastFrame = Math.max(0, frameCount - 1);
 
-  const [layout, setLayout] = useState<CameraLayout>("focus");
+  const [layout, setLayout] = useState<CameraLayout>(initialLayout);
   const [activeCamera, setActiveCamera] = useState<string>(cameraNames[0] ?? "");
   const [currentFrame, setCurrentFrame] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -76,6 +80,9 @@ export function EpisodeViewer({
   const stageRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    if (!enableInternalKeymap) {
+      return;
+    }
     function handleKeyDown(event: KeyboardEvent) {
       const target = event.target;
       const isTyping =
@@ -96,7 +103,7 @@ export function EpisodeViewer({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [enableInternalKeymap]);
 
   useEffect(() => {
     currentFrameRef.current = currentFrame;

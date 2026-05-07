@@ -4,6 +4,7 @@ import type {
   DatasetSummary,
   DatasetTableHealth,
   Episode,
+  EpisodeDisposition,
   EpisodeLabelHistoryRecord,
   EpisodeListPage,
   EpisodeTimeseries,
@@ -102,6 +103,9 @@ type EpisodeResponse = {
   fps?: number | null;
   camera_names?: string[];
   language_instruction?: string | null;
+  disposition?: EpisodeDisposition | null;
+  disposition_reason?: string | null;
+  disposition_updated_at?: string | null;
 };
 
 type EpisodeListPageResponse = {
@@ -586,6 +590,27 @@ export async function updateEpisodeLabels(
   }
   const row = await request<EpisodeResponse>(
     `/episodes/${episodeIndex}/labels?${query}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(body)
+    }
+  );
+  return toEpisode(row);
+}
+
+export async function setEpisodeDisposition(
+  datasetId: string,
+  episodeIndex: number,
+  disposition: EpisodeDisposition | null,
+  reason: string | null,
+): Promise<Episode> {
+  const query = new URLSearchParams({ dataset_id: datasetId });
+  const body: Record<string, string | null> = {
+    disposition,
+    reason
+  };
+  const row = await request<EpisodeResponse>(
+    `/episodes/${episodeIndex}/disposition?${query}`,
     {
       method: "PATCH",
       body: JSON.stringify(body)
@@ -1147,7 +1172,10 @@ function toEpisode(raw: EpisodeResponse): Episode {
     split: raw.split,
     fps: raw.fps ?? 0,
     cameraNames: raw.camera_names ?? [],
-    languageInstruction: raw.language_instruction ?? null
+    languageInstruction: raw.language_instruction ?? null,
+    disposition: raw.disposition ?? null,
+    dispositionReason: raw.disposition_reason ?? null,
+    dispositionUpdatedAt: raw.disposition_updated_at ?? null
   };
 }
 

@@ -1,5 +1,7 @@
 export type ReviewStatus = "pending" | "accepted" | "rejected" | "edited";
 export type ExportFormat = "lerobot" | "lance" | "jsonl" | "vla" | "hf_dataset";
+export type WorkspaceDrawerTab = "episodes" | "frames" | "rerun" | "export";
+export type EpisodeDisposition = "kept" | "deleted" | "flagged";
 
 export type SkillExportOptions = {
   clipLabelType?: string;
@@ -64,6 +66,9 @@ export type Episode = {
   fps: number;
   cameraNames: string[];
   languageInstruction: string | null;
+  disposition?: EpisodeDisposition | null;
+  dispositionReason?: string | null;
+  dispositionUpdatedAt?: string | null;
 };
 
 export type EpisodeListPage = {
