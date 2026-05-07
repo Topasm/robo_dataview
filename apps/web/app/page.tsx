@@ -77,11 +77,13 @@ export default function Home() {
           <Database size={18} />
           <span>Robot Data Studio</span>
         </div>
-        <nav className="top-nav">
+        <nav className="top-nav" aria-label="Workspace mode">
           <button
             className={`nav-button ${activeTab === "browse" ? "active" : ""}`}
             onClick={() => setActiveTab("browse")}
             type="button"
+            aria-label="Switch to Browse mode"
+            aria-pressed={activeTab === "browse"}
           >
             Browse
           </button>
@@ -89,6 +91,8 @@ export default function Home() {
             className={`nav-button ${activeTab === "annotate" ? "active" : ""}`}
             onClick={() => setActiveTab("annotate")}
             type="button"
+            aria-label="Switch to Annotate mode"
+            aria-pressed={activeTab === "annotate"}
           >
             Annotate
           </button>

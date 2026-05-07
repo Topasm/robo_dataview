@@ -2990,6 +2990,8 @@ textarea {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto auto auto auto;
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
   border-left: 1px solid var(--border);
   border-right: 1px solid var(--border);
   background: var(--surface);
@@ -2998,7 +3000,7 @@ textarea {
 .annotation-stage-preview {
   position: relative;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .annotation-stage-preview .main-viewer {

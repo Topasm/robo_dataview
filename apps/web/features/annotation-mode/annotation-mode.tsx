@@ -234,6 +234,7 @@ export function AnnotationMode({
           <EpisodeViewer
             annotations={studio.annotationRows}
             episode={studio.selectedEpisode}
+            initialLayout="stack"
             onFrameChange={studio.handleSelectFrame}
             selectedFrame={studio.selectedFrameIndex}
             onToggleSignals={onToggleSignals}
