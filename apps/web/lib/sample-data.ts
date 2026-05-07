@@ -31,7 +31,8 @@ export const episodes: Episode[] = [
     split: "train",
     fps: 20,
     cameraNames: datasetSummary.cameraNames,
-    languageInstruction: null
+    languageInstruction: null,
+    dirtyAnnotationCount: 0
   },
   {
     datasetId: datasetSummary.datasetId,
@@ -48,7 +49,8 @@ export const episodes: Episode[] = [
     split: "train",
     fps: 20,
     cameraNames: datasetSummary.cameraNames,
-    languageInstruction: null
+    languageInstruction: null,
+    dirtyAnnotationCount: 0
   },
   {
     datasetId: datasetSummary.datasetId,
@@ -65,7 +67,8 @@ export const episodes: Episode[] = [
     split: "val",
     fps: 20,
     cameraNames: datasetSummary.cameraNames,
-    languageInstruction: null
+    languageInstruction: null,
+    dirtyAnnotationCount: 0
   }
 ];
 

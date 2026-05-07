@@ -106,6 +106,7 @@ type EpisodeResponse = {
   disposition?: EpisodeDisposition | null;
   disposition_reason?: string | null;
   disposition_updated_at?: string | null;
+  dirty_annotation_count?: number | null;
 };
 
 type EpisodeListPageResponse = {
@@ -252,6 +253,8 @@ type ExportRecordResponse = {
   output_uri: string | null;
   message: string | null;
   artifacts?: ExportRecord["artifacts"];
+  num_episodes?: number | null;
+  created_at?: string | null;
 };
 
 type SearchResultResponse = {
@@ -951,6 +954,12 @@ export async function fetchExport(exportId: string): Promise<ExportRecord> {
   return toExportRecord(row);
 }
 
+export async function listExports(datasetId?: string | null): Promise<ExportRecord[]> {
+  const query = datasetId ? `?dataset_id=${encodeURIComponent(datasetId)}` : "";
+  const rows = await request<ExportRecordResponse[]>(`/exports${query}`);
+  return rows.map(toExportRecord);
+}
+
 export async function semanticSearch(
   datasetId: string,
   text: string,
@@ -1176,7 +1185,8 @@ function toEpisode(raw: EpisodeResponse): Episode {
     languageInstruction: raw.language_instruction ?? null,
     disposition: raw.disposition ?? null,
     dispositionReason: raw.disposition_reason ?? null,
-    dispositionUpdatedAt: raw.disposition_updated_at ?? null
+    dispositionUpdatedAt: raw.disposition_updated_at ?? null,
+    dirtyAnnotationCount: raw.dirty_annotation_count ?? 0
   };
 }
 
@@ -1413,7 +1423,9 @@ function toExportRecord(raw: ExportRecordResponse): ExportRecord {
     status: raw.status,
     outputUri: raw.output_uri,
     message: raw.message,
-    artifacts: raw.artifacts ?? null
+    artifacts: raw.artifacts ?? null,
+    numEpisodes: raw.num_episodes ?? raw.episode_indices.length,
+    createdAt: raw.created_at ?? null
   };
 }
 

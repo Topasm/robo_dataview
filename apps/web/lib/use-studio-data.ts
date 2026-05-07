@@ -19,6 +19,7 @@ import {
   fetchDatasetSummaries,
   fetchEpisodes,
   fetchExport,
+  listExports,
   fetchFilterPresets,
   fetchFrameRecord,
   fetchFrameWindowPage,
@@ -157,6 +158,7 @@ export function useStudioData() {
   const [vlmResponses, setVlmResponses] = useState<VlmResponseRecord[]>([]);
   const [exportJob, setExportJob] = useState<JobRecord | null>(null);
   const [exportRecord, setExportRecord] = useState<ExportRecord | null>(null);
+  const [pastExports, setPastExports] = useState<ExportRecord[]>([]);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [filterPresets, setFilterPresets] = useState<FilterPreset[]>([]);
   const [selectedFrameIndex, setSelectedFrameIndex] = useState(0);
@@ -501,6 +503,23 @@ export function useStudioData() {
       isMounted = false;
     };
   }, [selectedDatasetId]);
+
+  const refreshPastExports = useCallback(async (datasetId: string) => {
+    try {
+      const records = await listExports(datasetId);
+      setPastExports(records);
+    } catch {
+      setPastExports([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!selectedDatasetId) {
+      setPastExports([]);
+      return;
+    }
+    void refreshPastExports(selectedDatasetId);
+  }, [selectedDatasetId, refreshPastExports]);
 
   useEffect(() => {
     if (!vlmJobId || (vlmJob?.rawResponseIds.length ?? 0) === 0) {
@@ -1146,6 +1165,7 @@ export function useStudioData() {
     if (TERMINAL_JOB_STATUSES.has(job.status) && job.createdExportId) {
       const record = await fetchExport(job.createdExportId);
       setExportRecord(record);
+      void refreshPastExports(record.datasetId);
     }
   }
 
@@ -1217,6 +1237,7 @@ export function useStudioData() {
     episodeRows,
     exportJob,
     exportRecord,
+    pastExports,
     filterPresets,
     frameBrowserLimit,
     frameBrowserStart,

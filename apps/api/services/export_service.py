@@ -77,6 +77,16 @@ class ExportStore:
         self._records[export_id] = record
         return record
 
+    def list(self, *, dataset_id: str | None = None) -> list[ExportRecord]:
+        records = list(self._records.values())
+        if dataset_id is not None:
+            records = [record for record in records if record.dataset_id == dataset_id]
+        records.sort(
+            key=lambda record: record.created_at or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )
+        return records
+
     def _load_existing_exports(self) -> None:
         if not EXPORT_ROOT.exists():
             return
@@ -90,6 +100,13 @@ class ExportStore:
             return None
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            created_at_raw = manifest.get("created_at")
+            created_at: datetime | None = None
+            if isinstance(created_at_raw, str):
+                try:
+                    created_at = datetime.fromisoformat(created_at_raw)
+                except ValueError:
+                    created_at = None
             return ExportRecord(
                 export_id=manifest["export_id"],
                 dataset_id=manifest["dataset_id"],
@@ -99,6 +116,8 @@ class ExportStore:
                 output_uri=str(manifest_path),
                 message=f"Loaded export manifest with {manifest.get('num_episodes', 0)} episodes.",
                 artifacts=manifest.get("artifacts"),
+                num_episodes=int(manifest.get("num_episodes", 0)),
+                created_at=created_at,
             )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError):
             return None
@@ -302,6 +321,7 @@ class ExportStore:
                 },
             )
 
+        created_at = datetime.now(timezone.utc)
         manifest = {
             "export_id": record.export_id,
             "dataset_id": record.dataset_id,
@@ -309,7 +329,7 @@ class ExportStore:
             "splits": payload.splits,
             "version_description": payload.version_description,
             "publish_uri": payload.publish_uri or configured_export_publish_uri(),
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": created_at.isoformat(),
             "num_episodes": len(episodes),
             "episode_indices": [episode["episode_index"] for episode in episodes],
             "missing_episode_indices": missing_episodes,
@@ -393,6 +413,8 @@ class ExportStore:
                 "episode_indices": [episode["episode_index"] for episode in episodes],
                 "message": message,
                 "artifacts": artifacts,
+                "num_episodes": len(episodes),
+                "created_at": created_at,
             }
         )
 

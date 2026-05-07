@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 from apps.api.schemas.common import ExportFormat, JobStatus
@@ -26,3 +28,5 @@ class ExportRecord(BaseModel):
     output_uri: str | None = None
     message: str | None = None
     artifacts: dict | None = None
+    num_episodes: int = 0
+    created_at: datetime | None = None

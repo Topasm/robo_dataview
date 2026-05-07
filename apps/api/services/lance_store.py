@@ -287,6 +287,28 @@ def _count_rows(dataset: Any) -> int:
     return int(getattr(table, "num_rows", 0))
 
 
+_DIRTY_REVIEW_STATES = {"accepted", "edited"}
+
+
+def _count_dirty_annotations(dataset_id: str, episode_index: int) -> int:
+    """Count human annotations that have not been included in any export yet.
+
+    Imported lazily inside the function so the lance_store module stays free
+    of import cycles with annotation_service.
+    """
+
+    from apps.api.services.annotation_service import annotation_store
+
+    count = 0
+    for record in annotation_store.list(dataset_id, episode_index=episode_index):
+        if record.applied_export_id is not None:
+            continue
+        status = getattr(record.review_status, "value", record.review_status)
+        if status in _DIRTY_REVIEW_STATES:
+            count += 1
+    return count
+
+
 def _rows_from_table(table: Any) -> list[dict[str, Any]]:
     if table is None:
         return []
@@ -2703,9 +2725,9 @@ class LanceDatasetStore:
     def _apply_episode_overrides(self, dataset_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         episode_index = int(payload.get("episode_index", 0))
         overrides = self._episode_label_overrides.get(dataset_id, {}).get(episode_index)
-        if not overrides:
-            return payload
-        return {**payload, **overrides}
+        merged = payload if not overrides else {**payload, **overrides}
+        merged["dirty_annotation_count"] = _count_dirty_annotations(dataset_id, episode_index)
+        return merged
 
     def _refresh_episode_summary(self, dataset_id: str) -> None:
         record = self._datasets.get(dataset_id)

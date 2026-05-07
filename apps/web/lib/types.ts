@@ -69,6 +69,7 @@ export type Episode = {
   disposition?: EpisodeDisposition | null;
   dispositionReason?: string | null;
   dispositionUpdatedAt?: string | null;
+  dirtyAnnotationCount: number;
 };
 
 export type EpisodeListPage = {
@@ -288,6 +289,8 @@ export type ExportRecord = {
   outputUri: string | null;
   message: string | null;
   artifacts: ExportArtifacts | null;
+  numEpisodes: number;
+  createdAt: string | null;
 };
 
 export type ExportArtifacts = {

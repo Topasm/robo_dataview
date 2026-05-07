@@ -37,6 +37,7 @@ class EpisodeListItem(BaseModel):
     disposition: str | None = None
     disposition_reason: str | None = None
     disposition_updated_at: datetime | None = None
+    dirty_annotation_count: int = 0
 
 
 class EpisodeListPage(BaseModel):
