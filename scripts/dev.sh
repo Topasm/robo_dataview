@@ -55,12 +55,23 @@ echo "Starting Robot Data Studio API at http://${API_HOST}:${API_PORT}"
 python3 -m uvicorn apps.api.main:app --reload --host "$API_HOST" --port "$API_PORT" &
 
 echo "Starting Robot Data Studio web at http://${WEB_HOST}:${WEB_PORT}"
+
+# `ROBOT_DATA_STUDIO_TURBO=1` opts into `next dev --turbo`. Turbopack starts
+# noticeably faster (~600ms vs ~1.2s) but emits a "webpack configured while
+# turbopack is not" warning because the rerun-viewer absolute-path alias only
+# applies to webpack. The default base page renders fine; the rerun panel is
+# the only path that has not been exercised end-to-end under Turbopack.
+extra_args=()
+if [[ "${ROBOT_DATA_STUDIO_TURBO:-0}" == "1" ]]; then
+  extra_args+=("--turbo")
+fi
+
 if command -v bun >/dev/null 2>&1; then
   NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:-http://${API_HOST}:${API_PORT}/api}" \
-    bash -c "cd apps/web && bun run dev -- --hostname '$WEB_HOST' --port '$WEB_PORT'" &
+    bash -c "cd apps/web && bun run dev -- ${extra_args[*]:-} --hostname '$WEB_HOST' --port '$WEB_PORT'" &
 else
   NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:-http://${API_HOST}:${API_PORT}/api}" \
-    npm --workspace apps/web run dev -- --hostname "$WEB_HOST" --port "$WEB_PORT" &
+    npm --workspace apps/web run dev -- "${extra_args[@]}" --hostname "$WEB_HOST" --port "$WEB_PORT" &
 fi
 
 wait

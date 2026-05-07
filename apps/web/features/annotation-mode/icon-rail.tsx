@@ -4,7 +4,7 @@ import { Film, HelpCircle, Pin, PinOff, Search, Sparkles } from "lucide-react";
 
 import { EpisodeList } from "@/features/dataset-browser/episode-list";
 import { RerunPanel } from "@/features/rerun-viewer/rerun-panel";
-import { SearchFilterBar } from "@/features/search-filter/search-filter-bar";
+import { SearchFilterBar } from "@/features/search-filter/search-filter-bar-async";
 import type { IconRailPanel } from "@/lib/use-annotation-editor";
 import type { useStudioData } from "@/lib/use-studio-data";
 

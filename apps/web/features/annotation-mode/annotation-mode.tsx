@@ -13,7 +13,7 @@ import { SkillHotBar } from "@/features/annotation-mode/skill-hot-bar";
 import { StatusHud } from "@/features/annotation-mode/status-hud";
 import { EpisodeCharts } from "@/features/browse-mode/episode-charts-async";
 import { EpisodeViewer } from "@/features/episode-viewer/episode-viewer";
-import { TimelinePanel } from "@/features/episode-viewer/timeline-panel";
+import { TimelinePanel } from "@/features/episode-viewer/timeline-panel-async";
 import { SKILL_LABEL_TYPE } from "@/lib/skill-vocabulary";
 import { useAnnotateShortcuts } from "@/lib/use-annotate-shortcuts";
 import { useAnnotationEditor } from "@/lib/use-annotation-editor";
