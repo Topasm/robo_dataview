@@ -9,7 +9,7 @@ import { useBrowseShortcuts } from "@/lib/use-browse-shortcuts";
 import type { useStudioData } from "@/lib/use-studio-data";
 
 import { EpisodeActionBar } from "./episode-action-bar";
-import { EpisodeCharts } from "./episode-charts";
+import { EpisodeCharts } from "./episode-charts-async";
 
 type StudioData = ReturnType<typeof useStudioData>;
 

@@ -11,7 +11,7 @@ import { IconRail } from "@/features/annotation-mode/icon-rail";
 import { ShortcutChip } from "@/features/annotation-mode/shortcut-chip";
 import { SkillHotBar } from "@/features/annotation-mode/skill-hot-bar";
 import { StatusHud } from "@/features/annotation-mode/status-hud";
-import { EpisodeCharts } from "@/features/browse-mode/episode-charts";
+import { EpisodeCharts } from "@/features/browse-mode/episode-charts-async";
 import { EpisodeViewer } from "@/features/episode-viewer/episode-viewer";
 import { TimelinePanel } from "@/features/episode-viewer/timeline-panel";
 import { SKILL_LABEL_TYPE } from "@/lib/skill-vocabulary";
