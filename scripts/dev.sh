@@ -55,7 +55,12 @@ echo "Starting Robot Data Studio API at http://${API_HOST}:${API_PORT}"
 python3 -m uvicorn apps.api.main:app --reload --host "$API_HOST" --port "$API_PORT" &
 
 echo "Starting Robot Data Studio web at http://${WEB_HOST}:${WEB_PORT}"
-NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:-http://${API_HOST}:${API_PORT}/api}" \
-  npm --workspace apps/web run dev -- --hostname "$WEB_HOST" --port "$WEB_PORT" &
+if command -v bun >/dev/null 2>&1; then
+  NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:-http://${API_HOST}:${API_PORT}/api}" \
+    bash -c "cd apps/web && bun run dev -- --hostname '$WEB_HOST' --port '$WEB_PORT'" &
+else
+  NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:-http://${API_HOST}:${API_PORT}/api}" \
+    npm --workspace apps/web run dev -- --hostname "$WEB_HOST" --port "$WEB_PORT" &
+fi
 
 wait

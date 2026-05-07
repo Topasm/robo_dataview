@@ -16,20 +16,27 @@ Monorepo for **Robot Data Studio**, a web tool for curating Lance-native LeRobot
 
 ## Common Commands
 
+The web workspace is managed with **bun** (canonical lockfile is `bun.lock`).
+`scripts/dev.sh` and the stack's `setup_all.sh` prefer bun and fall back to
+npm if bun isn't installed; npm-style commands below still work because
+package.json keeps bun-compatible script entries.
+
 ```bash
-npm run dev                                       # API (uvicorn) + web (next) together via scripts/dev.sh
-npm run dev:api                                   # API only (uvicorn --reload, port 8000)
-npm run dev:web                                   # Next.js only (port 3000)
+bun run dev                                       # API (uvicorn) + web (next) together via scripts/dev.sh
+bun --workspaces run dev                          # all workspace dev scripts (rarely useful here)
+( cd apps/web && bun run dev )                    # Next.js only (port 3000)
+( cd apps/web && bun run lint )                   # eslint
+( cd apps/web && bun run typecheck )              # next typegen + tsc --noEmit
+( cd apps/web && bun run build )                  # next build
 
 python3 -m pytest -q                              # all Python tests (pytest config in pyproject.toml; testpaths = apps/api/tests)
 python3 -m pytest apps/api/tests/test_export_service.py -q                # one file
 python3 -m pytest apps/api/tests/test_export_service.py::test_name -q     # one test
-
-npm --workspace apps/web run lint                 # eslint
-npm --workspace apps/web run typecheck            # next typegen + tsc --noEmit
-npm --workspace apps/web run build                # next build
 python3 -m compileall -q apps packages workers    # quick syntax check
 ```
+
+Without bun, the older `npm --workspace apps/web run <script>` form still
+works (npm regenerates `package-lock.json` locally; it is gitignored).
 
 Full validation gate before declaring a milestone done is enumerated in `docs/plan.md` "Validation Checklist".
 

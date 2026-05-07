@@ -19,6 +19,10 @@ out/
 dist/
 coverage/
 
+# bun.lock is the canonical lockfile; package-lock.json is regenerated
+# locally if a dev falls back to npm.
+package-lock.json
+
 .env
 .env.*
 !.env.example
