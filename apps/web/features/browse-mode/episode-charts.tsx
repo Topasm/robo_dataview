@@ -229,15 +229,82 @@ function ChartCard({
   onClick: (payload: { activeLabel?: string | number } | null) => void;
   onMove?: (payload: { activeLabel?: string | number } | null) => void;
 }) {
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setFullscreen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previous;
+    };
+  }, [fullscreen]);
+
+  const containerHeight = fullscreen ? "calc(100vh - 88px)" : chartHeight;
+
   return (
-    <section className="episode-chart-card">
+    <section
+      className={`episode-chart-card${fullscreen ? " is-fullscreen" : ""}`}
+    >
       <header className="episode-chart-card-header">
         <span className="episode-chart-card-title">{title}</span>
         <span className="muted episode-chart-card-meta">
           {dimSeries.length > 0 ? `${dimSeries.length} dims + norm` : "norm"}
         </span>
+        <button
+          type="button"
+          className="btn btn--icon episode-chart-fullscreen-btn"
+          onClick={() => setFullscreen((value) => !value)}
+          title={fullscreen ? "Exit fullscreen (Esc)" : "Fullscreen"}
+          aria-label={fullscreen ? "Exit fullscreen" : "Open chart fullscreen"}
+        >
+          {fullscreen ? (
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M8 3v3a2 2 0 0 1-2 2H3" />
+              <path d="M21 8h-3a2 2 0 0 1-2-2V3" />
+              <path d="M3 16h3a2 2 0 0 1 2 2v3" />
+              <path d="M16 21v-3a2 2 0 0 1 2-2h3" />
+            </svg>
+          ) : (
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3 8V3h5" />
+              <path d="M21 8V3h-5" />
+              <path d="M3 16v5h5" />
+              <path d="M21 16v5h-5" />
+            </svg>
+          )}
+        </button>
       </header>
-      <div style={{ width: "100%", height: chartHeight }}>
+      <div style={{ width: "100%", height: containerHeight }}>
         <ResponsiveContainer>
           <LineChart
             data={data}
