@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+
+logger = logging.getLogger(__name__)
 
 from fastapi import HTTPException
 
@@ -368,6 +371,21 @@ class ExportStore:
         message = f"Exported {len(episodes)} episode manifest."
         if missing_episodes:
             message = f"{message} Missing episodes skipped: {missing_episodes}."
+        applied_ids = [
+            annotation.annotation_id
+            for annotations in annotations_by_episode.values()
+            for annotation in annotations
+        ]
+        if applied_ids:
+            try:
+                annotation_store.mark_applied(applied_ids, export_id=record.export_id)
+            except Exception as exc:  # noqa: BLE001 — best-effort, must not fail the export
+                logger.warning(
+                    "Failed to mark %d annotations as applied for export %s: %s",
+                    len(applied_ids),
+                    record.export_id,
+                    exc,
+                )
         return model_copy(
             record,
             update={

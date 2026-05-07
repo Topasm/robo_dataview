@@ -56,6 +56,7 @@ class AnnotationUpdate(BaseModel):
     metadata: dict[str, Any] | None = None
     assigned_to: str | None = None
     updated_by: str | None = None
+    applied_export_id: str | None = None
     expected_revision: int | None = Field(default=None, ge=1)
 
 
@@ -86,6 +87,7 @@ class AnnotationRecord(BaseModel):
     lock_expires_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+    applied_export_id: str | None = None
 
 
 class AnnotationHistoryRecord(BaseModel):

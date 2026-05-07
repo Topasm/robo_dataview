@@ -410,7 +410,19 @@ class ExportServiceTest(unittest.TestCase):
         self.assertNotIn("annotations", artifact["files"])
         self.assertTrue(Path(artifact["files"]["manifest"]).exists())
         self.assertTrue(artifact["validation"]["present"]["manifest"])
-        self.assertEqual(len(written_paths), 6)
+        # 6 export-bundle lance writes (episodes, frames, media, train_episodes,
+        # annotations_current, annotation_events) plus 3 from the post-export
+        # mark_applied side effect on the global annotation store: appends one
+        # annotation_events.lance row and rewrites annotations_current +
+        # annotations (legacy mirror).
+        self.assertEqual(len(written_paths), 9)
+        self.assertEqual(accepted.applied_export_id, None)
+        refreshed = annotation_store.get(accepted.annotation_id)
+        self.assertIsNotNone(refreshed)
+        self.assertEqual(refreshed.applied_export_id, record.export_id)
+        rejected_after = annotation_store.get(rejected.annotation_id)
+        self.assertIsNotNone(rejected_after)
+        self.assertIsNone(rejected_after.applied_export_id)
         exported_manifest = json.loads(
             Path(artifact["files"]["manifest"]).read_text(encoding="utf-8")
         )

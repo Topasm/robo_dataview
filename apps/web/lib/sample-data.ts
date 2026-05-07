@@ -88,7 +88,8 @@ export const annotations: SegmentAnnotation[] = [
     revision: 1,
     deletedAt: null,
     lockOwner: null,
-    lockExpiresAt: null
+    lockExpiresAt: null,
+    appliedExportId: null
   },
   {
     id: "seg-grasp",
@@ -108,7 +109,8 @@ export const annotations: SegmentAnnotation[] = [
     revision: 1,
     deletedAt: null,
     lockOwner: null,
-    lockExpiresAt: null
+    lockExpiresAt: null,
+    appliedExportId: null
   },
   {
     id: "seg-fold",
@@ -128,7 +130,8 @@ export const annotations: SegmentAnnotation[] = [
     revision: 1,
     deletedAt: null,
     lockOwner: null,
-    lockExpiresAt: null
+    lockExpiresAt: null,
+    appliedExportId: null
   },
   {
     id: "seg-release",
@@ -148,7 +151,8 @@ export const annotations: SegmentAnnotation[] = [
     revision: 1,
     deletedAt: null,
     lockOwner: null,
-    lockExpiresAt: null
+    lockExpiresAt: null,
+    appliedExportId: null
   }
 ];
 

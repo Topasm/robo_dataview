@@ -56,6 +56,9 @@ class AnnotationStore:
         if self.persist:
             self._load_records()
 
+    def get(self, annotation_id: str) -> AnnotationRecord | None:
+        return self._records.get(annotation_id)
+
     def list(self, dataset_id: str, episode_index: int | None) -> list[AnnotationRecord]:
         records = [
             record
@@ -132,6 +135,53 @@ class AnnotationStore:
         )
         self._persist_dataset(record.dataset_id)
         return record
+
+    def mark_applied(
+        self,
+        annotation_ids: list[str],
+        *,
+        export_id: str,
+        actor: str = "local",
+    ) -> list[AnnotationRecord]:
+        """Stamp `applied_export_id` on the given annotations and persist once.
+
+        Best-effort: silently skips ids that are missing or soft-deleted. Bumps
+        revision and updated_at, appends an audit event per id, then writes
+        JSONL + Lance mirrors a single time per touched dataset_id.
+        """
+
+        if not annotation_ids:
+            return []
+        now = datetime.now(timezone.utc)
+        updated: list[AnnotationRecord] = []
+        touched_datasets: set[str] = set()
+        for annotation_id in annotation_ids:
+            existing = self._records.get(annotation_id)
+            if existing is None or existing.deleted_at is not None:
+                continue
+            if existing.applied_export_id == export_id:
+                continue
+            merged = model_dump(existing)
+            merged["applied_export_id"] = export_id
+            merged["updated_at"] = now
+            merged["updated_by"] = actor
+            merged["revision"] = int(merged.get("revision") or 1) + 1
+            record = AnnotationRecord(**merged)
+            self._records[annotation_id] = record
+            self._append_history(
+                dataset_id=record.dataset_id,
+                annotation_id=record.annotation_id,
+                episode_index=record.episode_index,
+                action="apply",
+                actor=actor,
+                before=self._json_row(existing),
+                after=self._json_row(record),
+            )
+            updated.append(record)
+            touched_datasets.add(record.dataset_id)
+        for dataset_id in touched_datasets:
+            self._persist_dataset(dataset_id)
+        return updated
 
     def delete(
         self,

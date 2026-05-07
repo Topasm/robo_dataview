@@ -176,6 +176,7 @@ export type SegmentAnnotation = {
   deletedAt: string | null;
   lockOwner: string | null;
   lockExpiresAt: string | null;
+  appliedExportId: string | null;
 };
 
 export type AnnotationHistoryRecord = {

@@ -140,6 +140,7 @@ type AnnotationResponse = {
   deleted_at?: string | null;
   lock_owner?: string | null;
   lock_expires_at?: string | null;
+  applied_export_id?: string | null;
 };
 
 type AnnotationHistoryResponse = {
@@ -1281,7 +1282,8 @@ function toSegmentAnnotation(raw: AnnotationResponse): SegmentAnnotation {
     revision: raw.revision ?? 1,
     deletedAt: raw.deleted_at ?? null,
     lockOwner: raw.lock_owner ?? null,
-    lockExpiresAt: raw.lock_expires_at ?? null
+    lockExpiresAt: raw.lock_expires_at ?? null,
+    appliedExportId: raw.applied_export_id ?? null
   };
 }
 

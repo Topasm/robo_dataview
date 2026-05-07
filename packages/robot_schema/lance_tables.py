@@ -44,6 +44,11 @@ ANNOTATIONS_COLUMNS: tuple[ColumnSpec, ...] = (
     ColumnSpec("lock_expires_at", "timestamp_us_utc"),
     ColumnSpec("created_at", "timestamp_us_utc", nullable=False),
     ColumnSpec("updated_at", "timestamp_us_utc", nullable=False),
+    ColumnSpec(
+        "applied_export_id",
+        "string",
+        description="Export id this annotation was last materialized in (null = unapplied / draft).",
+    ),
 )
 
 ANNOTATIONS_CURRENT_COLUMNS = ANNOTATIONS_COLUMNS

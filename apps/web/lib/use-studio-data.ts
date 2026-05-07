@@ -115,6 +115,7 @@ function optimisticAnnotation(
     deletedAt: null,
     lockOwner: null,
     lockExpiresAt: null,
+    appliedExportId: null,
     ...patch
   };
 }

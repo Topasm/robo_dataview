@@ -206,6 +206,119 @@ class AnnotationServiceTest(unittest.TestCase):
                 AnnotationUpdate(label_value="late", expected_revision=1),
             )
 
+    def test_mark_applied_stamps_export_id_idempotently(self) -> None:
+        store = AnnotationStore(persist=False)
+        first = store.create(
+            AnnotationCreate(
+                dataset_id="dataset-a",
+                episode_index=0,
+                start_frame=0,
+                end_frame=4,
+                label_type="skill",
+                label_value="approach",
+                review_status=ReviewStatus.accepted,
+            )
+        )
+        second = store.create(
+            AnnotationCreate(
+                dataset_id="dataset-a",
+                episode_index=0,
+                start_frame=4,
+                end_frame=10,
+                label_type="skill",
+                label_value="grasp",
+                review_status=ReviewStatus.accepted,
+            )
+        )
+
+        updated = store.mark_applied(
+            [first.annotation_id, second.annotation_id],
+            export_id="export-001",
+        )
+        self.assertEqual(len(updated), 2)
+        self.assertEqual({record.applied_export_id for record in updated}, {"export-001"})
+        self.assertEqual({record.revision for record in updated}, {2})
+
+        # Idempotent — second call with same export id is a no-op (no extra
+        # revision bump, no extra history event).
+        replay = store.mark_applied(
+            [first.annotation_id, second.annotation_id],
+            export_id="export-001",
+        )
+        self.assertEqual(replay, [])
+        events = store.list_history("dataset-a", annotation_id=first.annotation_id)
+        self.assertEqual([event.action for event in events], ["create", "apply"])
+
+        # Re-marking with a different export id bumps revision again.
+        rebumped = store.mark_applied([first.annotation_id], export_id="export-002")
+        self.assertEqual(len(rebumped), 1)
+        self.assertEqual(rebumped[0].applied_export_id, "export-002")
+        self.assertEqual(rebumped[0].revision, 3)
+
+        # Soft-deleted annotations are skipped silently.
+        store.delete(second.annotation_id)
+        skipped = store.mark_applied([second.annotation_id], export_id="export-003")
+        self.assertEqual(skipped, [])
+
+    def test_applied_export_id_persists_across_jsonl_reload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage_root = Path(tmpdir)
+            first_store = AnnotationStore(storage_root=storage_root, mirror_lance=False)
+            created = first_store.create(
+                AnnotationCreate(
+                    dataset_id="dataset-a",
+                    episode_index=0,
+                    start_frame=0,
+                    end_frame=4,
+                    label_type="skill",
+                    label_value="approach",
+                    review_status=ReviewStatus.accepted,
+                )
+            )
+            first_store.mark_applied([created.annotation_id], export_id="export-roundtrip")
+
+            second_store = AnnotationStore(storage_root=storage_root, mirror_lance=False)
+            reloaded = second_store.get(created.annotation_id)
+            self.assertIsNotNone(reloaded)
+            self.assertEqual(reloaded.applied_export_id, "export-roundtrip")
+
+    def test_legacy_jsonl_without_applied_export_id_loads_as_null(self) -> None:
+        # Pre-Phase-2 JSONL rows do not carry the new column; pydantic's default
+        # must surface them as None so existing datasets keep loading.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage_root = Path(tmpdir)
+            dataset_dir = storage_root / "dataset-a-deadbeef0001"
+            dataset_dir.mkdir(parents=True, exist_ok=True)
+            legacy_row = {
+                "annotation_id": "legacy-row",
+                "dataset_id": "dataset-a",
+                "episode_index": 0,
+                "start_frame": 0,
+                "end_frame": 4,
+                "label_type": "skill",
+                "label_value": "approach",
+                "source": "human",
+                "confidence": 1.0,
+                "review_status": "accepted",
+                "metadata": {},
+                "created_by": "local",
+                "updated_by": "local",
+                "assigned_to": None,
+                "revision": 1,
+                "deleted_at": None,
+                "lock_owner": None,
+                "lock_expires_at": None,
+                "created_at": "2025-01-01T00:00:00+00:00",
+                "updated_at": "2025-01-01T00:00:00+00:00",
+            }
+            (dataset_dir / "annotations.jsonl").write_text(
+                json.dumps(legacy_row) + "\n", encoding="utf-8"
+            )
+            store = AnnotationStore(storage_root=storage_root, mirror_lance=False)
+            loaded = store.get("legacy-row")
+            self.assertIsNotNone(loaded)
+            self.assertIsNone(loaded.applied_export_id)
+
     def test_review_and_assignment_actions_are_specific(self) -> None:
         store = AnnotationStore(persist=False)
         created = store.create(
