@@ -16,6 +16,11 @@ if [[ -f ".env" ]]; then
   set +a
 fi
 
+if [[ "${ROBOT_DATA_STUDIO_CLEAN_NEXT:-0}" == "1" ]]; then
+  echo "Cleaning stale Next dev cache at apps/web/.next"
+  rm -rf "$ROOT_DIR/apps/web/.next"
+fi
+
 require_port_free() {
   local host="$1"
   local port="$2"
