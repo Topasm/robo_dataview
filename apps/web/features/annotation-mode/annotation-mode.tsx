@@ -11,6 +11,7 @@ import { IconRail } from "@/features/annotation-mode/icon-rail";
 import { ShortcutChip } from "@/features/annotation-mode/shortcut-chip";
 import { SkillHotBar } from "@/features/annotation-mode/skill-hot-bar";
 import { StatusHud } from "@/features/annotation-mode/status-hud";
+import { EpisodeCharts } from "@/features/browse-mode/episode-charts";
 import { EpisodeViewer } from "@/features/episode-viewer/episode-viewer";
 import { TimelinePanel } from "@/features/episode-viewer/timeline-panel";
 import { SKILL_LABEL_TYPE } from "@/lib/skill-vocabulary";
@@ -163,7 +164,7 @@ export function AnnotationMode({
           <div className="annotation-mode-header-actions">
             <button
               type="button"
-              className="annotation-mode-header-button primary"
+              className="btn btn--primary"
               onClick={() => setAutoLabelOpen(true)}
             >
               <Wand2 size={16} />
@@ -171,7 +172,7 @@ export function AnnotationMode({
             </button>
             <button
               type="button"
-              className="annotation-mode-header-button"
+              className="btn"
               disabled={applyLastDisabled}
               onClick={handleApplyLastEpisode}
               title={applyLastTitle}
@@ -181,7 +182,7 @@ export function AnnotationMode({
             </button>
             <button
               type="button"
-              className="annotation-mode-header-button icon-only"
+              className="btn btn--ghost btn--icon"
               onClick={onOpenCheatsheet}
               title="Keyboard shortcuts (?)"
               aria-label="Keyboard shortcuts"
@@ -220,6 +221,15 @@ export function AnnotationMode({
           clipEnd={clipEnd}
           annotations={studio.annotationRows}
         />
+        <div className="annotation-mode-charts">
+          <EpisodeCharts
+            episode={studio.selectedEpisode}
+            annotations={studio.annotationRows}
+            selectedFrame={studio.selectedFrameIndex}
+            onSelectFrame={studio.handleSelectFrame}
+            variant="compact"
+          />
+        </div>
         <TimelinePanel
           annotations={studio.annotationRows}
           clipEnd={clipEnd}

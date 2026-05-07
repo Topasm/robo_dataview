@@ -74,7 +74,7 @@ export function IconRail({
             <span>{panelTitle(activePanel)}</span>
             <button
               type="button"
-              className="icon-button"
+              className="btn btn--ghost btn--icon btn--sm"
               onClick={onTogglePin}
               title={pinned ? "Unpin panel" : "Pin panel"}
               aria-pressed={pinned}

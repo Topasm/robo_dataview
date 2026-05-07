@@ -50,7 +50,7 @@ export function ExportModal({ open, onClose, studio }: ExportModalProps) {
           </div>
           <button
             type="button"
-            className="icon-button"
+            className="btn btn--ghost btn--icon"
             onClick={onClose}
             aria-label="Close export dialog"
           >

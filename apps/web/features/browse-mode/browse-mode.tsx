@@ -9,6 +9,7 @@ import { useBrowseShortcuts } from "@/lib/use-browse-shortcuts";
 import type { useStudioData } from "@/lib/use-studio-data";
 
 import { EpisodeActionBar } from "./episode-action-bar";
+import { EpisodeCharts } from "./episode-charts";
 
 type StudioData = ReturnType<typeof useStudioData>;
 
@@ -58,10 +59,18 @@ export function BrowseMode({ studio, onSwitchToAnnotate }: BrowseModeProps) {
         <EpisodeViewer
           annotations={studio.annotationRows}
           episode={studio.selectedEpisode}
-          initialLayout="grid"
+          initialLayout="stack"
           onFrameChange={studio.handleSelectFrame}
           selectedFrame={studio.selectedFrameIndex}
         />
+        <div className="browse-mode-charts">
+          <EpisodeCharts
+            episode={studio.selectedEpisode}
+            annotations={studio.annotationRows}
+            selectedFrame={studio.selectedFrameIndex}
+            onSelectFrame={studio.handleSelectFrame}
+          />
+        </div>
         <div className="browse-mode-stage-actions">
           <EpisodeActionBar
             episodeCaption={studio.selectedEpisode.caption}

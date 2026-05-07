@@ -79,7 +79,7 @@ export function EpisodeActionBar({
       </div>
       <div className="episode-action-group">
         <button
-          className="episode-action-button"
+          className="btn"
           disabled={dispositionDisabled}
           onClick={handleKeep}
           title={dispositionTitle ?? "Mark this episode as kept"}
@@ -89,7 +89,7 @@ export function EpisodeActionBar({
           <span>Keep</span>
         </button>
         <button
-          className="episode-action-button danger"
+          className="btn btn--danger"
           disabled={dispositionDisabled}
           onClick={handleDelete}
           title={dispositionTitle ?? "Mark this episode as deleted"}
@@ -99,7 +99,7 @@ export function EpisodeActionBar({
           <span>Delete</span>
         </button>
         <button
-          className="episode-action-button warning"
+          className="btn btn--warning"
           disabled={dispositionDisabled}
           onClick={handleOpenFlag}
           title={dispositionTitle ?? "Flag this episode for follow-up"}
@@ -111,7 +111,7 @@ export function EpisodeActionBar({
       </div>
       <div className="episode-action-spacer" />
       <button
-        className="episode-action-button primary"
+        className="btn btn--primary"
         onClick={onSwitchToAnnotate}
         title="Open this episode in the Annotate workspace"
         type="button"
@@ -137,7 +137,7 @@ export function EpisodeActionBar({
               </div>
               <button
                 type="button"
-                className="icon-button"
+                className="btn btn--ghost btn--icon"
                 onClick={() => setFlagOpen(false)}
                 aria-label="Close flag dialog"
               >
@@ -168,12 +168,12 @@ export function EpisodeActionBar({
             <footer className="modal-footer">
               <button
                 type="button"
-                className="episode-action-button"
+                className="btn"
                 onClick={() => setFlagOpen(false)}
               >
                 Cancel
               </button>
-              <button type="button" className="primary-button" onClick={handleSubmitFlag}>
+              <button type="button" className="btn btn--primary" onClick={handleSubmitFlag}>
                 <Flag size={16} />
                 <span>Flag with reason</span>
               </button>

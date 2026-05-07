@@ -61,7 +61,7 @@ export function AutoLabelDialog({ open, onClose, studio }: AutoLabelDialogProps)
           </div>
           <button
             type="button"
-            className="icon-button"
+            className="btn btn--ghost btn--icon"
             onClick={onClose}
             aria-label="Close auto label dialog"
           >
@@ -97,7 +97,7 @@ export function AutoLabelDialog({ open, onClose, studio }: AutoLabelDialogProps)
         <footer className="modal-footer">
           <button
             type="button"
-            className="primary-button"
+            className="btn btn--primary"
             onClick={handleRun}
             disabled={isRunning}
           >

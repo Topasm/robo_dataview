@@ -18,6 +18,7 @@ import {
   Maximize2,
   Pause,
   Play,
+  Rows3,
   RotateCcw,
   SkipBack,
   SkipForward
@@ -35,10 +36,10 @@ type EpisodeViewerProps = {
   onToggleSignals?: () => void;
   showSignals?: boolean;
   enableInternalKeymap?: boolean;
-  initialLayout?: "focus" | "grid";
+  initialLayout?: "focus" | "grid" | "stack";
 };
 
-type CameraLayout = "focus" | "grid";
+type CameraLayout = "focus" | "grid" | "stack";
 type LoadStatus = "idle" | "ready" | "error";
 type PlotChannel = "norm" | number;
 
@@ -303,10 +304,18 @@ export function EpisodeViewer({
             <button
               className={`icon-button${layout === "grid" ? " active" : ""}`}
               onClick={() => setLayout("grid")}
-              title="Show all cameras"
+              title="Show all cameras (grid)"
               type="button"
             >
               <Grid2x2 size={16} />
+            </button>
+            <button
+              className={`icon-button${layout === "stack" ? " active" : ""}`}
+              onClick={() => setLayout("stack")}
+              title="Stack: main on top, secondaries below"
+              type="button"
+            >
+              <Rows3 size={16} />
             </button>
           </div>
           <button
@@ -331,6 +340,17 @@ export function EpisodeViewer({
       <section className={`camera-preview layout-${layout}`}>
         {layout === "focus" ? (
           <FocusCameras
+            activeCamera={activeCamera}
+            cameraNames={cameraNames}
+            datasetId={episode.datasetId}
+            episodeIndex={episode.episodeIndex}
+            onSelectCamera={setActiveCamera}
+            onStatusChange={setCameraStatus}
+            registerVideo={registerVideo}
+            videoStatus={videoStatus}
+          />
+        ) : layout === "stack" ? (
+          <StackCameras
             activeCamera={activeCamera}
             cameraNames={cameraNames}
             datasetId={episode.datasetId}
@@ -635,6 +655,101 @@ function GridCameras({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function StackCameras({
+  activeCamera,
+  cameraNames,
+  datasetId,
+  episodeIndex,
+  onSelectCamera,
+  onStatusChange,
+  registerVideo,
+  videoStatus
+}: CamerasGroupProps) {
+  if (cameraNames.length === 0) {
+    return (
+      <div className="active-camera-stage">
+        <div className="camera-pane-top">
+          <span className="camera-name">No camera</span>
+        </div>
+        <div className="video-placeholder">
+          <VideoMessage
+            icon={<Camera size={18} />}
+            label="No camera streams in episode metadata"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Vertical stack: leader on top, secondary cameras share a single row beneath.
+  // Compact triage layout — leaves room for charts / actions below the stack.
+  const leaderCamera =
+    cameraNames.includes(activeCamera) ? activeCamera : cameraNames[0];
+  const secondaryCameras = cameraNames.filter((camera) => camera !== leaderCamera);
+
+  return (
+    <div className={`camera-stack secondary-${secondaryCameras.length}`}>
+      <button
+        className="camera-stack-leader camera-grid-tile leader"
+        key={leaderCamera}
+        onClick={() => onSelectCamera(leaderCamera)}
+        title={`Make ${leaderCamera} the playback leader`}
+        type="button"
+      >
+        <span className="camera-grid-tile-top">
+          <span className="camera-name">{leaderCamera}</span>
+          <span className={`camera-select-status camera-status-${videoStatus[leaderCamera] ?? "idle"}`}>
+            {videoStatus[leaderCamera] ?? "idle"}
+          </span>
+        </span>
+        <span className="video-placeholder">
+          <CameraVideo
+            datasetId={datasetId}
+            episodeIndex={episodeIndex}
+            hidden={false}
+            name={leaderCamera}
+            onStatusChange={onStatusChange}
+            register={registerVideo(leaderCamera)}
+            status={videoStatus[leaderCamera] ?? "idle"}
+          />
+        </span>
+      </button>
+      {secondaryCameras.length > 0 ? (
+        <div className="camera-stack-secondary">
+          {secondaryCameras.map((camera) => {
+            const status = videoStatus[camera] ?? "idle";
+            return (
+              <button
+                className="camera-grid-tile"
+                key={camera}
+                onClick={() => onSelectCamera(camera)}
+                title={`Make ${camera} the playback leader`}
+                type="button"
+              >
+                <span className="camera-grid-tile-top">
+                  <span className="camera-name">{camera}</span>
+                  <span className={`camera-select-status camera-status-${status}`}>{status}</span>
+                </span>
+                <span className="video-placeholder">
+                  <CameraVideo
+                    datasetId={datasetId}
+                    episodeIndex={episodeIndex}
+                    hidden={false}
+                    name={camera}
+                    onStatusChange={onStatusChange}
+                    register={registerVideo(camera)}
+                    status={status}
+                  />
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }

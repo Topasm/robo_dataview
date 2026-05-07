@@ -122,7 +122,7 @@ export function CheatsheetModal({
           <h2>Keyboard shortcuts</h2>
           <button
             type="button"
-            className="icon-button"
+            className="btn btn--ghost btn--icon"
             onClick={onClose}
             aria-label="Close shortcuts"
           >
