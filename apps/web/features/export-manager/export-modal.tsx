@@ -42,17 +42,17 @@ export function ExportModal({ open, onClose, studio }: ExportModalProps) {
         }
       }}
     >
-      <div className="modal-panel export-modal-panel" role="dialog" aria-label="Export">
+      <div className="modal-panel export-modal-panel" role="dialog" aria-label="Apply to dataset">
         <header className="modal-header">
           <div className="modal-header-title">
             <Download size={18} />
-            <h2>Export</h2>
+            <h2>Apply to dataset</h2>
           </div>
           <button
             type="button"
             className="btn btn--ghost btn--icon"
             onClick={onClose}
-            aria-label="Close export dialog"
+            aria-label="Close apply dialog"
           >
             <X size={16} />
           </button>
@@ -63,6 +63,7 @@ export function ExportModal({ open, onClose, studio }: ExportModalProps) {
             episodeIndex={studio.selectedEpisode.episodeIndex}
             exportJob={studio.exportJob}
             exportRecord={studio.exportRecord}
+            pastExports={studio.pastExports}
             onCreateExport={studio.handleCreateExport}
             split={studio.selectedEpisode.split}
           />

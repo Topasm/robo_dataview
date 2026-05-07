@@ -199,6 +199,15 @@ export function EpisodeList({
                     {DISPOSITION_BADGE_LABEL[episode.disposition]}
                   </span>
                 ) : null}
+                {episode.dirtyAnnotationCount > 0 ? (
+                  <span
+                    className="episode-dirty-badge"
+                    title={`${episode.dirtyAnnotationCount} annotation${episode.dirtyAnnotationCount === 1 ? "" : "s"} not yet included in any export`}
+                    aria-label="Has unapplied annotations"
+                  >
+                    •
+                  </span>
+                ) : null}
               </span>
               <span>{episode.qualityScore === null ? "n/a" : episode.qualityScore.toFixed(2)}</span>
               <span className="label-icons">

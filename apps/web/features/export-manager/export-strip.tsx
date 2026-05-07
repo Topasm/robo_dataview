@@ -9,12 +9,14 @@ import type {
   SegmentAnnotation,
   SkillExportOptions
 } from "@/lib/types";
+import { ExportHistory } from "./export-history";
 
 type ExportStripProps = {
   annotations: SegmentAnnotation[];
   episodeIndex: number;
   exportJob: JobRecord | null;
   exportRecord: ExportRecord | null;
+  pastExports?: ExportRecord[];
   onCreateExport: (
     format?: ExportFormat,
     scope?: "episode" | "split",
@@ -28,6 +30,7 @@ export function ExportStrip({
   episodeIndex,
   exportJob,
   exportRecord,
+  pastExports = [],
   onCreateExport,
   split
 }: ExportStripProps) {
@@ -48,10 +51,12 @@ export function ExportStrip({
       <div>
         <div className="section-title">
           <PackageCheck size={16} />
-          <span>Export</span>
+          <span>Apply to dataset</span>
         </div>
         <div className="muted">
-          Export accepted skill clips from episode #{episodeIndex} as train_skill_clips.lance
+          Materializes accepted skill clips from episode #{episodeIndex} as a new dataset
+          version under <code>data/exports/&lt;id&gt;/</code>. Previous versions remain as
+          backups; raw Lance tables are never modified.
         </div>
         {exportRecord ? (
           <div className="muted">
@@ -171,7 +176,7 @@ export function ExportStrip({
           type="button"
         >
           <Download size={15} />
-          Export Skill Clips
+          Apply to dataset
         </button>
         <details className="advanced-menu export-advanced-menu">
           <summary>Augmentation Options</summary>
@@ -231,6 +236,7 @@ export function ExportStrip({
             </button>
           </div>
         </details>
+        <ExportHistory exports={pastExports} />
       </div>
       </div>
     </section>

@@ -220,7 +220,7 @@ export function AnnotationMode({
               aria-label="Copy skill clips from the previously annotated episode"
             >
               <RefreshCw size={16} />
-              <span>Apply Last Episode</span>
+              <span>Copy from previous</span>
             </button>
             <button
               type="button"
@@ -341,11 +341,11 @@ export function AnnotationMode({
             }
           }}
         >
-          <div className="modal-panel" role="dialog" aria-label="Apply last episode confirm">
+          <div className="modal-panel" role="dialog" aria-label="Copy from previous episode confirm">
             <header className="modal-header">
               <div className="modal-header-title">
                 <RefreshCw size={18} />
-                <h2>Apply last episode</h2>
+                <h2>Copy from previous episode</h2>
               </div>
             </header>
             <div className="modal-body">

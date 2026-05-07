@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Database, Download, Settings } from "lucide-react";
 
+import { DirtyChip } from "@/components/dirty-chip";
 import { AnnotationMode } from "@/features/annotation-mode/annotation-mode";
 import { BrowseMode } from "@/features/browse-mode/browse-mode";
 import { ExportModal } from "@/features/export-manager/export-modal";
@@ -23,11 +24,27 @@ export default function Home() {
   const studio = useStudioData();
   const {
     dataStatus,
+    episodeRows,
     handleDismissMutationNotice,
+    handleSelectEpisode,
     mutationNotice,
     selectedEpisode,
     selectedSummary
   } = studio;
+
+  const dirtyEpisodeCount = useMemo(
+    () => episodeRows.filter((episode) => (episode.dirtyAnnotationCount ?? 0) > 0).length,
+    [episodeRows]
+  );
+
+  const handleJumpToFirstDirty = useCallback(() => {
+    const firstDirty = episodeRows.find(
+      (episode) => (episode.dirtyAnnotationCount ?? 0) > 0
+    );
+    if (firstDirty) {
+      handleSelectEpisode(firstDirty.episodeIndex);
+    }
+  }, [episodeRows, handleSelectEpisode]);
 
   const toggleSignals = useCallback(() => setShowSignals((current) => !current), []);
   const openCheatsheet = useCallback(() => setCheatsheetOpen(true), []);
@@ -98,15 +115,18 @@ export default function Home() {
           </button>
         </nav>
         <div className="top-bar-actions">
+          <DirtyChip count={dirtyEpisodeCount} onJumpToFirst={handleJumpToFirstDirty} />
           <button
             className={`text-button primary-export-button compact-text-button${exportModalOpen ? " active" : ""}`}
             onClick={() => setExportModalOpen((current) => !current)}
+            title="Apply curated annotations to a new dataset version"
+            aria-label="Open the apply-to-dataset panel"
             type="button"
           >
             <Download size={15} />
-            Export
+            Apply
           </button>
-          <button className="icon-button" title="Advanced settings" type="button">
+          <button className="icon-button" title="Advanced settings" aria-label="Advanced settings" type="button">
             <Settings size={17} />
           </button>
         </div>
