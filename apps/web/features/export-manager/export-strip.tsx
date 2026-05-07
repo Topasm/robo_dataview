@@ -126,6 +126,9 @@ export function ExportStrip({
             className={scope === "episode" ? "active" : ""}
             disabled={exportJobActive}
             onClick={() => setScope("episode")}
+            title="Apply only the currently selected episode"
+            aria-label="Apply only the current episode"
+            aria-pressed={scope === "episode"}
             type="button"
           >
             Current Episode
@@ -134,6 +137,9 @@ export function ExportStrip({
             className={scope === "split" ? "active" : ""}
             disabled={!split || exportJobActive}
             onClick={() => setScope("split")}
+            title="Apply every episode in the selected split (train/val/test)"
+            aria-label="Apply every episode in the selected split"
+            aria-pressed={scope === "split"}
             type="button"
           >
             Selected Split {split ?? ""}
@@ -160,6 +166,8 @@ export function ExportStrip({
               copiesPerClip: 1
             })
           }
+          title="Materialize accepted skill clips as a new dataset version under data/exports/. Previous versions remain as backups."
+          aria-label="Apply accepted skill clips to a new dataset version"
           type="button"
         >
           <Download size={15} />
@@ -183,12 +191,13 @@ export function ExportStrip({
           </div>
         </details>
         <details className="advanced-menu export-advanced-menu">
-          <summary>More formats</summary>
+          <summary title="Show alternative export formats (LeRobot v3, JSONL, VLA, HF Dataset)">More formats</summary>
           <div className="advanced-menu-content">
             <button
               className="text-button secondary-text-button"
               disabled={exportJobActive}
               onClick={() => void onCreateExport("lerobot", scope)}
+              title="Export as LeRobot v3 (manifest + Parquet + MP4 + SHA256 index)"
               type="button"
             >
               LeRobot
@@ -197,6 +206,7 @@ export function ExportStrip({
               className="text-button secondary-text-button"
               disabled={exportJobActive}
               onClick={() => void onCreateExport("jsonl", scope)}
+              title="Export as line-delimited JSON (one frame per line)"
               type="button"
             >
               JSONL
@@ -205,6 +215,7 @@ export function ExportStrip({
               className="text-button secondary-text-button"
               disabled={exportJobActive}
               onClick={() => void onCreateExport("vla", scope)}
+              title="Export as VLA training format (vision-language-action JSONL)"
               type="button"
             >
               VLA
@@ -213,6 +224,7 @@ export function ExportStrip({
               className="text-button secondary-text-button"
               disabled={exportJobActive}
               onClick={() => void onCreateExport("hf_dataset", scope)}
+              title="Export as HuggingFace Datasets snapshot"
               type="button"
             >
               HF Dataset

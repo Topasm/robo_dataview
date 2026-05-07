@@ -205,6 +205,8 @@ export function AnnotationMode({
               type="button"
               className="btn btn--primary"
               onClick={() => setAutoLabelOpen(true)}
+              title="Run VLM auto-labeling on this episode (proposes pending clips for review)"
+              aria-label="Run VLM auto-labeling on this episode"
             >
               <Wand2 size={16} />
               <span>Auto Label this episode</span>
@@ -214,7 +216,8 @@ export function AnnotationMode({
               className="btn"
               disabled={applyLastDisabled}
               onClick={handleApplyLastEpisode}
-              title={applyLastTitle}
+              title={applyLastTitle ?? "Copy skill clip boundaries from the previous annotated episode"}
+              aria-label="Copy skill clips from the previously annotated episode"
             >
               <RefreshCw size={16} />
               <span>Apply Last Episode</span>
@@ -361,6 +364,8 @@ export function AnnotationMode({
                 type="button"
                 className="btn"
                 onClick={() => setApplyLastConfirm(null)}
+                title="Cancel — keep the existing clips unchanged"
+                aria-label="Cancel apply"
               >
                 Cancel
               </button>
@@ -372,6 +377,7 @@ export function AnnotationMode({
                   setApplyLastConfirm(null);
                 }}
                 title="Add the new clips alongside existing ones (may produce overlaps)"
+                aria-label="Append new clips"
               >
                 Append
               </button>
@@ -383,6 +389,7 @@ export function AnnotationMode({
                   setApplyLastConfirm(null);
                 }}
                 title="Delete the existing skill clips, then add the applied ones"
+                aria-label="Replace existing clips"
               >
                 Replace
               </button>

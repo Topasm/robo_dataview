@@ -34,7 +34,8 @@ export function IconRail({
           type="button"
           className={`icon-rail-button${activePanel === "episodes" ? " active" : ""}`}
           onClick={() => onTogglePanel("episodes")}
-          title="Episodes (E)"
+          title="Episodes (E) — toggle the episode list"
+          aria-label="Toggle episode list"
           aria-pressed={activePanel === "episodes"}
         >
           <Film size={18} />
@@ -44,7 +45,8 @@ export function IconRail({
           type="button"
           className={`icon-rail-button${activePanel === "search" ? " active" : ""}`}
           onClick={() => onTogglePanel("search")}
-          title="Search & filter"
+          title="Search & filter episodes"
+          aria-label="Toggle search and filter panel"
           aria-pressed={activePanel === "search"}
         >
           <Search size={18} />
@@ -53,7 +55,8 @@ export function IconRail({
           type="button"
           className={`icon-rail-button${activePanel === "rerun" ? " active" : ""}`}
           onClick={() => onTogglePanel("rerun")}
-          title="Rerun (R)"
+          title="Rerun (R) — open the 3D viewer panel"
+          aria-label="Toggle Rerun viewer panel"
           aria-pressed={activePanel === "rerun"}
         >
           <Sparkles size={18} />
@@ -64,6 +67,7 @@ export function IconRail({
           className="icon-rail-button"
           onClick={onOpenCheatsheet}
           title="Keyboard shortcuts (?)"
+          aria-label="Open keyboard shortcuts"
         >
           <HelpCircle size={18} />
         </button>
@@ -76,7 +80,8 @@ export function IconRail({
               type="button"
               className="btn btn--ghost btn--icon btn--sm"
               onClick={onTogglePin}
-              title={pinned ? "Unpin panel" : "Pin panel"}
+              title={pinned ? "Unpin panel — auto-collapses on focus loss" : "Pin panel open"}
+              aria-label={pinned ? "Unpin panel" : "Pin panel"}
               aria-pressed={pinned}
             >
               {pinned ? <PinOff size={14} /> : <Pin size={14} />}

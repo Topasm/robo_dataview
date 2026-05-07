@@ -132,6 +132,9 @@ export function AnnotationEditor({
         <button
           className={activeTab === "skills" ? "active" : ""}
           onClick={() => setActiveTab("skills")}
+          role="tab"
+          aria-selected={activeTab === "skills"}
+          title="Switch to Clip inspector — review and edit skill clips"
           type="button"
         >
           Clip ({skillClips.length})
@@ -139,6 +142,9 @@ export function AnnotationEditor({
         <button
           className={activeTab === "frame" ? "active" : ""}
           onClick={() => setActiveTab("frame")}
+          role="tab"
+          aria-selected={activeTab === "frame"}
+          title="Switch to Frame inspector — per-frame metadata and labels"
           type="button"
         >
           Frame
@@ -146,6 +152,9 @@ export function AnnotationEditor({
         <button
           className={activeTab === "coverage" ? "active" : ""}
           onClick={() => setActiveTab("coverage")}
+          role="tab"
+          aria-selected={activeTab === "coverage"}
+          title="Switch to Coverage inspector — episode coverage and gaps"
           type="button"
         >
           Coverage
@@ -220,6 +229,7 @@ export function AnnotationEditor({
                     setIsSaving(false);
                   }
                 }}
+                title="Create a new skill clip from the I/O markers and accept it immediately"
                 type="button"
               >
                 Add Clip
@@ -342,6 +352,7 @@ export function AnnotationEditor({
                               metadata: { ...clip.metadata, qualityScore: item.quality }
                             })
                           }
+                          title={`Mark this clip as ${item.label} (review ${item.reviewStatus}, quality ${item.quality.toFixed(1)})`}
                           type="button"
                         >
                           {item.label}
