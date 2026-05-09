@@ -27,14 +27,18 @@ type EpisodeListProps = {
   compact?: boolean;
 };
 
-type QuickFilter = "all" | "need_check" | "bad" | "no_label" | "failure" | "auto";
+type QuickFilter = "all" | "new" | "no_label" | "failure" | "auto";
 type SortKey = "episode_index" | "quality" | "status";
 type DispositionFilter = "all" | EpisodeDisposition;
 
+// "new" mirrors the StatusPill label for `reviewStatus === "pending"` so
+// the dropdown reads the same as the in-row pill. The legacy "Bad/Drop"
+// filter (reviewStatus === "rejected") was dropped because it overlapped
+// with the Deleted disposition filter — both ended up surfacing the same
+// "this episode is being thrown away" intent.
 const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
   { key: "all", label: "All" },
-  { key: "need_check", label: "Need Check" },
-  { key: "bad", label: "Bad/Drop" },
+  { key: "new", label: "New" },
   { key: "no_label", label: "No Label" },
   { key: "failure", label: "Failure" },
   { key: "auto", label: "Auto Labels" }
@@ -55,10 +59,8 @@ function matchFilter(episode: Episode, filter: QuickFilter): boolean {
   switch (filter) {
     case "all":
       return true;
-    case "need_check":
+    case "new":
       return episode.reviewStatus === "pending";
-    case "bad":
-      return episode.reviewStatus === "rejected";
     case "no_label":
       return !episode.hasHumanLabel && !episode.hasVlmLabel;
     case "failure":
