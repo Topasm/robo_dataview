@@ -220,6 +220,44 @@ Current implementation detail:
   `fsspec`, without reading the whole file first.
 - Suffix byte ranges such as `bytes=-500` are not supported.
 
+`GET /episodes/{episode_index}/timeseries` returns down-sampled state/action
+values for chart rendering plus the human-readable joint names so chart
+series can be labeled (e.g. `arm_l_joint1` instead of `s0`):
+
+```json
+{
+  "dataset_id": "session_20260508_075757_aiworker",
+  "episode_index": 0,
+  "frame_count": 322,
+  "fps": 30.0,
+  "sample_count": 322,
+  "sample_indices": [0, 1, 2, "..."],
+  "timestamps": [0.0, 0.0333, "..."],
+  "state_norms": [0.5, "..."],
+  "action_norms": [0.4, "..."],
+  "state_values": [[0.1, "..."]],
+  "action_values": [[0.1, "..."]],
+  "state_dim": 19,
+  "action_dim": 19,
+  "state_names": ["arm_l_joint1", "arm_l_joint2", "..."],
+  "action_names": ["arm_l_joint1", "arm_l_joint2", "..."]
+}
+```
+
+`state_names` / `action_names` are populated from `manifest.json.joint_order`
+when the bundle is a raw rllab collection session, and from
+`meta/info.json.features.observation.state.names` (or `.action.names`) when
+the bundle is a LeRobot v2.1 / v3 conversion. They are `null` if neither
+source provides names; the web client then falls back to `s{i}` / `a{i}`
+labels.
+
+`PATCH /episodes/{episode_index}/disposition` writes a soft-only triage state
+as an `episode_disposition` annotation row (`label_value` is `"deleted"` or
+`"flagged"`). Sending `disposition: null` clears the existing row via the
+soft-delete tombstone path. The legacy `"kept"` value is still accepted by
+the schema but the web parser normalizes it to `null` — the in-app type
+narrows to `"deleted" | "flagged"` because untouched is the implicit keep.
+
 ## Frames
 
 ```text

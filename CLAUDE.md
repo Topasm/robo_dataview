@@ -72,21 +72,30 @@ CORS is locked to `localhost:3000` / `127.0.0.1:30xx` — adjust in `main.py` if
 
 ### Page structure (2 tabs)
 
-`apps/web/app/page.tsx` is a thin shell — header (Browse/Annotate tabs + Export button + cheatsheet) and a banner — that mounts one of two workspaces:
+`apps/web/app/page.tsx` is a thin shell — header (Browse/Annotate tabs + Settings + cheatsheet) and a `<select>` dataset-switcher banner — that mounts one of two workspaces. The header used to host an Apply button; that lives in each mode now (sidebar footer in Browse, IconRail in Annotate) so the action follows the user's context.
 
-- `features/browse-mode/browse-mode.tsx` — triage: `DatasetBrowser` + `EpisodeList` sidebar | `EpisodeViewer initialLayout="stack"` (cam_head on top + wrist row beneath) + `EpisodeCharts` (recharts state/action lines with skill-clip `ReferenceArea` overlays + click/hover-to-seek) + `EpisodeActionBar` (Keep/Delete/Flag + "Annotate this episode →"). Disposition is soft-only (`label_type=episode_disposition` annotation; `episodes.lance` never mutated).
-- `features/annotation-mode/annotation-mode.tsx` — NLE-style cutter: `IconRail` | (annotation header + `EpisodeViewer` preview + `SkillHotBar` 0–9 + `StatusHud` + `EpisodeCharts` (compact) + `TimelinePanel` + `ShortcutChip`) | `AnnotationEditor` (3-tab inspector: Clip / Frame / Coverage). `AutoLabelDialog`, `CheatsheetModal`, and Apply-Last confirm are mounted here.
+- `features/browse-mode/browse-mode.tsx` — triage. Layout is a 3-column resizable `<PanelGroup>` (`react-resizable-panels`, autoSaveId `rds.browse.layout-3col`):
+  - left: `DatasetBrowser` (datasets switcher + open-by-URI) + `EpisodeList` (per-row inline Flag/Delete-or-Undo) + sidebar footer (`Annotate this episode →` primary + `Apply` outlined)
+  - center: `EpisodeViewer initialLayout="stack"` (cam_head on top + wrist row beneath, click ⛶ on a tile to enlarge that camera viewport-wide) + `EpisodeCharts` + a thin actions row (episode meta + overlay toggle)
+  - right: `DatasetMeta` (Dataset Progress + Advanced Details with Health, Cameras chips). `EpisodeActionBar` is gone; the only Annotate jump is the sidebar footer button. Per-row Delete↔Undo + Flag with a memo dialog cover triage actions inline. Disposition is still soft-only (`label_type=episode_disposition` annotation; `episodes.lance` never mutated).
+- `features/annotation-mode/annotation-mode.tsx` — NLE-style cutter: `IconRail` (Episodes + Search + Rerun + Apply icon button) | (annotation header + `EpisodeViewer` preview + `SkillHotBar` (0–9 canonical chips + custom-skill chips + `+` autocomplete) + `StatusHud` + `EpisodeCharts` (compact) + `TimelinePanel` + `ShortcutChip` + horizontal `EmptyStateCoach` banner above the videos when no clips yet) | `AnnotationEditor` (3-tab inspector: Clip / Frame / Coverage; the New Skill Clip form has Start / End / Add Clip only — skill identity reads from the hot bar, no duplicate picker). `AutoLabelDialog`, `CheatsheetModal`, and Apply-Last confirm are mounted here.
 
 ### Keymap split
 
 Two hooks own the keyboard contract:
 
-- `lib/use-browse-shortcuts.ts` — Browse: `Space ←/→ ↑/↓ K/X/F Enter` (disposition + open-in-Annotate).
+- `lib/use-browse-shortcuts.ts` — Browse: `Space ←/→ ↑/↓ X/F K Enter`. `X` = delete, `F` = flag (memo dialog), `K` = clear disposition (undo). The legacy `K`-marks-as-kept shortcut was retired together with the explicit `kept` state — untouched is the implicit keep, so K now only undoes a previous delete/flag. `Enter` opens the selected episode in Annotate mode.
 - `lib/use-annotate-shortcuts.ts` — Annotate: `I/O` (in/out markers), `1–9` (select skill **and** in one stroke create+accept the I→O clip; if a pending VLM clip is selected instead, reassign skill + accept), `0` (cancel draft), `Backspace` (delete selected clip). `M/B` (bad-frame, bad-range) are opt-in via `useAnnotationEditor.enableBadFrameShortcuts` (persisted to localStorage; toggled in the cheatsheet footer). `?` toggles the cheatsheet, `Esc` closes modals — both live at the page level.
 
 ### Skill vocabulary contract (do not break)
 
 The 10 canonical skills are the source of truth across the whole pipeline (`packages/robot_schema/humanoid_skills.json` → `apps/web/lib/skill-vocabulary.ts`). The same string is used as DataView `label_value`, `train_skill_clips.lance` `skill_name`, Skill Registry key, Robot CLI command, and the per-skill checkpoint directory. New skills must be added everywhere or nowhere. Each skill carries a stable color used by the timeline lane, skill hot bar, status HUD, episode chart `ReferenceArea` band, and inspector chip — all reads go through `skillByName`/`skillById`.
+
+`SkillHotBar` and `SkillCombobox` also surface a **user-defined "custom skills" registry** that lives only in localStorage (`apps/web/lib/custom-skills.ts`). Pressing `+` on the hot bar opens an autocomplete combobox over the union of canonical + custom skills, with an "Add 'xxx'" affordance to register a new custom name. `skillByName` falls back to that registry so chart bands, status HUD, and inspector chips render the user-defined skills with their assigned color. **Custom skills are intentionally not promoted to the canonical contract**: `services/lance_export.py` still rejects any `label_value` that is not in the canonical 10, and `rllab-training` does the same on read. They exist as an exploration surface — once a name stabilizes, promote it into `humanoid_skills.json` (and the corresponding registries) in the usual canonical-update flow.
+
+### Episode disposition contract
+
+`EpisodeDisposition` carries two values plus null: `"deleted"` and `"flagged"` (with optional reason memo). The legacy `"kept"` member was retired in favor of "untouched is the implicit keep"; the API parser at `apps/web/lib/api.ts` still accepts a legacy `"kept"` payload but normalizes it to `null` so the in-app type only carries the values that have UI affordances. Per-row triage in `EpisodeList` exposes Delete (toggles to Undo when already deleted) and Flag (with a memo dialog) — there is no Keep button.
 
 ### Design tokens & component conventions
 
@@ -97,6 +106,13 @@ Buttons use a small system: `.btn` baseline + `.btn--primary | --ghost | --dange
 ### Charts (lazy)
 
 `features/browse-mode/episode-charts.tsx` renders state/action timeseries via `recharts` with playhead `ReferenceLine`, accepted skill clips as colored `ReferenceArea` bands, and click/hover-to-seek. The component is wrapped in `episode-charts-async.tsx` via `next/dynamic({ssr: false})` so the ~110 KB recharts chunk only ships when the user actually opens Browse or Annotate.
+
+Series labels come from `EpisodeTimeseries.stateNames` / `actionNames`, piped end-to-end from the bundle:
+
+- `apps/api/services/lance_store.py` reads `manifest.json.joint_order` for raw rllab collection bundles and falls back to `meta/info.json.features.observation.state.names` / `action.names` for LeRobot-converted bundles, exposing both as `state_names` / `action_names` on the `EpisodeTimeseries` schema.
+- The web `EpisodeCharts` builds `DimSeries` records keyed by joint name; `groupOf(name)` groups them by prefix (`arm_l_*`, `arm_r_*`, `head_*`, `lift_*`, `gripper_*`) for the legend's master-checkbox rows. Singleton groups flatten into a Singles row.
+- Below each chart a `<ChartLegend>` lists every series with a colored checkbox + joint label + live current-frame value (tabular-nums, follows the playhead). Visibility is per-chart and per-series, persisted in `localStorage` as `rds.chart.visibleKeys.{state|action}`.
+- The chart header has a `Show series / Hide series` toggle so the legend can collapse for the Annotate-mode compact variant where the timeline already takes most of the vertical space.
 
 ### Sidebar / scroll invariants
 
