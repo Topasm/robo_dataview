@@ -25,13 +25,21 @@ type SkillComboboxProps = {
   /** Show a small × on custom rows that lets the user remove them. */
   allowCustomRemoval?: boolean;
   placeholder?: string;
+  /** Focus the input and pre-open the suggestion list on mount. Used in
+   *  the hot bar's inline-add slot so a single click on `+` lands the
+   *  user straight into typing with the canonical skills already listed. */
+  autoFocus?: boolean;
+  /** Optional callback when the user dismisses the combobox via Esc. */
+  onCancel?: () => void;
 };
 
 export function SkillCombobox({
   value,
   onChange,
   allowCustomRemoval = true,
-  placeholder = "Type to search or add…"
+  placeholder = "Type to search or add…",
+  autoFocus = false,
+  onCancel
 }: SkillComboboxProps) {
   const customSkills = useCustomSkills();
   const items: Item[] = useMemo(() => {
@@ -88,6 +96,15 @@ export function SkillCombobox({
     return () => window.removeEventListener("mousedown", onClickOutside);
   }, [open]);
 
+  useEffect(() => {
+    if (autoFocus) {
+      setOpen(true);
+      // Defer to next tick so the input is mounted before focusing.
+      const id = window.setTimeout(() => inputRef.current?.focus(), 0);
+      return () => window.clearTimeout(id);
+    }
+  }, [autoFocus]);
+
   function commitItem(item: Item) {
     onChange(item.name);
     setQuery("");
@@ -129,6 +146,7 @@ export function SkillCombobox({
       setOpen(false);
       setQuery("");
       inputRef.current?.blur();
+      onCancel?.();
     }
   }
 

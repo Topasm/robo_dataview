@@ -168,23 +168,6 @@ export function AnnotationEditor({
           <section className="panel-section">
             <div className="section-title">New Skill Clip</div>
             <div className="segment-form">
-              <div className="segment-form-skill-display">
-                <span className="muted">Skill</span>
-                <span
-                  className="skill-combobox-color"
-                  style={{
-                    background:
-                      skillByName(selectedSkillName)?.color ?? "var(--muted)"
-                  }}
-                  aria-hidden
-                />
-                <span>
-                  {skillByName(selectedSkillName)?.label ?? selectedSkillName}
-                </span>
-                <span className="muted skill-display-hint">
-                  pick from the bar
-                </span>
-              </div>
               <label>
                 Start
                 <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>

@@ -1,13 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Plus, X } from "lucide-react";
 
-import {
-  addCustomSkill,
-  removeCustomSkill,
-  useCustomSkills
-} from "@/lib/custom-skills";
+import { SkillCombobox } from "@/components/skill-combobox";
+import { removeCustomSkill, useCustomSkills } from "@/lib/custom-skills";
 import { HUMANOID_SKILLS } from "@/lib/skill-vocabulary";
 
 type SkillHotBarProps = {
@@ -26,21 +23,6 @@ export function SkillHotBar({
 }: SkillHotBarProps) {
   const customSkills = useCustomSkills();
   const [adding, setAdding] = useState(false);
-  const [draftName, setDraftName] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (adding) inputRef.current?.focus();
-  }, [adding]);
-
-  function commitNew() {
-    const created = addCustomSkill(draftName);
-    if (created) {
-      onSelectName(created.name);
-    }
-    setDraftName("");
-    setAdding(false);
-  }
 
   return (
     <div className="skill-hot-bar" role="toolbar" aria-label="Skill picker">
@@ -112,35 +94,25 @@ export function SkillHotBar({
         );
       })}
       {adding ? (
-        <span className="skill-chip skill-chip-add-input">
-          <input
-            ref={inputRef}
-            type="text"
-            value={draftName}
-            onChange={(event) => setDraftName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                commitNew();
-              } else if (event.key === "Escape") {
-                event.preventDefault();
-                setDraftName("");
-                setAdding(false);
-              }
+        <span className="skill-chip-combobox-slot">
+          <SkillCombobox
+            value=""
+            autoFocus
+            placeholder="search skills or add new…"
+            onChange={(name) => {
+              onSelectName(name);
+              setAdding(false);
             }}
-            placeholder="new_skill_name"
-            aria-label="New skill name"
-            autoComplete="off"
-            spellCheck={false}
+            onCancel={() => setAdding(false)}
           />
           <button
             type="button"
-            className="skill-chip-add-confirm"
-            onClick={commitNew}
-            disabled={!draftName.trim()}
-            aria-label="Add new custom skill"
+            className="skill-chip-add-cancel"
+            onClick={() => setAdding(false)}
+            title="Cancel"
+            aria-label="Cancel adding skill"
           >
-            ✓
+            <X size={12} />
           </button>
         </span>
       ) : (
@@ -148,8 +120,8 @@ export function SkillHotBar({
           type="button"
           className="skill-chip skill-chip-add"
           onClick={() => setAdding(true)}
-          title="Add a new custom skill (export still rejects non-canonical labels)"
-          aria-label="Add custom skill"
+          title="Search existing skills or add a new custom one"
+          aria-label="Search or add skill"
         >
           <Plus size={12} />
         </button>
