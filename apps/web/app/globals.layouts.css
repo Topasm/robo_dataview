@@ -18,25 +18,33 @@
   flex: 1 1 auto;
   display: flex;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
 }
 
 .annotation-mode-shell .annotation-stage {
   /* All rows are content-sized so the layout stays stable when the
-   * EmptyStateCoach banner is added at the top — the previous
-   * `1fr` row used to belong to the preview, but with the coach
-   * banner rendered as the first child the 1fr slot landed on the
-   * header instead and squashed the rows below. Use plain `flex`
-   * column + an explicit min-height on the camera viewer so the
-   * preview area still has a sensible size; `overflow-y: auto` keeps
-   * the whole stage scrollable when content exceeds viewport height. */
+   * EmptyStateCoach banner is added at the top. `height: 100%` is
+   * required because react-resizable-panels gives this element an
+   * un-flexed slot inside a `<Panel overflow:hidden>` — without it
+   * the stage tries to take its intrinsic content height and
+   * overflow-y:auto never engages because it thinks it is taller
+   * than the (clipped) panel. */
   display: flex;
   flex-direction: column;
+  flex: 1 1 0;
+  height: 100%;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
   border-left: 1px solid var(--border);
   border-right: 1px solid var(--border);
   background: var(--surface);
+}
+
+.annotation-mode-shell .annotation-inspector {
+  height: 100%;
+  min-height: 0;
 }
 
 .annotation-mode-shell .annotation-stage > * {
