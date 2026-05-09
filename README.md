@@ -1,90 +1,110 @@
 # Robot Data Studio
 
-Robot Data Studio is a Lance-native robot dataset operations platform. It can
-import from LeRobot and export LeRobot-compatible snapshots, but its canonical
-storage, search, annotation, versioning, and training subset layer is Lance.
-Its goal is not only to preview robot data, but to help curate high-quality
-datasets for VLA and robot policy training.
+Robot Data Studio는 Lance 기반 로봇 데이터셋 큐레이션 툴입니다. 수집된 LeRobot/Lance
+데이터셋을 브라우저에서 열어 episode를 검수하고, skill 단위로 clip을 잘라
+학습용으로 export하는 단계를 담당합니다. 단순히 데이터를 미리 보는 것이 아니라
+VLA·policy 학습에 쓸 고품질 데이터셋을 만들기 위한 도구입니다.
 
-## Product Direction
+이 repo는 `rllab_robot_stack`의 submodule (`repos/robo_dataview/`)로 편입되어
+있으며, 일반적으로는 상위 stack에서 같이 설치/실행하는 것을 권장합니다.
 
-- **Web GUI**: dataset browsing, annotation editing, filtering, review queues,
-  export management.
-- **Rerun Web Viewer**: episode replay, multi-camera inspection, timelines, 3D
-  visualization.
-- **Lance / LanceDB**: source of truth for raw data, annotations, embeddings,
-  versions, and searchable subsets.
-- **LeRobot compatibility**: import/export and optional official-loader
-  validation. LeRobot is an interoperability target, not the internal data
-  model.
-- **Python Workers**: VLM auto-labeling, embedding generation, thumbnails,
-  validation, Rerun cache generation, export jobs.
+## 주요 기능
 
-## Target Stack
+- **Web GUI**: 데이터셋 탐색, episode 리뷰, skill clip annotation, 검수 큐, export 관리.
+- **Rerun Web Viewer 연동**: episode 리플레이, 멀티 카메라 보기, state/action 타임라인.
+- **Lance / LanceDB**: 원본 데이터/annotation/임베딩의 source of truth.
+- **LeRobot 호환**: LeRobot v3 import/export, 공식 loader 검증 (옵션).
+- **Python Worker**: VLM 자동 라벨링, 임베딩 생성, 키프레임/Rerun 캐시, export 작업.
 
-- Frontend: Next.js, React, TypeScript
+## 기술 스택
+
+- Frontend: Next.js 15, React 19, TypeScript
 - Backend: FastAPI, Pydantic
-- Data: Lance and LanceDB
+- Data: Lance / LanceDB
 - Viewer: Rerun Web Viewer
-- Workers: Python with RQ or Celery
-- Interop: LeRobotDataset and Hugging Face datasets
+- Workers: Python (RQ 또는 inline)
+- Interop: LeRobotDataset, Hugging Face datasets
 
-## Repository Layout
+## 디렉토리 구조
 
 ```text
 apps/
-  api/        FastAPI backend
-  web/        Next.js frontend
-docs/         Architecture, schema, API, UI, roadmap, deployment, and plan
-workers/      Python worker helpers
-packages/     Shared schema and prompts
-data/         Local Lance data, cache, and exports
+  api/        FastAPI 백엔드
+  web/        Next.js 프론트엔드
+docs/         아키텍처/스키마/API/UI/배포 문서
+workers/      Python worker 함수 (VLM, embedding, export)
+packages/     공용 schema, prompt template
+data/         로컬 Lance 데이터, 캐시, export 결과
 ```
 
-Real dataset compatibility smoke checks live in
-[`docs/real_dataset_compatibility.md`](docs/real_dataset_compatibility.md) and
-can be run with:
+## 설치
+
+### 권장: 상위 stack에서 한 번에 설치
+
+`rllab_robot_stack`을 clone한 뒤 stack root에서 아래만 실행하면 됩니다.
 
 ```bash
-./.venv/bin/python scripts/check_dataset_compat.py /path/to/dataset
+cd /path/to/rllab_robot_stack
+./scripts/setup_all.sh
 ```
 
-## Local Development
+이 스크립트는 [`uv`](https://docs.astral.sh/uv/)로 `repos/robo_dataview/.venv`
+(Python 3.11)를 만들고 viewer에서 쓰는 extra (`dev,lance,rerun,video,storage`)와
+`lerobot2lance` converter까지 같이 설치합니다. Web 워크스페이스는 `bun`(없으면 `npm`)으로
+설치합니다.
 
-Robot Data Studio expects you to manage the Python virtual environment
-explicitly. The repo scripts use the active shell environment; they do not
-create or mutate `.venv`.
+### 단독 설치
 
-Base setup:
+이 repo만 단독으로 쓸 때도 `uv` 사용을 권장합니다.
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install -e ".[dev]"
-npm install
+cd repos/robo_dataview
+uv venv .venv --python 3.11
+uv pip install --python .venv/bin/python -e ".[dev,lance,rerun,video,storage]"
+bun install        # 또는 npm install
 cp .env.example .env
 ```
 
-Optional Python extras:
+필요에 따라 추가 extra를 골라 설치합니다.
 
 ```bash
-python3 -m pip install -e ".[lance]"      # Lance/LanceDB + PyArrow mirrors
-python3 -m pip install -e ".[rerun]"      # Rerun .rrd generation
-python3 -m pip install -e ".[video]"      # OpenCV keyframe/preview extraction
-python3 -m pip install -e ".[storage]"    # remote HF/object-store video paths
-python3 -m pip install -e ".[lerobot]"    # official LeRobotDataset validation
-python3 -m pip install -e ".[export]"     # optional LeRobot Parquet/MP4 materialization
-python3 -m pip install -e ".[queue]"      # Redis/RQ background job queue
-python3 -m pip install -e ".[ml]"         # Transformers CLIP/SigLIP smoke checks
+uv pip install --python .venv/bin/python -e ".[lerobot]"   # 공식 LeRobot loader 검증
+uv pip install --python .venv/bin/python -e ".[export]"    # LeRobot Parquet/MP4 export
+uv pip install --python .venv/bin/python -e ".[queue]"     # Redis/RQ 백그라운드 큐
+uv pip install --python .venv/bin/python -e ".[ml]"        # Transformers CLIP/SigLIP
+uv pip install --python .venv/bin/python -e ".[convert]"   # lerobot2lance 변환 API
 ```
 
-Run API and web together:
+## 실행
+
+### 권장: 상위 stack의 view 스크립트
 
 ```bash
-npm run dev
+./scripts/view.sh latest                           # 가장 최근 수집 session
+./scripts/view.sh latest_export                    # 가장 최근 curated export
+./scripts/view.sh session_YYYYMMDD_HHMMSS_grasp    # 특정 session
 ```
 
-Optional RQ worker mode:
+기본 포트:
+
+```text
+Web (Next.js)   http://127.0.0.1:3000
+API (FastAPI)   http://127.0.0.1:8000
+```
+
+### 단독 실행
+
+repo 루트에서 API와 web을 함께 띄웁니다.
+
+```bash
+bun run dev    # 또는 npm run dev
+```
+
+`API_HOST`, `API_PORT`, `WEB_HOST`, `WEB_PORT`는 `.env`에서 바꿀 수 있습니다.
+
+### 백그라운드 작업 모드 (옵션)
+
+기본은 inline 실행이라 별도 worker 없이도 동작합니다. RQ 큐를 쓰려면:
 
 ```bash
 export ROBOT_DATA_STUDIO_JOB_QUEUE=rq
@@ -92,104 +112,113 @@ export ROBOT_DATA_STUDIO_REDIS_URL=redis://127.0.0.1:6379/0
 rq worker robot-data-studio --url "$ROBOT_DATA_STUDIO_REDIS_URL"
 ```
 
-With `ROBOT_DATA_STUDIO_JOB_QUEUE` unset, jobs run inline in the API process for
-local development.
+### 인증 (옵션)
 
-Set `ROBOT_DATA_STUDIO_API_KEY` to require `X-Robot-Data-Studio-API-Key` on
-`/api/*` requests. Review actions can pass `X-Robot-Data-Studio-User` to record
-the actor in annotation history.
+`ROBOT_DATA_STUDIO_API_KEY`를 설정하면 `/api/*` 요청에
+`X-Robot-Data-Studio-API-Key` 헤더가 필요합니다. 검수 actor는
+`X-Robot-Data-Studio-User`로 기록됩니다.
 
-Deployment notes are in [docs/deployment.md](docs/deployment.md).
+## 사용 흐름
 
-The script starts FastAPI on `http://127.0.0.1:8000` and Next.js on
-`http://127.0.0.1:3000` by default. Override `API_HOST`, `API_PORT`,
-`WEB_HOST`, or `WEB_PORT` in `.env` or the shell.
+상위 stack의 `view.sh`로 데이터셋을 열면 두 개의 탭이 보입니다.
 
-## Current Implementation State
+- **Browse**: 수집된 episode를 빠르게 훑어보고 삭제/플래그(soft) 처리.
+- **Annotate**: episode 안에서 skill 단위 clip의 시작/끝을 잘라 라벨을 붙이고 accept.
 
-The repository has moved past a pure skeleton. The current MVP path can:
+검수가 끝나면 Annotate 탭에서 **Lance Training Bundle**을 export 합니다.
+export 결과는 stack의 `data/exports/<version>/`에 들어가고, 이후 학습은
+상위 stack에서 `./scripts/train_policy.sh latest_export`로 바로 이어집니다.
 
-1. Open and index the `lance-format/lerobot-xvla-soft-fold` Lance dataset.
-2. Serve dataset summaries, episode lists, episode details, state/action
-   summaries, and MP4 blobs with HTTP Range support when available, including
-   local files, HTTP(S), `hf://`, and optional `fsspec` path-backed video rows.
-3. Serve frame-level samples through `GET /frames`, preferring `frames.lance`
-   and falling back to episode time-series arrays with annotation labels and
-   bad-frame flags, and show/edit selected-frame labels in the web metadata
-   panel.
-4. Store human and generated annotations as durable JSONL debug copies plus
-   Lance-compatible current/events tables when optional Lance dependencies are
-   installed.
-5. Generate Rerun `.rrd` cache files for state/action timeline inspection and
-   load them through the Rerun React web viewer.
-6. Run basic filter search through a typed builder with saved presets, plus
-   full-text search and text-embedding semantic search with deterministic
-   fallback, optional OpenAI-compatible embedding inference, and optional
-   LanceDB vector table persistence/query when `lancedb` is installed.
-7. Generate keyframe image embeddings through a visual embedding job with a
-   deterministic fallback provider, optional Transformers CLIP/SigLIP/DINO-style
-   model route, cached JPEG keyframes, and Lance-compatible embedding metadata.
-8. Create VLM-style annotation proposals for review, including
-   deterministic keyframe index sampling, versioned prompt tracking, and a
-   provider interface with heuristic fallback, optional OpenAI-compatible model
-   routing, optional local Ollama-compatible model routing,
-   raw-response/keyframe artifact persistence, optional keyframe cache
-   artifact publishing, and a generated-label review queue.
-9. Export selected trajectories as a LeRobot v3-oriented snapshot with metadata,
-   frame JSONL, optional Parquet, available camera MP4 artifacts, validation,
-   and version lineage, or as a Lance Training Bundle when optional `pyarrow`
-   and `lance` dependencies are installed. Lance skill exports materialize
-   `skills.lance`, `skill_segments.lance`, `frame_skill_labels.lance`, and
-   `train_skill_clips.lance`; in `train_skill_clips.lance`, `episode_index` is
-   the skill-clip training row index, `source_episode_index` points back to the
-   original full trajectory, and `video_frame_offset` maps local clip frames to
-   source video frames. Lightweight JSONL caption and VLA-style trajectory
-   exports are also available. `format=hf_dataset` writes a
-   frame-level Hugging Face `Dataset.save_to_disk()` artifact when optional
-   export dependencies are installed. `publish_uri` can copy the finished export
-   directory to a local or `fsspec` destination. The manual official-dependency workflow
-   verifies native HF Dataset round-tripping plus no-video and video-backed
-   LeRobot snapshots with the real official loaders. An opt-in real-dataset
-   export smoke workflow also opens the default `xvla-soft-fold` `hf://` Lance
-   URI and validates a one-episode exported subset with the official loader.
-   Exports can target the selected episode or the current train/val/test split.
-   Rerun, preview, and keyframe cache artifacts can also publish to local or
-   `fsspec` destinations through cache publish environment variables.
-10. Render the main web operations UI with dataset, episode, video viewer,
-   annotation editing, search, Rerun, and export panels.
+### 키맵 요약
 
-Known MVP gaps:
+Browse 탭:
 
-- VLM labeling defaults to heuristic/local scaffolding; OpenAI-compatible and
-  local Ollama-compatible model inference are available only when configured
-  with environment variables.
-- Cross-modal text-to-image search requires configuring the text embedding
-  provider and visual embedding worker with the same compatible CLIP/SigLIP
-  model. A manual visual-model smoke workflow can run a real Transformers model
-  through both providers when optional `.[ml]` dependencies are installed.
-- LeRobot export writes frame JSONL, available MP4 artifacts, and optional
-  Parquet shards. Per-frame video references stay in the JSONL readability copy;
-  Parquet rows omit video feature columns so video resolution follows LeRobot
-  episode metadata. When `lerobot` is installed, validation records the official
-  loader result; GitHub's manual official-dependency workflow currently passes
-  the tiny no-video and video-backed loader fixtures.
-- Native Hugging Face Dataset export is frame-level and optional-dependency
-  gated; large real-dataset training compatibility still needs dedicated
-  end-to-end smoke runs with video materialization and larger subsets. The
-  real-dataset smoke workflow can run in strict video mode with
-  `require_videos=true` once the repository has an `HF_TOKEN` secret.
-- Lance subset export requires optional `pyarrow` and `lance` dependencies and
-  fails clearly when they are missing.
+```text
+Space        재생/일시정지
+←/→          이전/다음 frame
+↑/↓          이전/다음 episode
+X            episode 삭제 (soft, 다시 누르면 undo)
+F            episode 플래그 + 메모
+K            disposition 초기화 (delete/flag undo)
+Enter        선택 episode를 Annotate 탭에서 열기
+```
 
-## MVP Scope
+Annotate 탭:
 
-1. Open Lance LeRobot datasets.
-2. List episodes and dataset summary.
-3. Preview multi-camera video and state/action metadata.
-4. Edit episode-level and segment-level annotations.
-5. Store annotations in Lance-compatible tables.
-6. Embed Rerun Web Viewer for deeper replay.
-7. Run basic filters.
-8. Export selected episodes.
+```text
+I            clip 시작 frame 지정
+O            clip 끝 frame 지정
+1-9          skill 선택 + 현재 I→O clip을 한 번에 create + accept
+0            현재 draft clip 취소
+Backspace    선택한 clip 삭제
+M / B        bad-frame / bad-range (cheatsheet에서 opt-in)
+?            cheatsheet 열기
+Esc          모달 닫기
+```
 
-See `docs/plan.md` for the current implementation plan and todo list.
+## 데이터 계약
+
+### annotation은 raw 데이터셋을 건드리지 않습니다
+
+검수/annotation은 항상 별도 테이블에만 기록됩니다.
+
+```text
+annotations_current.lance   # 현재 active view
+annotation_events.lance     # create/update/delete 감사 로그
+annotations.jsonl           # restart/디버그용 사본 (soft-delete tombstone 포함)
+```
+
+학습에 반영하려면 Data Studio에서 Lance Training Bundle을 export 하세요.
+raw `episodes.lance`는 절대 수정하지 않습니다.
+
+### Skill 어휘 contract
+
+DataView의 skill label은 stack 전체에서 같은 문자열이 됩니다.
+
+```text
+DataView label_value
+  = train_skill_clips.lance skill_name
+  = Skill Registry key
+  = Robot CLI command
+  = checkpoint 디렉토리 이름
+```
+
+기본 어휘는 10개로 고정되어 있습니다 (`approach, grasp_part, grasp_bolt,
+insert_bolt, place, push_button, grasp_drill, drill_trigger, bimanual_grasp,
+insert_tire`). export 시 이 vocabulary에 없는 라벨은 거부됩니다. 사용자 정의
+"custom skills"는 탐색용으로 브라우저 localStorage에만 보관되며, 안정화되면
+canonical vocabulary에 정식 추가하는 절차로 승격합니다.
+
+### Curated export 레이아웃
+
+`data/exports/<version>/lance_subset/` 아래 다음 테이블이 만들어집니다.
+
+```text
+manifest.json + metadata.json + validation.json
+episodes.lance              # 메타데이터 only
+frames.lance                # frame-level QA / 캐시
+media.lance                 # canonical media 인덱스
+skills.lance                # skill vocabulary
+skill_segments.lance        # accept된 skill 경계
+frame_skill_labels.lance    # accept된 frame 단위 라벨
+train_skill_clips.lance     # 학습 primary table (skill clip 단위)
+train_episodes.lance        # episode-level fallback
+annotations_current.lance
+annotation_events.lance
+```
+
+`train_skill_clips.lance`에서 `episode_index`는 clip row 인덱스이고,
+`source_episode_index`가 원본 trajectory를 가리킵니다. `video_frame_offset`은
+clip 내부의 local frame `t`를 원본 video frame `video_frame_offset + t`로
+매핑합니다.
+
+## 문서
+
+- 아키텍처/스키마/API/UI/배포 상세: `docs/`
+- 라이브 todo / 마일스톤: `docs/plan.md`
+- 배포 노트: `docs/deployment.md`
+- 실데이터 호환성 smoke check: `docs/real_dataset_compatibility.md`
+
+```bash
+.venv/bin/python scripts/check_dataset_compat.py /path/to/dataset
+```

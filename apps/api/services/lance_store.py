@@ -8,6 +8,7 @@ import json
 import math
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -1733,12 +1734,39 @@ class LanceDatasetStore:
             ).items
         bundle = self._bundles.get(dataset_id)
         if bundle is not None:
-            return self._list_lance_episodes(dataset_id, bundle, limit=limit, offset=offset)
+            try:
+                return self._list_lance_episodes(dataset_id, bundle, limit=limit, offset=offset)
+            except (OSError, ValueError) as exc:
+                self._invalidate_dead_bundle(dataset_id, exc)
+                return []
         episodes = self._episodes.get(dataset_id, [])
         return [
             EpisodeListItem(**self._apply_episode_overrides(dataset_id, model_dump(episode)))
             for episode in episodes[offset : offset + limit]
         ]
+
+    def _invalidate_dead_bundle(self, dataset_id: str, exc: BaseException) -> None:
+        # Drop a bundle whose underlying Lance files vanished mid-session
+        # (e.g. user deleted the session_* directory after the API loaded it).
+        # Mark the record as open_failed so the UI can show why it went empty
+        # instead of bubbling a Lance "Not found" up as a 500.
+        record = self._datasets.get(dataset_id)
+        if record is not None:
+            self._datasets[dataset_id] = DatasetRecord(
+                dataset_id=record.dataset_id,
+                name=record.name,
+                uri=record.uri,
+                status="open_failed",
+                message=f"Underlying Lance dataset is no longer accessible: {exc}",
+            )
+            self._summaries[dataset_id] = self._empty_summary(self._datasets[dataset_id])
+        self._bundles.pop(dataset_id, None)
+        self._episode_row_offsets.pop(dataset_id, None)
+        self._episodes[dataset_id] = []
+        print(
+            f"[lance_store] invalidated bundle for {dataset_id}: {exc}",
+            file=sys.stderr,
+        )
 
     def list_episode_page(
         self,
@@ -2817,7 +2845,11 @@ class LanceDatasetStore:
     def _episode_count(self, dataset_id: str) -> int:
         bundle = self._bundles.get(dataset_id)
         if bundle is not None:
-            return _count_rows(bundle.tables["episodes"])
+            try:
+                return _count_rows(bundle.tables["episodes"])
+            except (OSError, ValueError) as exc:
+                self._invalidate_dead_bundle(dataset_id, exc)
+                return 0
         return len(self._episodes.get(dataset_id, []))
 
     def _all_episode_items(self, dataset_id: str) -> list[EpisodeListItem]:
@@ -2826,7 +2858,11 @@ class LanceDatasetStore:
             return []
         bundle = self._bundles.get(dataset_id)
         if bundle is not None:
-            return self._list_lance_episodes(dataset_id, bundle, limit=total, offset=0)
+            try:
+                return self._list_lance_episodes(dataset_id, bundle, limit=total, offset=0)
+            except (OSError, ValueError) as exc:
+                self._invalidate_dead_bundle(dataset_id, exc)
+                return []
         return [
             EpisodeListItem(**self._apply_episode_overrides(dataset_id, model_dump(episode)))
             for episode in self._episodes.get(dataset_id, [])
@@ -2835,6 +2871,7 @@ class LanceDatasetStore:
     def _load_dataset_registry(self) -> None:
         if not self.dataset_registry_path.exists():
             return
+        kept_any_drop = False
         for line in self.dataset_registry_path.read_text(encoding="utf-8").splitlines():
             if not line.strip():
                 continue
@@ -2845,7 +2882,24 @@ class LanceDatasetStore:
                 continue
             if payload.uri.startswith("sample://"):
                 continue
-            self._open_dataset(payload, persist_registry=False)
+            record = self._open_dataset(payload, persist_registry=False)
+            # If a local dataset disappeared since the registry entry was
+            # written, drop the failed reload record and rewrite the registry.
+            # We intentionally try opening first so tests and custom stores that
+            # mock Lance paths without real directories still work.
+            if (
+                record.status == "open_failed"
+                and "://" not in payload.uri
+                and not Path(payload.uri).exists()
+            ):
+                print(
+                    f"[lance_store] skipping registry entry for missing path: {payload.uri}",
+                    file=sys.stderr,
+                )
+                self._drop_dataset(record.dataset_id)
+                kept_any_drop = True
+        if kept_any_drop and self.persist_dataset_registry:
+            self._persist_dataset_registry()
 
     def _persist_dataset_registry(self) -> None:
         if not self.persist_dataset_registry:
