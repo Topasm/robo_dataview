@@ -962,13 +962,12 @@ button:disabled {
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   display: grid;
-  /* Camera preview row: minmax(360px, auto) so it always renders the
-   * camera tiles at a usable height. With the parent annotation-stage
-   * now using flex column + auto rows + overflow-y:auto, the previous
-   * `minmax(0, 1fr)` collapsed to zero and pushed the videos under
-   * the playback bar; pin a minimum so they stay legible while the
-   * full stage scrolls if content is taller than viewport. */
-  grid-template-rows: auto minmax(360px, auto) auto;
+  /* Camera preview row floor sits at 240px so the videos remain
+   * legible without monopolizing short viewports (charts + actions
+   * still need ~200 px). When the stage's flex column overflows the
+   * panel the parent .annotation-stage / .browse-mode-stage scrolls
+   * vertically (overflow-y: auto). */
+  grid-template-rows: auto minmax(240px, auto) auto;
   min-height: 0;
   padding: 8px 10px;
 }

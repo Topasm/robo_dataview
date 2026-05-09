@@ -797,19 +797,20 @@ kbd {
 }
 
 .browse-mode-stage {
-  display: grid;
-  /* preview (auto, capped by camera-preview max-height) | charts (1fr) | actions (auto)
-   * — kept in sync with the components.css declaration so subsequent
-   *   `.browse-mode-stage` rules can't collapse the chart row. */
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  /* `flex` column + `overflow-y: auto` matches the Annotate stage so
+   * tall content (preview + charts + actions) scrolls inside the panel
+   * instead of being clipped. The previous `display: grid` /
+   * `overflow: hidden` setup let the chart row collapse to zero on
+   * shorter viewports because the 1fr slot couldn't shrink past the
+   * camera-preview's intrinsic height. */
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  height: 100%;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
   background: var(--surface);
-}
-
-.browse-mode-stage > * {
-  min-height: 0;
 }
 
 .browse-mode-stage-actions {
