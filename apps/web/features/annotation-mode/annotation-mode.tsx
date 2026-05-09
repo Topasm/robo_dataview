@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { HelpCircle, RefreshCw, Wand2 } from "lucide-react";
 
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+
 import { AnnotationEditor } from "@/features/annotation-editor/annotation-editor";
 import { AutoLabelDialog } from "@/features/annotation-mode/auto-label-dialog";
 import { CheatsheetModal } from "@/features/annotation-mode/cheatsheet-modal";
@@ -205,6 +207,12 @@ export function AnnotationMode({
         exportModalOpen={exportModalOpen}
         onToggleExport={onToggleExport}
       />
+      <PanelGroup
+        direction="horizontal"
+        className="annotation-mode-panels"
+        autoSaveId="rds.annotate.layout"
+      >
+        <Panel id="annotate-stage" order={1} defaultSize={70} minSize={40}>
       <main className="annotation-stage">
         <div className="annotation-mode-header">
           <div className="annotation-mode-header-meta">
@@ -312,6 +320,9 @@ export function AnnotationMode({
           onOpenCheatsheet={onOpenCheatsheet}
         />
       </main>
+        </Panel>
+        <PanelResizeHandle className="panel-resize-handle" />
+        <Panel id="annotate-inspector" order={2} defaultSize={30} minSize={18} maxSize={55}>
       <aside className="annotation-inspector">
         <AnnotationEditor
           annotations={studio.annotationRows}
@@ -337,6 +348,8 @@ export function AnnotationMode({
           vlmResponses={studio.vlmResponses}
         />
       </aside>
+        </Panel>
+      </PanelGroup>
       <CheatsheetModal
         open={cheatsheetOpen}
         onClose={onCloseCheatsheet}

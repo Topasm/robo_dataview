@@ -790,29 +790,28 @@ button:disabled {
 .filter-row {
   /* Two-line stack inside narrow side panels (~280px popout): the field
    * select sits on the first row alongside the trash button, and the
-   * operator + value share the second row. The previous single-line
-   * 4-column grid (~334px min) overflowed the IconRail Search popout. */
+   * operator + value share the second row. Positional `:nth-child`
+   * selectors are used because FilterValueInput swaps between <select>
+   * and <input> based on the operator's value type, so element-type
+   * selectors fall apart. */
   display: grid;
   gap: 6px;
   grid-template-columns: minmax(0, 1fr) 32px;
   grid-template-areas:
     "field trash"
     "op    value";
-  min-height: 32px;
 }
 
-.filter-row > select:nth-of-type(1) {
+.filter-row > *:nth-child(1) {
   grid-area: field;
 }
-.filter-row > select:nth-of-type(2) {
+.filter-row > *:nth-child(2) {
   grid-area: op;
 }
-.filter-row > .filter-value-input,
-.filter-row > input,
-.filter-row > textarea {
+.filter-row > *:nth-child(3) {
   grid-area: value;
 }
-.filter-row > button {
+.filter-row > *:nth-child(4) {
   grid-area: trash;
 }
 
@@ -857,16 +856,16 @@ button:disabled {
     "name   save   delete";
 }
 
-.filter-preset-row > select {
+.filter-preset-row > *:nth-child(1) {
   grid-area: preset;
 }
-.filter-preset-row > input {
+.filter-preset-row > *:nth-child(2) {
   grid-area: name;
 }
-.filter-preset-row > button:nth-of-type(1) {
+.filter-preset-row > *:nth-child(3) {
   grid-area: save;
 }
-.filter-preset-row > button:nth-of-type(2) {
+.filter-preset-row > *:nth-child(4) {
   grid-area: delete;
 }
 

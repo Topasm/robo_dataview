@@ -3,12 +3,21 @@
  * =========================================================== */
 
 .annotation-mode-shell {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) 360px;
+  /* IconRail (auto width, owns its own collapse/expand) sits beside a
+   * <PanelGroup> that hosts the resizable stage + inspector pair, so
+   * Annotate gets the same drag-handle resize as Browse. */
+  display: flex;
+  flex-direction: row;
   height: 100%;
   min-height: 0;
   overflow: hidden;
   background: var(--bg);
+}
+
+.annotation-mode-panels {
+  flex: 1 1 auto;
+  display: flex;
+  min-width: 0;
 }
 
 .annotation-mode-shell .annotation-stage {
