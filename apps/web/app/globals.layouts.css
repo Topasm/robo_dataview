@@ -1307,25 +1307,6 @@ kbd {
   gap: var(--space-1);
 }
 
-.episode-list-filter-toggle {
-  align-items: center;
-  color: var(--muted);
-  display: inline-flex;
-  font-size: var(--text-sm);
-  gap: 6px;
-  user-select: none;
-  white-space: nowrap;
-}
-
-.episode-list-filter-toggle input[type="checkbox"] {
-  accent-color: var(--accent);
-  margin: 0;
-}
-
-.episode-list-filter-toggle input[type="checkbox"]:disabled + span {
-  opacity: 0.5;
-}
-
 .flag-reason-form {
   display: flex;
   flex-direction: column;

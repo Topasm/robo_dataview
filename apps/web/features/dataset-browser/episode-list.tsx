@@ -104,7 +104,6 @@ export function EpisodeList({
 }: EpisodeListProps) {
   const [filter, setFilter] = useState<QuickFilter>("all");
   const [dispositionFilter, setDispositionFilter] = useState<DispositionFilter>("all");
-  const [hideDeleted, setHideDeleted] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("episode_index");
   const [sortDesc, setSortDesc] = useState(false);
   const [flagTarget, setFlagTarget] = useState<{ index: number; reason: string } | null>(null);
@@ -114,9 +113,6 @@ export function EpisodeList({
       return false;
     }
     if (!matchDispositionFilter(ep, dispositionFilter)) {
-      return false;
-    }
-    if (hideDeleted && dispositionFilter === "all" && ep.disposition === "deleted") {
       return false;
     }
     return true;
@@ -168,15 +164,6 @@ export function EpisodeList({
               </button>
             ))}
           </div>
-          <label className="episode-list-filter-toggle">
-            <input
-              type="checkbox"
-              checked={hideDeleted}
-              disabled={dispositionFilter === "deleted"}
-              onChange={(event) => setHideDeleted(event.target.checked)}
-            />
-            <span>Hide deleted</span>
-          </label>
         </div>
       </div>
       <div className="episode-table" role="table">

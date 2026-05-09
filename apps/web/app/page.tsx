@@ -34,18 +34,11 @@ export default function Home() {
     dataStatus,
     episodeRows,
     handleDismissMutationNotice,
-    handleSelectDataset,
     handleSelectEpisode,
     mutationNotice,
-    selectedDatasetId,
     selectedEpisode,
-    selectedSummary,
-    summaries
+    selectedSummary
   } = studio;
-  const switchableSummaries = useMemo(
-    () => summaries.filter((item) => item.status !== "sample"),
-    [summaries]
-  );
 
   const dirtyEpisodeCount = useMemo(
     () => episodeRows.filter((episode) => (episode.dirtyAnnotationCount ?? 0) > 0).length,
@@ -138,31 +131,11 @@ export default function Home() {
       </header>
 
       <div className={`data-source-banner data-source-${dataStatus}`}>
-        {dataStatus === "loading" ? (
-          "Loading API datasets"
-        ) : dataStatus === "api" ? (
-          <>
-            <span>API dataset:</span>
-            {switchableSummaries.length > 1 ? (
-              <select
-                className="data-source-banner-select"
-                value={selectedDatasetId}
-                onChange={(event) => void handleSelectDataset(event.target.value)}
-                aria-label="Switch dataset"
-              >
-                {switchableSummaries.map((item) => (
-                  <option key={item.datasetId} value={item.datasetId}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <span>{selectedSummary.name}</span>
-            )}
-          </>
-        ) : (
-          "Sample data fallback"
-        )}
+        {dataStatus === "loading"
+          ? "Loading API datasets"
+          : dataStatus === "api"
+            ? `API dataset: ${selectedSummary.name}`
+            : "Sample data fallback"}
       </div>
       {mutationNotice ? (
         <div className="data-source-banner data-source-sample">
