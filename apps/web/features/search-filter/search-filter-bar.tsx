@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileText, Plus, Save, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Plus, Save, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 
 import type { FilterPreset, SearchResult } from "@/lib/types";
 
@@ -9,7 +9,6 @@ type SearchFilterBarProps = {
   onCreateFilterPreset: (name: string, query: string) => Promise<void>;
   onDeleteFilterPreset: (presetId: string) => Promise<void>;
   onFilterSearch: (query: string) => Promise<void>;
-  onFullTextSearch: (text: string) => Promise<void>;
   onSelectResult: (episodeIndex: number) => void;
   onSemanticSearch: (text: string, filterQuery?: string) => Promise<void>;
 };
@@ -51,7 +50,6 @@ export function SearchFilterBar({
   onCreateFilterPreset,
   onDeleteFilterPreset,
   onFilterSearch,
-  onFullTextSearch,
   results,
   onSelectResult,
   onSemanticSearch
@@ -70,25 +68,15 @@ export function SearchFilterBar({
   const [isSearching, setIsSearching] = useState(false);
   const filterQuery = buildFilterQuery(filterRows);
 
-  async function handleSearch(filterSemantic = false) {
-    if (!semanticText.trim()) {
-      return;
-    }
+  async function handleSearch() {
+    // Smart-combine: when both the semantic text and a structured filter
+    // are present, send them together (`semanticText` ∩ `filterQuery`);
+    // otherwise the search degenerates to whichever side is filled.
+    const text = semanticText.trim();
+    if (!text) return;
     setIsSearching(true);
     try {
-      await onSemanticSearch(semanticText.trim(), filterSemantic ? filterQuery : undefined);
-    } finally {
-      setIsSearching(false);
-    }
-  }
-
-  async function handleFullTextSearch() {
-    if (!semanticText.trim()) {
-      return;
-    }
-    setIsSearching(true);
-    try {
-      await onFullTextSearch(semanticText.trim());
+      await onSemanticSearch(text, filterQuery || undefined);
     } finally {
       setIsSearching(false);
     }
@@ -192,8 +180,12 @@ export function SearchFilterBar({
         <button
           className="icon-button"
           disabled={isSearching || !semanticText.trim()}
-          onClick={() => handleSearch(false)}
-          title="Semantic search"
+          onClick={handleSearch}
+          title={
+            filterQuery
+              ? "Search semantic text within the active filter"
+              : "Semantic search"
+          }
           type="button"
         >
           <Search size={16} />
@@ -257,35 +249,24 @@ export function SearchFilterBar({
               })}
             </div>
             <div className="filter-actions">
-              <button className="icon-button" onClick={addFilterRow} title="Add filter" type="button">
-                <Plus size={15} />
+              <button
+                className="btn btn--sm btn--ghost"
+                onClick={addFilterRow}
+                title="Add another filter row"
+                type="button"
+              >
+                <Plus size={14} />
+                <span>Add filter</span>
               </button>
               <button
-                className="icon-button"
+                className="btn btn--sm btn--primary"
                 disabled={isSearching || !filterQuery}
                 onClick={handleFilter}
-                title="Episode filter"
+                title="Apply the current filter to the episode list"
                 type="button"
               >
-                <SlidersHorizontal size={16} />
-              </button>
-              <button
-                className="icon-button"
-                disabled={isSearching || !semanticText.trim() || !filterQuery}
-                onClick={() => handleSearch(true)}
-                title="Search within filter"
-                type="button"
-              >
-                <Search size={16} />
-              </button>
-              <button
-                className="icon-button"
-                disabled={isSearching || !semanticText.trim()}
-                onClick={handleFullTextSearch}
-                title="Full-text search"
-                type="button"
-              >
-                <FileText size={16} />
+                <SlidersHorizontal size={14} />
+                <span>Apply filter</span>
               </button>
             </div>
           </div>

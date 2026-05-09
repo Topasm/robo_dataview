@@ -116,7 +116,6 @@ export function IconRail({
                 onCreateFilterPreset={studio.handleCreateFilterPreset}
                 onDeleteFilterPreset={studio.handleDeleteFilterPreset}
                 onFilterSearch={studio.handleFilterSearch}
-                onFullTextSearch={studio.handleFullTextSearch}
                 onSelectResult={studio.handleSelectEpisode}
                 onSemanticSearch={studio.handleSemanticSearch}
                 results={studio.searchResults}
