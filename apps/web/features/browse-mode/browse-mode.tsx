@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Download, Eye, EyeOff, Scissors } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Eye, EyeOff, Scissors } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
 import { DatasetBrowser, DatasetMeta } from "@/features/dataset-browser/dataset-browser";
@@ -51,6 +51,7 @@ export function BrowseMode({
   // annotation overlays so Browse mirrors a raw playback view. Persisted in
   // localStorage so the choice survives page reloads.
   const [showAnnotations, setShowAnnotations] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const stored = window.localStorage.getItem(ANNOTATION_OVERLAY_STORAGE_KEY);
@@ -155,22 +156,48 @@ export function BrowseMode({
             {showAnnotations ? <Eye size={14} /> : <EyeOff size={14} />}
             <span>{showAnnotations ? "Overlays on" : "Overlays off"}</span>
           </button>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm browse-details-toggle"
+            onClick={() => setInspectorOpen((value) => !value)}
+            aria-expanded={inspectorOpen}
+            title={inspectorOpen ? "Hide dataset details" : "Show dataset details"}
+          >
+            {inspectorOpen ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+            <span>Details</span>
+          </button>
         </div>
       </Panel>
-      <PanelResizeHandle className="panel-resize-handle" />
-      <Panel
-        id="browse-inspector"
-        order={3}
-        defaultSize={22}
-        minSize={14}
-        maxSize={40}
-        className="browse-mode-inspector"
-      >
-        <DatasetMeta
-          health={studio.selectedDatasetHealth}
-          summary={studio.selectedSummary}
-        />
-      </Panel>
+      {inspectorOpen ? (
+        <>
+          <PanelResizeHandle className="panel-resize-handle" />
+          <Panel
+            id="browse-inspector"
+            order={3}
+            defaultSize={16}
+            minSize={12}
+            maxSize={30}
+            className="browse-mode-inspector"
+          >
+            <div className="browse-inspector-header">
+              <span>Details</span>
+              <button
+                type="button"
+                className="btn btn--ghost btn--icon"
+                onClick={() => setInspectorOpen(false)}
+                title="Hide dataset details"
+                aria-label="Hide dataset details"
+              >
+                <ChevronRight size={15} />
+              </button>
+            </div>
+            <DatasetMeta
+              health={studio.selectedDatasetHealth}
+              summary={studio.selectedSummary}
+            />
+          </Panel>
+        </>
+      ) : null}
     </PanelGroup>
   );
 }

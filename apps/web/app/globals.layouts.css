@@ -40,6 +40,7 @@
   border-left: 1px solid var(--border);
   border-right: 1px solid var(--border);
   background: var(--surface);
+  scrollbar-gutter: stable;
 }
 
 .annotation-mode-shell .annotation-inspector {
@@ -48,6 +49,7 @@
 }
 
 .annotation-mode-shell .annotation-stage > * {
+  flex: 0 0 auto;
   min-height: 0;
 }
 
@@ -796,6 +798,22 @@ kbd {
   overflow-y: auto;
 }
 
+.browse-inspector-header {
+  align-items: center;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  display: flex;
+  flex: 0 0 auto;
+  font-size: var(--text-xs);
+  font-weight: 800;
+  justify-content: space-between;
+  letter-spacing: 0.04em;
+  min-height: 42px;
+  padding: 6px 10px;
+  text-transform: uppercase;
+}
+
 .browse-mode-stage {
   /* `flex` column + `overflow-y: auto` matches the Annotate stage so
    * tall content (preview + charts + actions) scrolls inside the panel
@@ -811,6 +829,12 @@ kbd {
   min-height: 0;
   overflow-y: auto;
   background: var(--surface);
+  scrollbar-gutter: stable;
+}
+
+.browse-mode-stage > * {
+  flex: 0 0 auto;
+  min-height: 0;
 }
 
 .browse-mode-stage-actions {
@@ -824,6 +848,12 @@ kbd {
 .browse-overlay-toggle {
   align-self: center;
   margin-left: 16px;
+  white-space: nowrap;
+}
+
+.browse-details-toggle {
+  align-self: center;
+  margin-right: 12px;
   white-space: nowrap;
 }
 

@@ -181,7 +181,6 @@ export function EpisodeCharts({
         lastFrame={lastFrame}
         onClick={handleClick}
         onMove={handleMove}
-        variant={variant}
       />
       <ChartCard
         title="Action"
@@ -196,7 +195,6 @@ export function EpisodeCharts({
         lastFrame={lastFrame}
         onClick={handleClick}
         onMove={handleMove}
-        variant={variant}
       />
     </div>
   );
@@ -229,8 +227,7 @@ function ChartCard({
   currentRow,
   lastFrame,
   onClick,
-  onMove,
-  variant
+  onMove
 }: {
   title: string;
   chartHeight: number;
@@ -244,16 +241,14 @@ function ChartCard({
   lastFrame: number;
   onClick: (payload: { activeLabel?: string | number } | null) => void;
   onMove?: (payload: { activeLabel?: string | number } | null) => void;
-  variant: "default" | "compact";
 }) {
   const [fullscreen, setFullscreen] = useState(false);
 
-  // Per-chart visibility state (persisted in localStorage). Default: all
-  // visible. The storage key is namespaced by chart type so state and action
-  // remember separately.
-  const storageKey = `rds.chart.visibleKeys.${seriesKey}`;
+  // Per-chart visibility state (persisted in localStorage). Default: no
+  // per-joint overlays, so the norm trace stays readable in tight workspaces.
+  const storageKey = `rds.chart.visibleKeys.v2.${seriesKey}`;
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(
-    () => new Set(dimSeries.map((d) => d.key))
+    () => new Set()
   );
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
@@ -276,9 +271,7 @@ function ChartCard({
     window.localStorage.setItem(storageKey, JSON.stringify([...visibleKeys]));
   }, [storageKey, visibleKeys, hydrated]);
 
-  // Default-show legend in default variant; compact (Annotate) starts hidden
-  // to keep the inspector tight.
-  const [showLegend, setShowLegend] = useState(variant === "default");
+  const [showLegend, setShowLegend] = useState(false);
 
   useEffect(() => {
     if (!fullscreen) return;
@@ -339,9 +332,9 @@ function ChartCard({
             className="btn btn--ghost btn--sm"
             onClick={() => setShowLegend((v) => !v)}
             aria-pressed={showLegend}
-            title={showLegend ? "Hide series legend" : "Show series legend"}
+            title={showLegend ? "Hide joint series controls" : "Show joint series controls"}
           >
-            {showLegend ? "Hide series" : "Show series"}
+            {showLegend ? "Hide joints" : "Show joints"}
           </button>
         ) : null}
         <button

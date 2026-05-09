@@ -37,6 +37,7 @@ export function DatasetBrowser({
 
   const switchableSummaries = summaries.filter((item) => item.status !== "sample");
   const [switchingId, setSwitchingId] = useState<string | null>(null);
+  const [datasetOpenExpanded, setDatasetOpenExpanded] = useState(false);
 
   async function handleSelect(datasetId: string) {
     if (datasetId === selectedDatasetId || switchingId) {
@@ -61,7 +62,7 @@ export function DatasetBrowser({
       </div>
       {switchableSummaries.length === 0 ? (
         <div className="empty-state compact-empty-state">
-          No datasets opened. Use the input below.
+          No datasets opened.
         </div>
       ) : (
         <div className="dataset-list">
@@ -89,23 +90,33 @@ export function DatasetBrowser({
           })}
         </div>
       )}
-      <div className="dataset-open-form" style={{ marginTop: "8px" }}>
-        <input
-          aria-label="Open dataset by URI"
-          placeholder="Open another path or hf:// URI…"
-          onChange={(event) => setUri(event.target.value)}
-          value={uri}
-        />
-        <button
-          className="icon-button"
-          disabled={isOpening || !uri.trim()}
-          onClick={handleOpenDataset}
-          title="Open dataset"
-          type="button"
-        >
-          <FolderOpen size={16} />
-        </button>
-      </div>
+      <details
+        className="dataset-open-details"
+        open={switchableSummaries.length === 0 || datasetOpenExpanded}
+        onToggle={(event) => setDatasetOpenExpanded(event.currentTarget.open)}
+      >
+        <summary>
+          <FolderOpen size={14} />
+          <span>Open dataset</span>
+        </summary>
+        <div className="dataset-open-form">
+          <input
+            aria-label="Open dataset by URI"
+            placeholder="Path or hf:// URI…"
+            onChange={(event) => setUri(event.target.value)}
+            value={uri}
+          />
+          <button
+            className="icon-button"
+            disabled={isOpening || !uri.trim()}
+            onClick={handleOpenDataset}
+            title="Open dataset"
+            type="button"
+          >
+            <FolderOpen size={16} />
+          </button>
+        </div>
+      </details>
     </section>
   );
 }

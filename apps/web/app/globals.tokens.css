@@ -46,8 +46,8 @@
   --text-xl: 18px;
 
   /* === Surfaces & overlays ================================================ */
-  --video-bg: var(--video-bg);
-  --video-bg-overlay: var(--video-bg-overlay);
+  --video-bg: #10181c;
+  --video-bg-overlay: #182329;
   --scrim: rgb(20 33 38 / 0.45);
 
   /* === Shadows ============================================================ */
@@ -304,11 +304,37 @@ button:disabled {
   display: grid;
   gap: 7px;
   grid-template-columns: minmax(0, 1fr) 32px;
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .dataset-open-form input {
   height: 32px;
+}
+
+.dataset-open-details {
+  border-top: 1px solid var(--border);
+  margin-top: 10px;
+  padding-top: 7px;
+}
+
+.dataset-open-details summary {
+  align-items: center;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  gap: 6px;
+  min-height: 30px;
+  user-select: none;
+}
+
+.dataset-open-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.dataset-open-details[open] summary {
+  color: var(--text);
 }
 
 .dataset-list {
@@ -959,7 +985,7 @@ button:disabled {
 }
 
 .main-viewer {
-  background: var(--bg);
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: grid;
   /* Camera preview row floor sits at 240px so the videos remain
@@ -1038,4 +1064,3 @@ button:disabled {
   max-height: 100%;
   aspect-ratio: 8 / 3;
 }
-
