@@ -74,6 +74,21 @@ export function EpisodeViewer({
     "loading"
   );
   const [activePreset, setActivePreset] = useState<string>("overview");
+  const [enlargedCamera, setEnlargedCamera] = useState<string | null>(null);
+
+  // Esc to close per-camera enlarge overlay (without triggering native
+  // requestFullscreen exit). Only attached when something is enlarged.
+  useEffect(() => {
+    if (!enlargedCamera) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setEnlargedCamera(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [enlargedCamera]);
 
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   const animationRef = useRef<number | null>(null);
@@ -344,6 +359,8 @@ export function EpisodeViewer({
             cameraNames={cameraNames}
             datasetId={episode.datasetId}
             episodeIndex={episode.episodeIndex}
+            enlargedCamera={enlargedCamera}
+            onEnlargeCamera={setEnlargedCamera}
             onSelectCamera={setActiveCamera}
             onStatusChange={setCameraStatus}
             registerVideo={registerVideo}
@@ -355,6 +372,8 @@ export function EpisodeViewer({
             cameraNames={cameraNames}
             datasetId={episode.datasetId}
             episodeIndex={episode.episodeIndex}
+            enlargedCamera={enlargedCamera}
+            onEnlargeCamera={setEnlargedCamera}
             onSelectCamera={setActiveCamera}
             onStatusChange={setCameraStatus}
             registerVideo={registerVideo}
@@ -366,6 +385,8 @@ export function EpisodeViewer({
             cameraNames={cameraNames}
             datasetId={episode.datasetId}
             episodeIndex={episode.episodeIndex}
+            enlargedCamera={enlargedCamera}
+            onEnlargeCamera={setEnlargedCamera}
             onSelectCamera={setActiveCamera}
             onStatusChange={setCameraStatus}
             registerVideo={registerVideo}
@@ -509,6 +530,8 @@ type CamerasGroupProps = {
   cameraNames: string[];
   datasetId: string;
   episodeIndex: number;
+  enlargedCamera: string | null;
+  onEnlargeCamera: (camera: string | null) => void;
   onSelectCamera: (camera: string) => void;
   onStatusChange: (camera: string, status: LoadStatus) => void;
   registerVideo: (camera: string) => (element: HTMLVideoElement | null) => void;
@@ -520,6 +543,8 @@ function FocusCameras({
   cameraNames,
   datasetId,
   episodeIndex,
+  enlargedCamera: _enlargedCamera,
+  onEnlargeCamera: _onEnlargeCamera,
   onSelectCamera,
   onStatusChange,
   registerVideo,
@@ -595,6 +620,8 @@ function GridCameras({
   cameraNames,
   datasetId,
   episodeIndex,
+  enlargedCamera,
+  onEnlargeCamera,
   onSelectCamera,
   onStatusChange,
   registerVideo,
@@ -624,37 +651,35 @@ function GridCameras({
   const orderedCameras = [leaderCamera, ...secondaryCameras];
 
   return (
-    <div className={`camera-grid grid-secondary-${secondaryCameras.length}`}>
+    <div
+      className={`camera-grid grid-secondary-${secondaryCameras.length}${enlargedCamera ? " has-enlarged" : ""}`}
+    >
       {orderedCameras.map((camera) => {
         const isLeader = camera === leaderCamera;
         const status = videoStatus[camera] ?? "idle";
         return (
-          <button
+          <CameraTile
+            camera={camera}
             className={`camera-grid-tile${isLeader ? " leader" : ""}`}
+            datasetId={datasetId}
+            enlarged={enlargedCamera === camera}
+            episodeIndex={episodeIndex}
             key={camera}
-            onClick={() => onSelectCamera(camera)}
-            title={`Make ${camera} the playback leader`}
-            type="button"
-          >
-            <span className="camera-grid-tile-top">
-              <span className="camera-name">{camera}</span>
-              <span className={`camera-select-status camera-status-${status}`}>{status}</span>
-            </span>
-            <span className="video-placeholder">
-              <CameraVideo
-                datasetId={datasetId}
-                episodeIndex={episodeIndex}
-                hidden={false}
-                key={camera}
-                name={camera}
-                onStatusChange={onStatusChange}
-                register={registerVideo(camera)}
-                status={status}
-              />
-            </span>
-          </button>
+            onEnlargeCamera={onEnlargeCamera}
+            onSelectCamera={onSelectCamera}
+            onStatusChange={onStatusChange}
+            registerVideo={registerVideo}
+            status={status}
+          />
         );
       })}
+      {enlargedCamera ? (
+        <div
+          className="camera-enlarge-scrim"
+          onClick={() => onEnlargeCamera(null)}
+          aria-label="Close enlarged camera"
+        />
+      ) : null}
     </div>
   );
 }
@@ -664,6 +689,8 @@ function StackCameras({
   cameraNames,
   datasetId,
   episodeIndex,
+  enlargedCamera,
+  onEnlargeCamera,
   onSelectCamera,
   onStatusChange,
   registerVideo,
@@ -692,64 +719,121 @@ function StackCameras({
   const secondaryCameras = cameraNames.filter((camera) => camera !== leaderCamera);
 
   return (
-    <div className={`camera-stack secondary-${secondaryCameras.length}`}>
-      <button
+    <div
+      className={`camera-stack secondary-${secondaryCameras.length}${enlargedCamera ? " has-enlarged" : ""}`}
+    >
+      <CameraTile
+        camera={leaderCamera}
         className="camera-stack-leader camera-grid-tile leader"
-        key={leaderCamera}
-        onClick={() => onSelectCamera(leaderCamera)}
-        title={`Make ${leaderCamera} the playback leader`}
-        type="button"
-      >
-        <span className="camera-grid-tile-top">
-          <span className="camera-name">{leaderCamera}</span>
-          <span className={`camera-select-status camera-status-${videoStatus[leaderCamera] ?? "idle"}`}>
-            {videoStatus[leaderCamera] ?? "idle"}
-          </span>
-        </span>
-        <span className="video-placeholder">
-          <CameraVideo
-            datasetId={datasetId}
-            episodeIndex={episodeIndex}
-            hidden={false}
-            name={leaderCamera}
-            onStatusChange={onStatusChange}
-            register={registerVideo(leaderCamera)}
-            status={videoStatus[leaderCamera] ?? "idle"}
-          />
-        </span>
-      </button>
+        datasetId={datasetId}
+        enlarged={enlargedCamera === leaderCamera}
+        episodeIndex={episodeIndex}
+        onEnlargeCamera={onEnlargeCamera}
+        onSelectCamera={onSelectCamera}
+        onStatusChange={onStatusChange}
+        registerVideo={registerVideo}
+        status={videoStatus[leaderCamera] ?? "idle"}
+      />
       {secondaryCameras.length > 0 ? (
         <div className="camera-stack-secondary">
-          {secondaryCameras.map((camera) => {
-            const status = videoStatus[camera] ?? "idle";
-            return (
-              <button
-                className="camera-grid-tile"
-                key={camera}
-                onClick={() => onSelectCamera(camera)}
-                title={`Make ${camera} the playback leader`}
-                type="button"
-              >
-                <span className="camera-grid-tile-top">
-                  <span className="camera-name">{camera}</span>
-                  <span className={`camera-select-status camera-status-${status}`}>{status}</span>
-                </span>
-                <span className="video-placeholder">
-                  <CameraVideo
-                    datasetId={datasetId}
-                    episodeIndex={episodeIndex}
-                    hidden={false}
-                    name={camera}
-                    onStatusChange={onStatusChange}
-                    register={registerVideo(camera)}
-                    status={status}
-                  />
-                </span>
-              </button>
-            );
-          })}
+          {secondaryCameras.map((camera) => (
+            <CameraTile
+              camera={camera}
+              className="camera-grid-tile"
+              datasetId={datasetId}
+              enlarged={enlargedCamera === camera}
+              episodeIndex={episodeIndex}
+              key={camera}
+              onEnlargeCamera={onEnlargeCamera}
+              onSelectCamera={onSelectCamera}
+              onStatusChange={onStatusChange}
+              registerVideo={registerVideo}
+              status={videoStatus[camera] ?? "idle"}
+            />
+          ))}
         </div>
       ) : null}
+      {enlargedCamera ? (
+        <div
+          className="camera-enlarge-scrim"
+          onClick={() => onEnlargeCamera(null)}
+          aria-label="Close enlarged camera"
+        />
+      ) : null}
+    </div>
+  );
+}
+
+type CameraTileProps = {
+  camera: string;
+  className: string;
+  datasetId: string;
+  enlarged: boolean;
+  episodeIndex: number;
+  onEnlargeCamera: (camera: string | null) => void;
+  onSelectCamera: (camera: string) => void;
+  onStatusChange: (camera: string, status: LoadStatus) => void;
+  registerVideo: (camera: string) => (element: HTMLVideoElement | null) => void;
+  status: LoadStatus;
+};
+
+function CameraTile({
+  camera,
+  className,
+  datasetId,
+  enlarged,
+  episodeIndex,
+  onEnlargeCamera,
+  onSelectCamera,
+  onStatusChange,
+  registerVideo,
+  status
+}: CameraTileProps) {
+  return (
+    <div
+      className={`${className}${enlarged ? " is-enlarged" : ""}`}
+      onClick={() => {
+        if (enlarged) return;
+        onSelectCamera(camera);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          if (enlarged) onEnlargeCamera(null);
+          else onSelectCamera(camera);
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      title={enlarged ? "Click outside or press Esc to close" : `Make ${camera} the playback leader`}
+    >
+      <span className="camera-grid-tile-top">
+        <span className="camera-name">{camera}</span>
+        <span className={`camera-select-status camera-status-${status}`}>{status}</span>
+        <button
+          type="button"
+          className="camera-enlarge-btn"
+          onClick={(event) => {
+            event.stopPropagation();
+            onEnlargeCamera(enlarged ? null : camera);
+          }}
+          title={enlarged ? "Exit enlarge (Esc)" : "Enlarge this camera"}
+          aria-label={enlarged ? "Close enlarged camera" : `Enlarge ${camera}`}
+        >
+          <Maximize2 size={12} />
+        </button>
+      </span>
+      <span className="video-placeholder">
+        <CameraVideo
+          datasetId={datasetId}
+          episodeIndex={episodeIndex}
+          hidden={false}
+          name={camera}
+          onStatusChange={onStatusChange}
+          register={registerVideo(camera)}
+          status={status}
+        />
+      </span>
     </div>
   );
 }

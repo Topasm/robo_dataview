@@ -83,6 +83,8 @@ class EpisodeTimeseries(BaseModel):
     action_values: list[list[float | None] | None] = Field(default_factory=list)
     state_dim: int | None = None
     action_dim: int | None = None
+    state_names: list[str] | None = None
+    action_names: list[str] | None = None
 
 
 class EpisodeLabelUpdate(BaseModel):

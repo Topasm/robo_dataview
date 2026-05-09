@@ -233,6 +233,16 @@ export function AnnotationMode({
             </button>
           </div>
         </div>
+        {coachVisible ? (
+          <EmptyStateCoach
+            onDismiss={() =>
+              editor.dismissCoach(
+                studio.selectedEpisode.datasetId,
+                studio.selectedEpisode.episodeIndex
+              )
+            }
+          />
+        ) : null}
         <div className="annotation-stage-preview">
           <EpisodeViewer
             annotations={studio.annotationRows}
@@ -243,16 +253,6 @@ export function AnnotationMode({
             onToggleSignals={onToggleSignals}
             showSignals={showSignals}
           />
-          {coachVisible ? (
-            <EmptyStateCoach
-              onDismiss={() =>
-                editor.dismissCoach(
-                  studio.selectedEpisode.datasetId,
-                  studio.selectedEpisode.episodeIndex
-                )
-              }
-            />
-          ) : null}
         </div>
         <SkillHotBar selectedSkillId={selectedSkillId} onSelect={onSetSelectedSkillId} />
         <StatusHud

@@ -398,12 +398,31 @@ kbd {
  * =========================================================== */
 
 .browse-mode-shell {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  display: flex;
+  flex-direction: row;
   height: 100%;
   min-height: 0;
   overflow: hidden;
   background: var(--bg);
+}
+
+.panel-resize-handle {
+  flex: 0 0 4px;
+  background: var(--border);
+  cursor: col-resize;
+  position: relative;
+  transition: background 120ms ease;
+}
+
+.panel-resize-handle:hover,
+.panel-resize-handle[data-resize-handle-active] {
+  background: var(--accent);
+}
+
+.panel-resize-handle::after {
+  content: "";
+  position: absolute;
+  inset: 0 -3px;
 }
 
 .browse-mode-side {
@@ -417,14 +436,23 @@ kbd {
 
 .browse-mode-side > :first-child {
   border-right: 0;
+  flex: 0 0 auto;
 }
 
-.browse-mode-side > :last-child {
-  flex: 1;
+.browse-mode-side > .episode-table-wrap {
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   border-top: 1px solid var(--border);
   padding: var(--space-2) var(--space-3);
+}
+
+.browse-mode-side > .dataset-meta {
+  flex: 0 0 auto;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  max-height: 40vh;
+  overflow-y: auto;
 }
 
 .browse-mode-stage {
@@ -437,6 +465,20 @@ kbd {
 .browse-mode-stage-actions {
   border-top: 1px solid var(--border);
   background: var(--surface-2);
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+.browse-overlay-toggle {
+  align-self: center;
+  margin-left: 16px;
+  white-space: nowrap;
+}
+
+.browse-mode-stage-actions > .episode-action-bar {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* --- EpisodeActionBar --- */
@@ -1058,57 +1100,101 @@ button.shortcut-chip-item.shortcut-chip-button:hover .shortcut-chip-label {
  * Sprint 4 — Empty-state coach overlay
  * =========================================================== */
 
-.empty-coach-overlay {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  bottom: auto;
-  left: auto;
-  display: flex;
-  pointer-events: none;
-  z-index: 5;
-}
-
-.empty-coach-card {
-  position: relative;
-  pointer-events: auto;
-  width: min(320px, 80vw);
-  padding: 14px 16px 14px 18px;
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+.camera-enlarge-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 10px 28px rgb(20 33 38 / 0.22);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
 }
 
-.empty-coach-dismiss {
-  position: absolute;
-  top: 8px;
-  right: 8px;
+.camera-enlarge-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
 }
 
-.empty-coach-card h2 {
-  margin: 0 0 10px;
-  font-size: var(--text-md);
+.camera-grid-tile.is-enlarged {
+  position: fixed;
+  inset: 32px;
+  z-index: 70;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.35);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+}
+
+.camera-grid-tile.is-enlarged .video-placeholder {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.camera-grid-tile.is-enlarged .video-element {
+  max-height: calc(100vh - 96px);
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.camera-stack.has-enlarged > :not(.is-enlarged):not(.camera-enlarge-scrim),
+.camera-grid.has-enlarged > :not(.is-enlarged):not(.camera-enlarge-scrim) {
+  display: none;
+}
+
+.camera-enlarge-scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim, rgb(0 0 0 / 0.55));
+  z-index: 65;
+  cursor: zoom-out;
+}
+
+.empty-coach-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: 8px 14px;
+  margin: 0 var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+}
+
+.empty-coach-banner-title {
   font-weight: 600;
   color: var(--text);
 }
 
+.empty-coach-banner .empty-coach-dismiss {
+  margin-left: auto;
+}
+
 .empty-coach-steps {
   list-style: none;
-  margin: 0 0 10px;
+  margin: 0;
   padding: 0;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
 }
 
 .empty-coach-steps li {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
+  gap: 6px;
+  font-size: var(--text-xs);
   color: var(--text);
 }
 

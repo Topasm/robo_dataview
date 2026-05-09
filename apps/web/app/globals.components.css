@@ -67,8 +67,80 @@
 
 .episode-chart-card-header {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  padding: 6px 4px 2px;
+  font-size: var(--text-xs);
+}
+
+.chart-legend-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.chart-legend-group-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.chart-legend-group-name {
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.chart-legend-members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--space-2);
+  padding-left: 18px;
+}
+
+.chart-legend-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text);
+}
+
+.chart-legend-row.is-hidden {
+  color: var(--muted);
+  opacity: 0.55;
+}
+
+.chart-legend-row input[type="checkbox"] {
+  width: 12px;
+  height: 12px;
+  margin: 0;
+}
+
+.chart-legend-name {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 12ch;
+}
+
+.chart-legend-value {
+  min-width: 5ch;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .episode-chart-card-title {

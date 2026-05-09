@@ -305,6 +305,8 @@ type EpisodeTimeseriesResponse = {
   action_values: ((number | null)[] | null)[];
   state_dim: number | null;
   action_dim: number | null;
+  state_names: string[] | null;
+  action_names: string[] | null;
 };
 
 type FrameLabelResponse = {
@@ -1233,7 +1235,9 @@ function toEpisodeTimeseries(raw: EpisodeTimeseriesResponse): EpisodeTimeseries 
     stateValues: raw.state_values ?? [],
     actionValues: raw.action_values ?? [],
     stateDim: raw.state_dim,
-    actionDim: raw.action_dim
+    actionDim: raw.action_dim,
+    stateNames: raw.state_names ?? null,
+    actionNames: raw.action_names ?? null
   };
 }
 

@@ -2,43 +2,122 @@ import { useState } from "react";
 import { Database, FolderOpen } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
-import type { DatasetHealth, DatasetSummary, SegmentAnnotation } from "@/lib/types";
+import type { DatasetHealth, DatasetSummary } from "@/lib/types";
 
 type DatasetBrowserProps = {
-  summary: DatasetSummary;
-  health: DatasetHealth | null;
-  reviewQueueRows: SegmentAnnotation[];
-  reviewerUserId: string;
+  summaries: DatasetSummary[];
+  selectedDatasetId: string;
   onOpenDataset: (uri: string) => Promise<void>;
-  onSelectEpisode: (episodeIndex: number) => void;
+  onSelectDataset: (datasetId: string) => Promise<void>;
 };
 
 export function DatasetBrowser({
-  summary,
-  health,
-  reviewQueueRows,
-  reviewerUserId,
+  summaries,
+  selectedDatasetId,
   onOpenDataset,
-  onSelectEpisode
+  onSelectDataset
 }: DatasetBrowserProps) {
   const defaultDatasetUri =
     process.env.NEXT_PUBLIC_DEFAULT_DATASET_URI ??
     "hf://datasets/lance-format/lerobot-xvla-soft-fold/data";
   const [uri, setUri] = useState(defaultDatasetUri);
   const [isOpening, setIsOpening] = useState(false);
+
+  async function handleOpenDataset() {
+    if (!uri.trim()) {
+      return;
+    }
+    setIsOpening(true);
+    try {
+      await onOpenDataset(uri.trim());
+    } finally {
+      setIsOpening(false);
+    }
+  }
+
+  const switchableSummaries = summaries.filter((item) => item.status !== "sample");
+  const [switchingId, setSwitchingId] = useState<string | null>(null);
+
+  async function handleSelect(datasetId: string) {
+    if (datasetId === selectedDatasetId || switchingId) {
+      return;
+    }
+    setSwitchingId(datasetId);
+    try {
+      await onSelectDataset(datasetId);
+    } finally {
+      setSwitchingId(null);
+    }
+  }
+
+  return (
+    <section className="dataset-switcher panel-section">
+      <div className="section-title">
+        <Database size={16} />
+        <span>Datasets</span>
+        <span className="muted" style={{ marginLeft: "auto" }}>
+          {switchableSummaries.length}
+        </span>
+      </div>
+      {switchableSummaries.length === 0 ? (
+        <div className="empty-state compact-empty-state">
+          No datasets opened. Use the input below.
+        </div>
+      ) : (
+        <div className="dataset-list">
+          {switchableSummaries.map((item) => {
+            const isActive = item.datasetId === selectedDatasetId;
+            const isSwitching = switchingId === item.datasetId;
+            const isClickable = item.status === "indexed";
+            return (
+              <button
+                key={item.datasetId}
+                className={`dataset-list-item${isActive ? " dataset-list-item--active" : ""}`}
+                onClick={() => handleSelect(item.datasetId)}
+                disabled={isSwitching || isActive || !isClickable}
+                aria-pressed={isActive}
+                title={isClickable ? undefined : `Cannot open: ${item.status}`}
+                type="button"
+              >
+                <span className="dataset-list-name">{item.name}</span>
+                <span className="dataset-list-meta">
+                  <StatusPill status={item.status} />
+                  <span className="muted mono">{item.episodeCount} ep</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div className="dataset-open-form" style={{ marginTop: "8px" }}>
+        <input
+          aria-label="Open dataset by URI"
+          placeholder="Open another path or hf:// URI…"
+          onChange={(event) => setUri(event.target.value)}
+          value={uri}
+        />
+        <button
+          className="icon-button"
+          disabled={isOpening || !uri.trim()}
+          onClick={handleOpenDataset}
+          title="Open dataset"
+          type="button"
+        >
+          <FolderOpen size={16} />
+        </button>
+      </div>
+    </section>
+  );
+}
+
+type DatasetMetaProps = {
+  summary: DatasetSummary;
+  health: DatasetHealth | null;
+};
+
+export function DatasetMeta({ summary, health }: DatasetMetaProps) {
   const checkedPercent =
     summary.episodeCount === 0 ? 0 : Math.round((summary.reviewedCount / summary.episodeCount) * 100);
-  const pendingRows = reviewQueueRows.filter((annotation) => annotation.reviewStatus === "pending");
-  const badRows = reviewQueueRows.filter(
-    (annotation) => annotation.labelType === "bad_range" || annotation.labelType === "bad_frame"
-  );
-  const autoRows = pendingRows.filter(
-    (annotation) => annotation.source === "vlm" || annotation.source === "heuristic"
-  );
-  const queueRows = [
-    ...pendingRows.filter((annotation) => annotation.assignedTo === reviewerUserId),
-    ...pendingRows.filter((annotation) => annotation.assignedTo !== reviewerUserId)
-  ].slice(0, 4);
   const coreTables =
     health?.tables.filter((table) => table.table === "episodes" || table.table === "frames") ?? [];
   const mediaTable = health?.tables.find((table) => table.table === "media") ?? null;
@@ -66,64 +145,8 @@ export function DatasetBrowser({
       ? `${healthIssues.length.toLocaleString()} warning${healthIssues.length === 1 ? "" : "s"}`
       : "OK";
 
-  async function handleOpenDataset() {
-    if (!uri.trim()) {
-      return;
-    }
-    setIsOpening(true);
-    try {
-      await onOpenDataset(uri.trim());
-    } finally {
-      setIsOpening(false);
-    }
-  }
-
   return (
-    <aside className="left-panel">
-      <section className="panel-section">
-        <div className="section-title">
-          <Database size={16} />
-          <span>Dataset</span>
-        </div>
-        <div className="dataset-name">{summary.name}</div>
-        <div className="dataset-status-row">
-          <StatusPill status={summary.status} />
-          {summary.message ? <span className="muted">{summary.message}</span> : null}
-        </div>
-      </section>
-
-      <section className="panel-section review-queue-section">
-        <div className="section-title">
-          <span>Work Queue</span>
-        </div>
-        {pendingRows.length === 0 && badRows.length === 0 && autoRows.length === 0 ? (
-          <div className="empty-state compact-empty-state">Queue clear.</div>
-        ) : (
-          <>
-            <div className="review-queue-metrics">
-              <Metric label="Need Check" value={pendingRows.length.toString()} />
-              <Metric label="Bad" value={badRows.length.toString()} />
-              <Metric label="Auto" value={autoRows.length.toString()} />
-            </div>
-            <div className="review-queue-list">
-              {queueRows.map((annotation) => (
-                <button
-                  className="review-queue-row"
-                  key={annotation.id}
-                  onClick={() => onSelectEpisode(annotation.episodeIndex)}
-                  type="button"
-                >
-                  <span className="review-queue-label">{annotation.labelValue}</span>
-                  <span className="muted mono">
-                    ep {annotation.episodeIndex} / f{annotation.startFrame}-{annotation.endFrame}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-      </section>
-
+    <section className="dataset-meta">
       <section className="panel-section review-progress-section">
         <div className="section-title">
           <span>Dataset Progress</span>
@@ -152,23 +175,7 @@ export function DatasetBrowser({
         </summary>
         <div className="panel-disclosure-body">
           <div className="muted mono" style={{ marginBottom: "8px", wordBreak: "break-all" }}>{summary.uri}</div>
-          <div className="dataset-open-form">
-            <input
-              aria-label="Dataset URI"
-              onChange={(event) => setUri(event.target.value)}
-              value={uri}
-            />
-            <button
-              className="icon-button"
-              disabled={isOpening}
-              onClick={handleOpenDataset}
-              title="Open dataset"
-              type="button"
-            >
-              <FolderOpen size={16} />
-            </button>
-          </div>
-          
+
           <div className="metrics-grid" style={{ marginTop: "16px", marginBottom: "16px" }}>
             <Metric label="Episodes" value={summary.episodeCount.toLocaleString()} />
             <Metric label="Frames" value={summary.frameCount.toLocaleString()} />
@@ -209,7 +216,7 @@ export function DatasetBrowser({
           </div>
         </div>
       </details>
-    </aside>
+    </section>
   );
 }
 

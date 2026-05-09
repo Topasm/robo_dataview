@@ -32,14 +32,14 @@ type ChartRow = {
   frame: number;
   state: number | null;
   action: number | null;
-  /** Per-dimension state values (only when stateDim > 0 and small enough to chart inline). */
-  [key: `s${number}`]: number | null | undefined;
-  [key: `a${number}`]: number | null | undefined;
+  // Per-dimension state/action values, keyed by series id (s0/a0 fallback or
+  // joint name when info.json/manifest provides one).
+  [key: string]: number | null | string | undefined;
 };
 
 const STATE_COLOR = "var(--accent)";
 const ACTION_COLOR = "var(--blue)";
-const MAX_DIMS_INLINE = 6;
+const MAX_DIMS_INLINE = 32;
 
 export function EpisodeCharts({
   episode,
@@ -71,10 +71,20 @@ export function EpisodeCharts({
     };
   }, [episode.datasetId, episode.episodeIndex]);
 
+  const stateDim = Math.min(timeseries?.stateDim ?? 0, MAX_DIMS_INLINE);
+  const actionDim = Math.min(timeseries?.actionDim ?? 0, MAX_DIMS_INLINE);
+
+  const stateSeries = useMemo<DimSeries[]>(
+    () => buildDimSeries(stateDim, timeseries?.stateNames ?? null, "s"),
+    [stateDim, timeseries?.stateNames]
+  );
+  const actionSeries = useMemo<DimSeries[]>(
+    () => buildDimSeries(actionDim, timeseries?.actionNames ?? null, "a"),
+    [actionDim, timeseries?.actionNames]
+  );
+
   const data = useMemo<ChartRow[]>(() => {
     if (!timeseries) return [];
-    const stateDim = Math.min(timeseries.stateDim ?? 0, MAX_DIMS_INLINE);
-    const actionDim = Math.min(timeseries.actionDim ?? 0, MAX_DIMS_INLINE);
     return timeseries.sampleIndices.map((frame, sampleIdx) => {
       const row: ChartRow = {
         frame,
@@ -84,20 +94,19 @@ export function EpisodeCharts({
       const stateVec = timeseries.stateValues[sampleIdx];
       if (stateVec) {
         for (let d = 0; d < stateDim; d++) {
-          row[`s${d}` as const] = stateVec[d] ?? null;
+          row[stateSeries[d].key] = stateVec[d] ?? null;
         }
       }
       const actionVec = timeseries.actionValues[sampleIdx];
       if (actionVec) {
         for (let d = 0; d < actionDim; d++) {
-          row[`a${d}` as const] = actionVec[d] ?? null;
+          row[actionSeries[d].key] = actionVec[d] ?? null;
         }
       }
       return row;
     });
-  }, [timeseries]);
+  }, [timeseries, stateDim, actionDim, stateSeries, actionSeries]);
 
-  // Skill clip overlays — accepted clips become colored ReferenceArea bands.
   const skillBands = useMemo(
     () =>
       annotations
@@ -122,8 +131,6 @@ export function EpisodeCharts({
   );
 
   const lastFrame = Math.max(0, episode.length - 1);
-  const stateDim = Math.min(timeseries?.stateDim ?? 0, MAX_DIMS_INLINE);
-  const actionDim = Math.min(timeseries?.actionDim ?? 0, MAX_DIMS_INLINE);
   const chartHeight = variant === "compact" ? 96 : 132;
 
   if (status === "loading") {
@@ -156,6 +163,9 @@ export function EpisodeCharts({
   const handleClick = seekFromPayload;
   const handleMove = hoverSeek ? seekFromPayload : undefined;
 
+  // Pick the row closest to selectedFrame for the live legend value column.
+  const closestRow = data.length > 0 ? closestRowFor(data, selectedFrame) : null;
+
   return (
     <div className={`episode-charts variant-${variant}`}>
       <ChartCard
@@ -164,15 +174,14 @@ export function EpisodeCharts({
         data={data}
         seriesKey="state"
         seriesColor={STATE_COLOR}
-        dimSeries={Array.from({ length: stateDim }, (_, d) => ({
-          key: `s${d}`,
-          color: dimColor(d)
-        }))}
+        dimSeries={stateSeries}
         skillBands={skillBands}
         currentFrame={selectedFrame}
+        currentRow={closestRow}
         lastFrame={lastFrame}
         onClick={handleClick}
         onMove={handleMove}
+        variant={variant}
       />
       <ChartCard
         title="Action"
@@ -180,15 +189,14 @@ export function EpisodeCharts({
         data={data}
         seriesKey="action"
         seriesColor={ACTION_COLOR}
-        dimSeries={Array.from({ length: actionDim }, (_, d) => ({
-          key: `a${d}`,
-          color: dimColor(d)
-        }))}
+        dimSeries={actionSeries}
         skillBands={skillBands}
         currentFrame={selectedFrame}
+        currentRow={closestRow}
         lastFrame={lastFrame}
         onClick={handleClick}
         onMove={handleMove}
+        variant={variant}
       />
     </div>
   );
@@ -202,7 +210,12 @@ type SkillBand = {
   color: string;
 };
 
-type DimSeries = { key: string; color: string };
+type DimSeries = {
+  key: string;
+  label: string;
+  group: string;
+  color: string;
+};
 
 function ChartCard({
   title,
@@ -213,9 +226,11 @@ function ChartCard({
   dimSeries,
   skillBands,
   currentFrame,
+  currentRow,
   lastFrame,
   onClick,
-  onMove
+  onMove,
+  variant
 }: {
   title: string;
   chartHeight: number;
@@ -225,11 +240,46 @@ function ChartCard({
   dimSeries: DimSeries[];
   skillBands: SkillBand[];
   currentFrame: number;
+  currentRow: ChartRow | null;
   lastFrame: number;
   onClick: (payload: { activeLabel?: string | number } | null) => void;
   onMove?: (payload: { activeLabel?: string | number } | null) => void;
+  variant: "default" | "compact";
 }) {
   const [fullscreen, setFullscreen] = useState(false);
+
+  // Per-chart visibility state (persisted in localStorage). Default: all
+  // visible. The storage key is namespaced by chart type so state and action
+  // remember separately.
+  const storageKey = `rds.chart.visibleKeys.${seriesKey}`;
+  const [visibleKeys, setVisibleKeys] = useState<Set<string>>(
+    () => new Set(dimSeries.map((d) => d.key))
+  );
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(storageKey);
+    if (stored !== null) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setVisibleKeys(new Set(parsed.map(String)));
+        }
+      } catch {
+        /* ignore corrupt entry */
+      }
+    }
+    setHydrated(true);
+  }, [storageKey]);
+  useEffect(() => {
+    if (!hydrated || typeof window === "undefined") return;
+    window.localStorage.setItem(storageKey, JSON.stringify([...visibleKeys]));
+  }, [storageKey, visibleKeys, hydrated]);
+
+  // Default-show legend in default variant; compact (Annotate) starts hidden
+  // to keep the inspector tight.
+  const [showLegend, setShowLegend] = useState(variant === "default");
+
   useEffect(() => {
     if (!fullscreen) return;
     const onKey = (event: KeyboardEvent) => {
@@ -249,6 +299,31 @@ function ChartCard({
 
   const containerHeight = fullscreen ? "calc(100vh - 88px)" : chartHeight;
 
+  // Group dims by their `group` field so legend can render group headers.
+  const grouped = useMemo(() => groupDimSeries(dimSeries), [dimSeries]);
+  const visibleDimSeries = dimSeries.filter((d) => visibleKeys.has(d.key));
+
+  function toggleKey(key: string) {
+    setVisibleKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function setGroup(group: string, on: boolean) {
+    const groupKeys = grouped.groups[group]?.map((d) => d.key) ?? [];
+    setVisibleKeys((prev) => {
+      const next = new Set(prev);
+      for (const key of groupKeys) {
+        if (on) next.add(key);
+        else next.delete(key);
+      }
+      return next;
+    });
+  }
+
   return (
     <section
       className={`episode-chart-card${fullscreen ? " is-fullscreen" : ""}`}
@@ -258,6 +333,17 @@ function ChartCard({
         <span className="muted episode-chart-card-meta">
           {dimSeries.length > 0 ? `${dimSeries.length} dims + norm` : "norm"}
         </span>
+        {dimSeries.length > 0 ? (
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => setShowLegend((v) => !v)}
+            aria-pressed={showLegend}
+            title={showLegend ? "Hide series legend" : "Show series legend"}
+          >
+            {showLegend ? "Hide series" : "Show series"}
+          </button>
+        ) : null}
         <button
           type="button"
           className="btn btn--icon episode-chart-fullscreen-btn"
@@ -338,6 +424,10 @@ function ChartCard({
                 padding: "4px 8px"
               }}
               labelFormatter={(label) => `frame ${label}`}
+              formatter={(value, name) => {
+                const series = dimSeries.find((d) => d.key === name);
+                return [value, series?.label ?? name];
+              }}
             />
 
             {/* Skill clip background bands */}
@@ -353,17 +443,18 @@ function ChartCard({
               />
             ))}
 
-            {/* Per-dim faint lines first */}
-            {dimSeries.map((dim) => (
+            {/* Per-dim faint lines (only those toggled visible) */}
+            {visibleDimSeries.map((dim) => (
               <Line
                 key={dim.key}
                 type="monotone"
                 dataKey={dim.key}
                 stroke={dim.color}
-                strokeOpacity={0.55}
+                strokeOpacity={0.6}
                 strokeWidth={1}
                 dot={false}
                 isAnimationActive={false}
+                name={dim.label}
               />
             ))}
 
@@ -375,9 +466,9 @@ function ChartCard({
               strokeWidth={1.75}
               dot={false}
               isAnimationActive={false}
+              name="norm"
             />
 
-            {/* Playhead */}
             <ReferenceLine
               x={currentFrame}
               stroke="var(--accent)"
@@ -388,19 +479,210 @@ function ChartCard({
           </LineChart>
         </ResponsiveContainer>
       </div>
+
+      {showLegend && dimSeries.length > 0 ? (
+        <ChartLegend
+          grouped={grouped}
+          visibleKeys={visibleKeys}
+          currentRow={currentRow}
+          onToggleKey={toggleKey}
+          onSetGroup={setGroup}
+        />
+      ) : null}
     </section>
   );
 }
 
-const DIM_PALETTE = [
+function ChartLegend({
+  grouped,
+  visibleKeys,
+  currentRow,
+  onToggleKey,
+  onSetGroup
+}: {
+  grouped: { groups: Record<string, DimSeries[]>; singles: DimSeries[] };
+  visibleKeys: Set<string>;
+  currentRow: ChartRow | null;
+  onToggleKey: (key: string) => void;
+  onSetGroup: (group: string, on: boolean) => void;
+}) {
+  const groupNames = Object.keys(grouped.groups);
+  return (
+    <div className="chart-legend">
+      {groupNames.map((groupName) => {
+        const members = grouped.groups[groupName];
+        const allOn = members.every((d) => visibleKeys.has(d.key));
+        const someOn = members.some((d) => visibleKeys.has(d.key));
+        const groupColor = members[0].color;
+        return (
+          <div key={groupName} className="chart-legend-group">
+            <label className="chart-legend-group-header">
+              <input
+                type="checkbox"
+                checked={allOn}
+                ref={(el) => {
+                  if (el) el.indeterminate = someOn && !allOn;
+                }}
+                onChange={() => onSetGroup(groupName, !allOn)}
+                style={{ accentColor: groupColor }}
+              />
+              <span className="chart-legend-group-name">{groupName}</span>
+            </label>
+            <div className="chart-legend-members">
+              {members.map((dim) => (
+                <ChartLegendRow
+                  key={dim.key}
+                  dim={dim}
+                  visible={visibleKeys.has(dim.key)}
+                  value={currentRow?.[dim.key] as number | null | undefined}
+                  onToggle={() => onToggleKey(dim.key)}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+      {grouped.singles.length > 0 ? (
+        <div className="chart-legend-group">
+          <div className="chart-legend-members">
+            {grouped.singles.map((dim) => (
+              <ChartLegendRow
+                key={dim.key}
+                dim={dim}
+                visible={visibleKeys.has(dim.key)}
+                value={currentRow?.[dim.key] as number | null | undefined}
+                onToggle={() => onToggleKey(dim.key)}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ChartLegendRow({
+  dim,
+  visible,
+  value,
+  onToggle
+}: {
+  dim: DimSeries;
+  visible: boolean;
+  value: number | null | undefined;
+  onToggle: () => void;
+}) {
+  const formatted = typeof value === "number" ? value.toFixed(3) : "—";
+  return (
+    <label className={`chart-legend-row${visible ? "" : " is-hidden"}`}>
+      <input
+        type="checkbox"
+        checked={visible}
+        onChange={onToggle}
+        style={{ accentColor: dim.color }}
+      />
+      <span className="chart-legend-name" title={dim.key}>
+        {dim.label}
+      </span>
+      <span className="chart-legend-value mono">{formatted}</span>
+    </label>
+  );
+}
+
+function buildDimSeries(
+  dim: number,
+  names: string[] | null,
+  fallback: "s" | "a"
+): DimSeries[] {
+  return Array.from({ length: dim }, (_, d) => {
+    const name = names?.[d] ?? `${fallback}${d}`;
+    const group = groupOf(name);
+    return {
+      key: name,
+      label: shortLabel(name, group),
+      group,
+      color: groupColor(group, d)
+    };
+  });
+}
+
+function groupOf(name: string): string {
+  // Match e.g. "arm_l_joint1" → "arm_l", "head_joint2" → "head",
+  // "lift_joint" → "lift", "gripper_l_joint1" → "gripper_l".
+  const m = name.match(/^(.+?)_(?:joint\d*|gripper\d*)$/i);
+  if (m) return m[1];
+  // Fallback: use everything before the last underscore as the group.
+  const idx = name.lastIndexOf("_");
+  if (idx > 0) return name.slice(0, idx);
+  return "—";
+}
+
+function shortLabel(name: string, group: string): string {
+  if (group === "—") return name;
+  if (name.startsWith(`${group}_`)) return name.slice(group.length + 1);
+  return name;
+}
+
+const GROUP_PALETTE: Record<string, string> = {
+  arm_l: "#3b82f6",
+  arm_r: "#22c55e",
+  head: "#f97316",
+  lift: "#a855f7",
+  gripper_l: "#ec4899",
+  gripper_r: "#14b8a6"
+};
+
+const FALLBACK_PALETTE = [
   "#f97316",
   "#3b82f6",
   "#22c55e",
   "#a855f7",
   "#ec4899",
-  "#14b8a6"
+  "#14b8a6",
+  "#eab308",
+  "#06b6d4"
 ];
 
-function dimColor(index: number): string {
-  return DIM_PALETTE[index % DIM_PALETTE.length] ?? "var(--muted)";
+function groupColor(group: string, fallbackIndex: number): string {
+  return (
+    GROUP_PALETTE[group] ??
+    FALLBACK_PALETTE[fallbackIndex % FALLBACK_PALETTE.length] ??
+    "var(--muted)"
+  );
+}
+
+function groupDimSeries(dims: DimSeries[]): {
+  groups: Record<string, DimSeries[]>;
+  singles: DimSeries[];
+} {
+  const groups: Record<string, DimSeries[]> = {};
+  for (const dim of dims) {
+    if (!groups[dim.group]) groups[dim.group] = [];
+    groups[dim.group].push(dim);
+  }
+  // Pull groups with only one member out into "singles" so the legend layout
+  // doesn't show a one-row group header.
+  const singles: DimSeries[] = [];
+  for (const [name, members] of Object.entries(groups)) {
+    if (members.length <= 1) {
+      singles.push(...members);
+      delete groups[name];
+    }
+  }
+  return { groups, singles };
+}
+
+function closestRowFor(rows: ChartRow[], frame: number): ChartRow {
+  // Rows are sample-spaced — pick the one with the smallest abs frame
+  // distance.
+  let best = rows[0];
+  let bestDist = Math.abs((rows[0].frame as number) - frame);
+  for (let i = 1; i < rows.length; i++) {
+    const d = Math.abs((rows[i].frame as number) - frame);
+    if (d < bestDist) {
+      best = rows[i];
+      bestDist = d;
+    }
+  }
+  return best;
 }

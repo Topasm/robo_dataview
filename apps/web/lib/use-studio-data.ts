@@ -732,6 +732,18 @@ export function useStudioData() {
     setDataStatus("api");
   }
 
+  async function handleSelectDataset(datasetId: string) {
+    if (datasetId === selectedDatasetId) {
+      return;
+    }
+    const apiEpisodes = await fetchEpisodes(datasetId);
+    setSelectedDatasetId(datasetId);
+    setEpisodeRows(apiEpisodes);
+    setSelectedEpisodeIndex(apiEpisodes[0]?.episodeIndex ?? 0);
+    resetDerivedState();
+    setDataStatus("api");
+  }
+
   function handleSelectEpisode(episodeIndex: number) {
     setSelectedEpisodeIndex(episodeIndex);
     setSelectedFrameIndex(0);
@@ -1257,7 +1269,9 @@ export function useStudioData() {
     selectedFrameRecord,
     selectedFrameStatus,
     selectedSummary,
+    selectedDatasetId,
     selectedDatasetHealth,
+    summaries,
     vlmJob,
     vlmResponses,
     handleCreateExport,
@@ -1272,6 +1286,7 @@ export function useStudioData() {
     handleMergeSegments,
     handleOpenDataset,
     handleRunVlmLabel,
+    handleSelectDataset,
     handleSelectEpisode,
     handleSelectFrame,
     handleDismissMutationNotice: () => setMutationNotice(null),

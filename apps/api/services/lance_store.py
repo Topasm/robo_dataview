@@ -233,6 +233,63 @@ def _state_action_dims_from_features(features: Any) -> tuple[int | None, int | N
     return _dim("observation.state"), _dim("action")
 
 
+def _joint_names_from_features(
+    features: Any,
+) -> tuple[list[str] | None, list[str] | None]:
+    if not isinstance(features, dict):
+        return None, None
+
+    def _names(key: str) -> list[str] | None:
+        feature = features.get(key)
+        if not isinstance(feature, dict):
+            return None
+        names = feature.get("names")
+        if isinstance(names, (list, tuple)) and names:
+            return [str(n) for n in names]
+        return None
+
+    return _names("observation.state"), _names("action")
+
+
+def _joint_names_from_info(
+    uri: str | None,
+) -> tuple[list[str] | None, list[str] | None]:
+    """LeRobot v2.1+ info.json features carry per-dim names — pull them out
+    so charts can label series with joint names instead of s0/s1/..."""
+    for info in _iter_lerobot_info(uri):
+        state_names, action_names = _joint_names_from_features(info.get("features"))
+        if state_names or action_names:
+            return state_names, action_names
+    return None, None
+
+
+def _joint_names_from_manifest(
+    uri: str | None,
+) -> tuple[list[str] | None, list[str] | None]:
+    """rllab raw collection manifest.json carries joint_order. The same list
+    applies to both state and action since collection enforces matching DoF."""
+    if not uri:
+        return None, None
+    candidate = _join_uri(uri.rstrip("/"), "manifest.json")
+    try:
+        text = _fetch_text_uri(candidate)
+    except Exception:
+        return None, None
+    if text is None:
+        return None, None
+    try:
+        manifest = json.loads(text)
+    except (ValueError, json.JSONDecodeError):
+        return None, None
+    if not isinstance(manifest, dict):
+        return None, None
+    joint_order = manifest.get("joint_order")
+    if isinstance(joint_order, list) and joint_order:
+        names = [str(n) for n in joint_order]
+        return names, names
+    return None, None
+
+
 def _camera_info_from_features(
     features: dict[str, Any] | None,
 ) -> dict[str, dict[str, Any]] | None:
@@ -1919,6 +1976,12 @@ class LanceDatasetStore:
         episode = self.get_episode(dataset_id, episode_index)
         fps = episode.fps if episode is not None else None
 
+        record = self._datasets.get(dataset_id)
+        bundle_uri = record.uri if record is not None else None
+        state_names, action_names = _joint_names_from_manifest(bundle_uri)
+        if state_names is None and action_names is None:
+            state_names, action_names = _joint_names_from_info(bundle_uri)
+
         if frame_count == 0:
             return EpisodeTimeseries(
                 dataset_id=dataset_id,
@@ -1932,6 +1995,8 @@ class LanceDatasetStore:
                 action_norms=[],
                 state_dim=_vector_dim(states),
                 action_dim=_vector_dim(actions),
+                state_names=state_names,
+                action_names=action_names,
             )
 
         stride = max(1, math.ceil(frame_count / NORM_SERIES_MAX_POINTS))
@@ -1961,6 +2026,8 @@ class LanceDatasetStore:
             action_values=action_values,
             state_dim=_vector_dim(states),
             action_dim=_vector_dim(actions),
+            state_names=state_names,
+            action_names=action_names,
         )
 
     def list_frames(

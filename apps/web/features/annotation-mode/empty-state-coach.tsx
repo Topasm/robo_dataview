@@ -17,30 +17,28 @@ const STEPS: { kbd: string; text: string }[] = [
 
 export function EmptyStateCoach({ onDismiss }: EmptyStateCoachProps) {
   return (
-    <div className="empty-coach-overlay" aria-live="polite">
-      <div className="empty-coach-card">
-        <button
-          type="button"
-          className="empty-coach-dismiss icon-button"
-          onClick={onDismiss}
-          aria-label="Dismiss coaching tips"
-          title="Dismiss"
-        >
-          <X size={14} />
-        </button>
-        <h2>Cut your first skill clip</h2>
-        <ol className="empty-coach-steps">
-          {STEPS.map((step) => (
-            <li key={step.text}>
-              <kbd>{step.kbd}</kbd>
-              <span>{step.text}</span>
-            </li>
-          ))}
-        </ol>
-        <p className="empty-coach-foot">
-          Press <kbd>?</kbd> any time for the full cheatsheet.
-        </p>
-      </div>
+    <div className="empty-coach-banner" role="note" aria-live="polite">
+      <span className="empty-coach-banner-title">Cut your first skill clip:</span>
+      <ol className="empty-coach-steps">
+        {STEPS.map((step) => (
+          <li key={step.text}>
+            <kbd>{step.kbd}</kbd>
+            <span>{step.text}</span>
+          </li>
+        ))}
+      </ol>
+      <span className="empty-coach-foot muted">
+        Press <kbd>?</kbd> for the full cheatsheet.
+      </span>
+      <button
+        type="button"
+        className="icon-button empty-coach-dismiss"
+        onClick={onDismiss}
+        aria-label="Dismiss coaching tips"
+        title="Dismiss"
+      >
+        <X size={14} />
+      </button>
     </div>
   );
 }

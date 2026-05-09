@@ -111,6 +111,8 @@ export type EpisodeTimeseries = {
   actionValues: ((number | null)[] | null)[];
   stateDim: number | null;
   actionDim: number | null;
+  stateNames: string[] | null;
+  actionNames: string[] | null;
 };
 
 export type FrameLabel = {
