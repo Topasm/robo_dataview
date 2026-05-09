@@ -21,10 +21,16 @@
 }
 
 .annotation-mode-shell .annotation-stage {
-  display: grid;
-  /* 7 rows: coach banner / header / preview / hot bar / status / charts /
-   * timeline / chip — matches the components.css declaration. */
-  grid-template-rows: auto minmax(0, 1fr) auto auto auto auto auto;
+  /* All rows are content-sized so the layout stays stable when the
+   * EmptyStateCoach banner is added at the top — the previous
+   * `1fr` row used to belong to the preview, but with the coach
+   * banner rendered as the first child the 1fr slot landed on the
+   * header instead and squashed the rows below. Use plain `flex`
+   * column + an explicit min-height on the camera viewer so the
+   * preview area still has a sensible size; `overflow-y: auto` keeps
+   * the whole stage scrollable when content exceeds viewport height. */
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;

@@ -776,10 +776,13 @@ button:disabled {
 }
 
 .typed-filter-builder {
-  align-items: flex-start;
-  display: grid;
+  /* Stack the filter rows above the action buttons (Add filter / Apply
+   * filter). The previous side-by-side `1fr | auto` grid only worked on
+   * the wide-search-panel deployment; inside the IconRail popout the
+   * actions ended up squashed alongside a single filter row. */
+  display: flex;
+  flex-direction: column;
   gap: 10px;
-  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .filter-rows {
@@ -959,12 +962,14 @@ button:disabled {
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   display: grid;
-  /* Camera preview row: minmax(0, 1fr) so it shrinks gracefully when the
-   * stage row is small. The hard 300px floor used to overflow into the
-   * chart area whenever the panel was resized down. */
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  /* Camera preview row: minmax(360px, auto) so it always renders the
+   * camera tiles at a usable height. With the parent annotation-stage
+   * now using flex column + auto rows + overflow-y:auto, the previous
+   * `minmax(0, 1fr)` collapsed to zero and pushed the videos under
+   * the playback bar; pin a minimum so they stay legible while the
+   * full stage scrolls if content is taller than viewport. */
+  grid-template-rows: auto minmax(360px, auto) auto;
   min-height: 0;
-  overflow: hidden;
   padding: 8px 10px;
 }
 
