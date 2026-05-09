@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Database, Download, Settings } from "lucide-react";
+import { Database, Settings } from "lucide-react";
 
 import { DirtyChip } from "@/components/dirty-chip";
 import { AnnotationMode } from "@/features/annotation-mode/annotation-mode";
 import { BrowseMode } from "@/features/browse-mode/browse-mode";
 import { ExportModal } from "@/features/export-manager/export-modal";
+import { HUMANOID_SKILLS } from "@/lib/skill-vocabulary";
 import { useStudioData } from "@/lib/use-studio-data";
 
 type ActiveTab = "browse" | "annotate";
@@ -19,6 +20,13 @@ export default function Home() {
   const [clipEnd, setClipEnd] = useState<number | null>(null);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedSkillId, setSelectedSkillId] = useState<number>(0);
+  // Authoritative selection — labelValue stored on annotations. Tracks
+  // both canonical 0–9 and custom skills added through the SkillHotBar.
+  // selectedSkillId stays around for the keyboard-shortcut machinery
+  // (1–9 picks the canonical skill at that slot).
+  const [selectedSkillName, setSelectedSkillName] = useState<string>(
+    HUMANOID_SKILLS[0].name
+  );
   const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
 
   const studio = useStudioData();
@@ -123,16 +131,6 @@ export default function Home() {
         </nav>
         <div className="top-bar-actions">
           <DirtyChip count={dirtyEpisodeCount} onJumpToFirst={handleJumpToFirstDirty} />
-          <button
-            className={`text-button primary-export-button compact-text-button${exportModalOpen ? " active" : ""}`}
-            onClick={() => setExportModalOpen((current) => !current)}
-            title="Apply curated annotations to a new dataset version"
-            aria-label="Open the apply-to-dataset panel"
-            type="button"
-          >
-            <Download size={15} />
-            Apply
-          </button>
           <button className="icon-button" title="Advanced settings" aria-label="Advanced settings" type="button">
             <Settings size={17} />
           </button>
@@ -176,7 +174,12 @@ export default function Home() {
       ) : null}
 
       {activeTab === "browse" ? (
-        <BrowseMode studio={studio} onSwitchToAnnotate={() => setActiveTab("annotate")} />
+        <BrowseMode
+          studio={studio}
+          onSwitchToAnnotate={() => setActiveTab("annotate")}
+          exportModalOpen={exportModalOpen}
+          onToggleExport={() => setExportModalOpen((current) => !current)}
+        />
       ) : null}
       {activeTab === "annotate" ? (
         <AnnotationMode
@@ -191,9 +194,13 @@ export default function Home() {
           onSetSelectedClipId={setSelectedClipId}
           selectedSkillId={selectedSkillId}
           onSetSelectedSkillId={setSelectedSkillId}
+          selectedSkillName={selectedSkillName}
+          onSetSelectedSkillName={setSelectedSkillName}
           cheatsheetOpen={cheatsheetOpen}
           onCloseCheatsheet={closeCheatsheet}
           onOpenCheatsheet={openCheatsheet}
+          exportModalOpen={exportModalOpen}
+          onToggleExport={() => setExportModalOpen((current) => !current)}
         />
       ) : null}
       <ExportModal

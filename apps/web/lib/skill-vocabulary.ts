@@ -121,5 +121,32 @@ export function skillById(id: number): HumanoidSkill | undefined {
 
 /** Look up a skill by name (label_value in DB) */
 export function skillByName(name: string): HumanoidSkill | undefined {
-  return HUMANOID_SKILLS.find((skill) => skill.name === name);
+  const canonical = HUMANOID_SKILLS.find((skill) => skill.name === name);
+  if (canonical) return canonical;
+  // Fall back to user-defined custom skills (localStorage). These are
+  // exploratory only — exporting still rejects them per the canonical
+  // contract, but they participate fully in the in-app UI.
+  if (typeof window === "undefined") return undefined;
+  try {
+    const raw = window.localStorage.getItem("rds.customSkills");
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return undefined;
+    const custom = parsed.find(
+      (item: { name?: string }) =>
+        typeof item?.name === "string" && item.name === name
+    ) as { name: string; label: string; color: string } | undefined;
+    if (!custom) return undefined;
+    return {
+      id: -1,
+      name: custom.name,
+      label: custom.label,
+      color: custom.color,
+      startCondition: null,
+      endCondition: null,
+      missionSection: null
+    };
+  } catch {
+    return undefined;
+  }
 }

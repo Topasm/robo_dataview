@@ -18,6 +18,7 @@ type UseAnnotateShortcutsOptions = {
   selectedClipId: string | null;
   setSelectedClipId: (id: string | null) => void;
   setSelectedSkillId: (id: number) => void;
+  setSelectedSkillName?: (name: string) => void;
 };
 
 export function useAnnotateShortcuts({
@@ -30,7 +31,8 @@ export function useAnnotateShortcuts({
   setClipEnd,
   selectedClipId,
   setSelectedClipId,
-  setSelectedSkillId
+  setSelectedSkillId,
+  setSelectedSkillName
 }: UseAnnotateShortcutsOptions): void {
   useEffect(() => {
     if (!enabled) {
@@ -96,6 +98,7 @@ export function useAnnotateShortcuts({
         if (!skill) {
           return;
         }
+        setSelectedSkillName?.(skill.name);
 
         // Path A: a pending skill-clip is selected → reassign skill + accept
         const selected = selectedClipId

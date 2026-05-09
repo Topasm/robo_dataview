@@ -1,7 +1,13 @@
 export type ReviewStatus = "pending" | "accepted" | "rejected" | "edited";
 export type ExportFormat = "lerobot" | "lance" | "jsonl" | "vla" | "hf_dataset";
 export type WorkspaceDrawerTab = "episodes" | "frames" | "rerun" | "export";
-export type EpisodeDisposition = "kept" | "deleted" | "flagged";
+/**
+ * Per-episode triage state. The previous "kept" member was dropped because
+ * leaving an episode untouched (no disposition) is the implicit "keep".
+ * The data layer treats null / undefined as "kept" too, so legacy backend
+ * payloads that still carry "kept" are normalized at the API parser layer.
+ */
+export type EpisodeDisposition = "deleted" | "flagged";
 
 export type SkillExportOptions = {
   clipLabelType?: string;

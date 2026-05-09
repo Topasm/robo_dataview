@@ -34,9 +34,13 @@ type AnnotationModeProps = {
   onSetSelectedClipId: (id: string | null) => void;
   selectedSkillId: number;
   onSetSelectedSkillId: (id: number) => void;
+  selectedSkillName: string;
+  onSetSelectedSkillName: (name: string) => void;
   cheatsheetOpen: boolean;
   onCloseCheatsheet: () => void;
   onOpenCheatsheet: () => void;
+  exportModalOpen: boolean;
+  onToggleExport: () => void;
 };
 
 export function AnnotationMode({
@@ -51,9 +55,13 @@ export function AnnotationMode({
   onSetSelectedClipId,
   selectedSkillId,
   onSetSelectedSkillId,
+  selectedSkillName,
+  onSetSelectedSkillName,
   cheatsheetOpen,
   onCloseCheatsheet,
-  onOpenCheatsheet
+  onOpenCheatsheet,
+  exportModalOpen,
+  onToggleExport
 }: AnnotationModeProps) {
   const editor = useAnnotationEditor();
   const fps = studio.selectedEpisode?.fps > 0 ? studio.selectedEpisode.fps : 20;
@@ -181,7 +189,8 @@ export function AnnotationMode({
     setClipEnd: onSetClipEnd,
     selectedClipId,
     setSelectedClipId: onSetSelectedClipId,
-    setSelectedSkillId: onSetSelectedSkillId
+    setSelectedSkillId: onSetSelectedSkillId,
+    setSelectedSkillName: onSetSelectedSkillName
   });
 
   return (
@@ -193,6 +202,8 @@ export function AnnotationMode({
         onTogglePanel={editor.toggleRailPanel}
         onTogglePin={editor.togglePin}
         onOpenCheatsheet={onOpenCheatsheet}
+        exportModalOpen={exportModalOpen}
+        onToggleExport={onToggleExport}
       />
       <main className="annotation-stage">
         <div className="annotation-mode-header">
@@ -254,7 +265,11 @@ export function AnnotationMode({
             showSignals={showSignals}
           />
         </div>
-        <SkillHotBar selectedSkillId={selectedSkillId} onSelect={onSetSelectedSkillId} />
+        <SkillHotBar
+          selectedSkillName={selectedSkillName}
+          onSelectId={onSetSelectedSkillId}
+          onSelectName={onSetSelectedSkillName}
+        />
         <StatusHud
           frameIndex={studio.selectedFrameIndex}
           frameCount={studio.selectedEpisode.length}
@@ -318,6 +333,7 @@ export function AnnotationMode({
           selectedFrameStatus={studio.selectedFrameStatus}
           selectedClipId={selectedClipId}
           selectedSkillId={selectedSkillId}
+          selectedSkillName={selectedSkillName}
           vlmResponses={studio.vlmResponses}
         />
       </aside>

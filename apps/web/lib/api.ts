@@ -103,7 +103,12 @@ type EpisodeResponse = {
   fps?: number | null;
   camera_names?: string[];
   language_instruction?: string | null;
-  disposition?: EpisodeDisposition | null;
+  /**
+   * Backend may still emit the legacy "kept" value for older records;
+   * the parser normalizes it to null so the in-app type only carries
+   * the two disposition values that have UI affordances.
+   */
+  disposition?: EpisodeDisposition | "kept" | null;
   disposition_reason?: string | null;
   disposition_updated_at?: string | null;
   dirty_annotation_count?: number | null;
@@ -1185,7 +1190,8 @@ function toEpisode(raw: EpisodeResponse): Episode {
     fps: raw.fps ?? 0,
     cameraNames: raw.camera_names ?? [],
     languageInstruction: raw.language_instruction ?? null,
-    disposition: raw.disposition ?? null,
+    disposition:
+      raw.disposition === "kept" ? null : raw.disposition ?? null,
     dispositionReason: raw.disposition_reason ?? null,
     dispositionUpdatedAt: raw.disposition_updated_at ?? null,
     dirtyAnnotationCount: raw.dirty_annotation_count ?? 0

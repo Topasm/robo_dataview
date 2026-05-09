@@ -1,6 +1,6 @@
 "use client";
 
-import { Film, HelpCircle, Pin, PinOff, Search, Sparkles } from "lucide-react";
+import { Download, Film, HelpCircle, Pin, PinOff, Search, Sparkles } from "lucide-react";
 
 import { EpisodeList } from "@/features/dataset-browser/episode-list";
 import { RerunPanel } from "@/features/rerun-viewer/rerun-panel";
@@ -17,6 +17,8 @@ type IconRailProps = {
   onTogglePanel: (panel: IconRailPanel) => void;
   onTogglePin: () => void;
   onOpenCheatsheet: () => void;
+  exportModalOpen: boolean;
+  onToggleExport: () => void;
 };
 
 export function IconRail({
@@ -25,7 +27,9 @@ export function IconRail({
   pinned,
   onTogglePanel,
   onTogglePin,
-  onOpenCheatsheet
+  onOpenCheatsheet,
+  exportModalOpen,
+  onToggleExport
 }: IconRailProps) {
   return (
     <aside className={`icon-rail-shell${activePanel ? " expanded" : ""}`}>
@@ -62,6 +66,16 @@ export function IconRail({
           <Sparkles size={18} />
         </button>
         <span className="icon-rail-spacer" />
+        <button
+          type="button"
+          className={`icon-rail-button${exportModalOpen ? " active" : ""}`}
+          onClick={onToggleExport}
+          title="Apply curated annotations to a new dataset version"
+          aria-label="Open the apply-to-dataset panel"
+          aria-pressed={exportModalOpen}
+        >
+          <Download size={18} />
+        </button>
         <button
           type="button"
           className="icon-rail-button"

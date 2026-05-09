@@ -1883,22 +1883,41 @@ textarea {
 
 .episode-table {
   display: grid;
+  /* `start` keeps rows packed at the top when the grid is stretched by
+   * a flex parent; default `normal` can distribute extra space between
+   * rows, leaving large gaps in narrow side panels. */
+  align-content: start;
+  grid-auto-rows: max-content;
 }
 
 .episode-table-compact {
+  /* Compact mode now fills the surrounding flex parent (IconRail popout
+   * in Annotate, ~50vh side panel in Browse). The previous fixed 150px
+   * cap left only ~30px of room for rows once the toolbar / filter /
+   * column headers were stacked, hiding most of the list. */
   border-bottom: 1px solid var(--border);
   border-left: 0;
   border-right: 0;
-  max-height: 150px;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .episode-table-compact .table-toolbar {
   height: 34px;
   padding: 0 12px;
+  flex: 0 0 auto;
+}
+
+.episode-table-compact .episode-list-filters,
+.episode-table-compact .episode-list-disposition-row {
+  flex: 0 0 auto;
 }
 
 .episode-table-compact .episode-table {
-  max-height: 116px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
 }
 
@@ -1919,14 +1938,82 @@ textarea {
   border: 0;
   border-bottom: 1px solid var(--border);
   color: var(--text);
+  cursor: pointer;
   display: grid;
   gap: var(--space-2);
-  /* Sidebar-friendly: status takes flexible width, others have minimum needed. */
-  grid-template-columns: 56px 36px 48px minmax(0, 1fr) 56px auto;
-  min-height: 42px;
+  /* Sidebar-friendly: status takes flexible width, others stay tight. The
+   * trailing 50px holds two inline action buttons (flag, delete/undo);
+   * Quality column was dropped because the per-row actions cover it. */
+  grid-template-columns: 56px 36px 48px minmax(0, 1fr) 56px 50px;
+  height: 38px;
   padding: 0 12px;
   text-align: left;
   overflow: hidden;
+}
+
+.episode-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.episode-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  justify-self: end;
+}
+
+.episode-row-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+.episode-row:hover .episode-row-action {
+  opacity: 1;
+  color: var(--text);
+}
+
+.episode-row-action:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.episode-row-action.is-flagged {
+  color: var(--warning);
+  opacity: 1;
+}
+
+.episode-row-action.is-undo {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.episode-row-action.is-undo:hover {
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
+}
+
+.episode-row-action:not(.is-undo):hover {
+  background: var(--danger-soft, color-mix(in srgb, var(--danger) 14%, transparent));
+  color: var(--danger);
+}
+
+.episode-row-action.is-flagged:hover {
+  background: var(--warning-soft, color-mix(in srgb, var(--warning) 14%, transparent));
+  color: var(--warning);
+}
+
+.episode-row-deleted .episode-row-action:not(.is-undo) {
+  display: none;
 }
 
 /* Truncate every cell so a long status pill / quality text never bleeds

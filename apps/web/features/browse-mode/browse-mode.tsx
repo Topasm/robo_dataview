@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Download, Eye, EyeOff, Scissors } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
 import { DatasetBrowser, DatasetMeta } from "@/features/dataset-browser/dataset-browser";
@@ -10,7 +10,6 @@ import { EpisodeViewer } from "@/features/episode-viewer/episode-viewer";
 import { useBrowseShortcuts } from "@/lib/use-browse-shortcuts";
 import type { useStudioData } from "@/lib/use-studio-data";
 
-import { EpisodeActionBar } from "./episode-action-bar";
 import { EpisodeCharts } from "./episode-charts-async";
 
 type StudioData = ReturnType<typeof useStudioData>;
@@ -18,13 +17,20 @@ type StudioData = ReturnType<typeof useStudioData>;
 type BrowseModeProps = {
   studio: StudioData;
   onSwitchToAnnotate: () => void;
+  exportModalOpen: boolean;
+  onToggleExport: () => void;
 };
 
 const ANNOTATION_OVERLAY_STORAGE_KEY = "rds.browse.showAnnotationOverlay";
 
-export function BrowseMode({ studio, onSwitchToAnnotate }: BrowseModeProps) {
+export function BrowseMode({
+  studio,
+  onSwitchToAnnotate,
+  exportModalOpen,
+  onToggleExport
+}: BrowseModeProps) {
   const handleMarkDisposition = useCallback(
-    (kind: "kept" | "deleted" | "flagged", reason: string | null) => {
+    (kind: "deleted" | "flagged" | null, reason: string | null) => {
       void studio.handleSetEpisodeDisposition(
         studio.selectedEpisode.episodeIndex,
         kind,
@@ -63,14 +69,14 @@ export function BrowseMode({ studio, onSwitchToAnnotate }: BrowseModeProps) {
     <PanelGroup
       direction="horizontal"
       className="browse-mode-shell"
-      autoSaveId="rds.browse.layout"
+      autoSaveId="rds.browse.layout-3col"
     >
       <Panel
         id="browse-side"
         order={1}
-        defaultSize={22}
-        minSize={14}
-        maxSize={45}
+        defaultSize={20}
+        minSize={12}
+        maxSize={40}
         className="browse-mode-side"
       >
         <DatasetBrowser
@@ -83,15 +89,36 @@ export function BrowseMode({ studio, onSwitchToAnnotate }: BrowseModeProps) {
           compact={false}
           episodes={studio.episodeRows}
           onSelectEpisode={studio.handleSelectEpisode}
+          onMarkDisposition={(idx, kind, reason) =>
+            void studio.handleSetEpisodeDisposition(idx, kind, reason)
+          }
           selectedEpisodeIndex={studio.selectedEpisodeIndex}
         />
-        <DatasetMeta
-          health={studio.selectedDatasetHealth}
-          summary={studio.selectedSummary}
-        />
+        <div className="browse-mode-side-footer">
+          <button
+            className="btn btn--primary btn--sm browse-side-annotate"
+            onClick={onSwitchToAnnotate}
+            title="Open this episode in the Annotate workspace"
+            type="button"
+          >
+            <Scissors size={14} />
+            <span>Annotate this episode &rarr;</span>
+          </button>
+          <button
+            className={`btn btn--sm browse-side-apply${exportModalOpen ? " active" : ""}`}
+            onClick={onToggleExport}
+            title="Apply curated annotations to a new dataset version"
+            aria-label="Open the apply-to-dataset panel"
+            aria-pressed={exportModalOpen}
+            type="button"
+          >
+            <Download size={14} />
+            <span>Apply</span>
+          </button>
+        </div>
       </Panel>
       <PanelResizeHandle className="panel-resize-handle" />
-      <Panel id="browse-stage" order={2} defaultSize={78} minSize={40} className="browse-mode-stage">
+      <Panel id="browse-stage" order={2} defaultSize={58} minSize={32} className="browse-mode-stage">
         <EpisodeViewer
           annotations={annotationsForOverlay}
           episode={studio.selectedEpisode}
@@ -108,6 +135,12 @@ export function BrowseMode({ studio, onSwitchToAnnotate }: BrowseModeProps) {
           />
         </div>
         <div className="browse-mode-stage-actions">
+          <span className="browse-stage-meta muted">
+            Episode #{studio.selectedEpisode.episodeIndex}
+            {studio.selectedEpisode.caption ? (
+              <> · {studio.selectedEpisode.caption}</>
+            ) : null}
+          </span>
           <button
             type="button"
             className="btn btn--ghost btn--sm browse-overlay-toggle"
@@ -122,13 +155,21 @@ export function BrowseMode({ studio, onSwitchToAnnotate }: BrowseModeProps) {
             {showAnnotations ? <Eye size={14} /> : <EyeOff size={14} />}
             <span>{showAnnotations ? "Overlays on" : "Overlays off"}</span>
           </button>
-          <EpisodeActionBar
-            episodeCaption={studio.selectedEpisode.caption}
-            episodeIndex={studio.selectedEpisode.episodeIndex}
-            onMarkDisposition={handleMarkDisposition}
-            onSwitchToAnnotate={onSwitchToAnnotate}
-          />
         </div>
+      </Panel>
+      <PanelResizeHandle className="panel-resize-handle" />
+      <Panel
+        id="browse-inspector"
+        order={3}
+        defaultSize={22}
+        minSize={14}
+        maxSize={40}
+        className="browse-mode-inspector"
+      >
+        <DatasetMeta
+          health={studio.selectedDatasetHealth}
+          summary={studio.selectedSummary}
+        />
       </Panel>
     </PanelGroup>
   );

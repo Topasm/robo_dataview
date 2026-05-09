@@ -3,16 +3,16 @@ type StatusPillProps = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  pending: "Need Check",
+  pending: "New",
   accepted: "Keep",
   rejected: "Drop",
   edited: "Edited",
   ready: "Ready",
   error: "Error",
-  warning: "Warning",
+  warning: "Warn",
   succeeded: "Done",
   failed: "Failed",
-  running: "Running",
+  running: "Run",
 };
 
 export function StatusPill({ status }: StatusPillProps) {

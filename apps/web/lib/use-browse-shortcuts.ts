@@ -6,7 +6,7 @@ import type { useStudioData } from "@/lib/use-studio-data";
 
 type StudioData = ReturnType<typeof useStudioData>;
 
-export type EpisodeDispositionKind = "kept" | "deleted" | "flagged";
+export type EpisodeDispositionKind = "deleted" | "flagged" | null;
 
 type UseBrowseShortcutsOptions = {
   enabled: boolean;
@@ -76,13 +76,16 @@ export function useBrowseShortcuts({
         return;
       }
       const key = event.key.toLowerCase();
+      // K is repurposed: in the previous "kept/deleted/flagged" model it
+      // marked an episode as kept; that explicit state is gone (default
+      // is "untouched = keep"), so K now clears any disposition (undo).
       if (key === "k" || key === "x" || key === "f") {
         if (!onMarkDisposition) {
           return;
         }
         event.preventDefault();
         const kind: EpisodeDispositionKind =
-          key === "k" ? "kept" : key === "x" ? "deleted" : "flagged";
+          key === "k" ? null : key === "x" ? "deleted" : "flagged";
         onMarkDisposition(kind, null);
       }
     }

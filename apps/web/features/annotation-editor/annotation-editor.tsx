@@ -34,6 +34,7 @@ type AnnotationEditorProps = {
   selectedFrameStatus: "idle" | "loading" | "ready" | "error";
   selectedClipId: string | null;
   selectedSkillId: number;
+  selectedSkillName: string;
   vlmResponses?: VlmResponseRecord[];
   onCreateSegment: (draft: AnnotationDraft) => Promise<void>;
   onDeleteSegment: (annotationId: string) => Promise<void>;
@@ -68,6 +69,7 @@ export function AnnotationEditor({
   selectedFrameStatus,
   selectedClipId,
   selectedSkillId,
+  selectedSkillName,
   vlmResponses = [],
   onCreateSegment,
   onDeleteSegment,
@@ -166,19 +168,23 @@ export function AnnotationEditor({
           <section className="panel-section">
             <div className="section-title">New Skill Clip</div>
             <div className="segment-form">
-              <label>
-                Skill
-                <select
-                  onChange={(event) => onSetSelectedSkillId(Number(event.target.value))}
-                  value={selectedSkillId}
-                >
-                  {HUMANOID_SKILLS.map((skill) => (
-                    <option key={skill.id} value={skill.id}>
-                      {skill.id}: {skill.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="segment-form-skill-display">
+                <span className="muted">Skill</span>
+                <span
+                  className="skill-combobox-color"
+                  style={{
+                    background:
+                      skillByName(selectedSkillName)?.color ?? "var(--muted)"
+                  }}
+                  aria-hidden
+                />
+                <span>
+                  {skillByName(selectedSkillName)?.label ?? selectedSkillName}
+                </span>
+                <span className="muted skill-display-hint">
+                  pick from the bar
+                </span>
+              </div>
               <label>
                 Start
                 <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
@@ -211,17 +217,21 @@ export function AnnotationEditor({
                 className="text-button segment-save-button"
                 disabled={isSaving || clipStart === null || clipEnd === null}
                 onClick={async () => {
-                  const skill = HUMANOID_SKILLS[selectedSkillId];
-                  if (!skill || clipStart === null || clipEnd === null) return;
+                  if (!selectedSkillName || clipStart === null || clipEnd === null) return;
+                  const skill = skillByName(selectedSkillName);
                   setIsSaving(true);
                   try {
                     await onCreateSegment({
                       labelType: SKILL_LABEL_TYPE,
-                      labelValue: skill.name,
+                      labelValue: selectedSkillName,
                       startFrame: Math.min(clipStart, clipEnd),
                       endFrame: Math.max(clipStart, clipEnd),
                       reviewStatus: "accepted",
-                      metadata: { skillId: skill.id, qualityScore: null, successLabel: null }
+                      metadata: {
+                        skillId: skill && skill.id >= 0 ? skill.id : undefined,
+                        qualityScore: null,
+                        successLabel: null
+                      }
                     });
                     onSetClipStart(null);
                     onSetClipEnd(null);
