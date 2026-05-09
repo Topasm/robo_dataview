@@ -1,9 +1,10 @@
-import { AlertTriangle, Download, PackageCheck } from "lucide-react";
-import { useMemo, useState } from "react";
+import { AlertTriangle, Download, PackageCheck, UploadCloud } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 import { countOverlappingPairs } from "@/lib/clip-validation";
 import type {
   ExportFormat,
+  ExportHubUploadResult,
   ExportRecord,
   JobRecord,
   SegmentAnnotation,
@@ -22,6 +23,7 @@ type ExportStripProps = {
     scope?: "episode" | "split",
     options?: SkillExportOptions,
   ) => Promise<void>;
+  onUploadExportToHub: (exportId: string) => Promise<ExportHubUploadResult>;
   split: string | null;
 };
 
@@ -32,6 +34,7 @@ export function ExportStrip({
   exportRecord,
   pastExports = [],
   onCreateExport,
+  onUploadExportToHub,
   split
 }: ExportStripProps) {
   const overlapCount = useMemo(() => countOverlappingPairs(annotations), [annotations]);
@@ -43,8 +46,35 @@ export function ExportStrip({
   const jsonlArtifact = exportRecord?.artifacts?.jsonl;
   const vlaArtifact = exportRecord?.artifacts?.vla_jsonl;
   const hfDatasetArtifact = exportRecord?.artifacts?.hf_dataset;
+  const hubArtifact = exportRecord?.artifacts?.huggingface_hub;
   const validation = lerobotArtifact?.validation;
   const lanceValidation = lanceArtifact?.validation;
+  const canUploadHub = exportRecord?.status === "succeeded" && Boolean(lanceArtifact?.root);
+  const [hubUpload, setHubUpload] = useState<ExportHubUploadResult | null>(null);
+  const [hubUploadError, setHubUploadError] = useState<string | null>(null);
+  const [hubUploading, setHubUploading] = useState(false);
+
+  useEffect(() => {
+    setHubUpload(null);
+    setHubUploadError(null);
+    setHubUploading(false);
+  }, [exportRecord?.exportId]);
+
+  async function handleHubUpload() {
+    if (!exportRecord || hubUploading) {
+      return;
+    }
+    setHubUploading(true);
+    setHubUploadError(null);
+    try {
+      const result = await onUploadExportToHub(exportRecord.exportId);
+      setHubUpload(result);
+    } catch (error) {
+      setHubUploadError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setHubUploading(false);
+    }
+  }
 
   return (
     <section className="export-strip">
@@ -123,6 +153,33 @@ export function ExportStrip({
         ) : null}
         {hfDatasetArtifact ? (
           <ExportArtifactSummary artifact={hfDatasetArtifact} label="HF Dataset" />
+        ) : null}
+        {canUploadHub ? (
+          <div className="export-artifact">
+            <span>Hugging Face</span>
+            <span>
+              {hubUpload?.repoUrl ?? hubArtifact?.repo_url ?? "Upload this curated export?"}
+            </span>
+            {hubUpload?.commitUrl ?? hubArtifact?.commit_url ? (
+              <span>{hubUpload?.commitUrl ?? hubArtifact?.commit_url}</span>
+            ) : hubUploadError ? (
+              <span>{hubUploadError}</span>
+            ) : null}
+            <button
+              className="text-button secondary-text-button"
+              disabled={hubUploading}
+              onClick={() => void handleHubUpload()}
+              title="Upload this curated Lance export to Hugging Face"
+              type="button"
+            >
+              <UploadCloud size={14} />
+              {hubUploading
+                ? "Uploading..."
+                : hubArtifact || hubUpload
+                  ? "Upload again"
+                  : "Upload to HF"}
+            </button>
+          </div>
         ) : null}
       </div>
       <div className="export-actions">

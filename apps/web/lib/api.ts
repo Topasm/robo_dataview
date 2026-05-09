@@ -9,6 +9,7 @@ import type {
   EpisodeListPage,
   EpisodeTimeseries,
   ExportFormat,
+  ExportHubUploadResult,
   ExportRecord,
   SkillExportOptions,
   FilterPreset,
@@ -260,6 +261,16 @@ type ExportRecordResponse = {
   artifacts?: ExportRecord["artifacts"];
   num_episodes?: number | null;
   created_at?: string | null;
+};
+
+type ExportHubUploadResponse = {
+  export_id: string;
+  repo_id: string;
+  repo_url: string;
+  uploaded_path: string;
+  revision: string | null;
+  commit_url: string | null;
+  message: string;
 };
 
 type SearchResultResponse = {
@@ -961,6 +972,21 @@ export async function fetchExport(exportId: string): Promise<ExportRecord> {
   return toExportRecord(row);
 }
 
+export async function uploadExportToHub(
+  exportId: string,
+  repoId?: string,
+): Promise<ExportHubUploadResult> {
+  const body: Record<string, string> = {};
+  if (repoId?.trim()) {
+    body.repo_id = repoId.trim();
+  }
+  const row = await request<ExportHubUploadResponse>(`/exports/${exportId}/upload-hub`, {
+    method: "POST",
+    body: JSON.stringify(body)
+  });
+  return toExportHubUploadResult(row);
+}
+
 export async function listExports(datasetId?: string | null): Promise<ExportRecord[]> {
   const query = datasetId ? `?dataset_id=${encodeURIComponent(datasetId)}` : "";
   const rows = await request<ExportRecordResponse[]>(`/exports${query}`);
@@ -1436,6 +1462,18 @@ function toExportRecord(raw: ExportRecordResponse): ExportRecord {
     artifacts: raw.artifacts ?? null,
     numEpisodes: raw.num_episodes ?? raw.episode_indices.length,
     createdAt: raw.created_at ?? null
+  };
+}
+
+function toExportHubUploadResult(raw: ExportHubUploadResponse): ExportHubUploadResult {
+  return {
+    exportId: raw.export_id,
+    repoId: raw.repo_id,
+    repoUrl: raw.repo_url,
+    uploadedPath: raw.uploaded_path,
+    revision: raw.revision,
+    commitUrl: raw.commit_url,
+    message: raw.message
   };
 }
 

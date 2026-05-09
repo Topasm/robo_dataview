@@ -65,6 +65,7 @@ export function ExportModal({ open, onClose, studio }: ExportModalProps) {
             exportRecord={studio.exportRecord}
             pastExports={studio.pastExports}
             onCreateExport={studio.handleCreateExport}
+            onUploadExportToHub={studio.handleUploadExportToHub}
             split={studio.selectedEpisode.split}
           />
         </div>

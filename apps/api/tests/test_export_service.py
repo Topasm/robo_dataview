@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from types import ModuleType
 import unittest
@@ -10,7 +11,7 @@ from pathlib import Path
 from apps.api.schemas.annotations import AnnotationCreate
 from apps.api.schemas.common import ExportFormat, JobStatus, ReviewStatus
 from apps.api.schemas.episodes import EpisodeDetail
-from apps.api.schemas.exports import ExportCreateRequest
+from apps.api.schemas.exports import ExportCreateRequest, ExportHubUploadRequest
 from apps.api.schemas.frames import FrameRecord
 from apps.api.services.annotation_service import annotation_store
 from apps.api.services import export_service
@@ -460,6 +461,45 @@ class ExportServiceTest(unittest.TestCase):
         annotation_store.delete(accepted.annotation_id)
         annotation_store.delete(rejected.annotation_id)
 
+    def test_upload_lance_export_to_hub_uses_curated_artifact_root(self) -> None:
+        fake_pyarrow = _fake_pyarrow_module()
+        fake_lance, _written_paths = _fake_lance_module()
+        fake_hub, upload_calls = _fake_huggingface_hub_module()
+
+        versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
+        exports = ExportStore(versions=versions)
+        with patch.dict(sys.modules, {"pyarrow": fake_pyarrow, "lance": fake_lance}):
+            record = exports.create(
+                ExportCreateRequest(
+                    dataset_id="sample-xvla-soft-fold",
+                    episode_indices=[0],
+                    format=ExportFormat.lance,
+                    version_description="curated lance subset",
+                )
+            )
+
+        with patch.dict(sys.modules, {"huggingface_hub": fake_hub}), patch.dict(
+            os.environ,
+            {"RLLAB_HF_NAMESPACE": "rllab-postech", "RLLAB_HF_PRIVATE": "1"},
+        ):
+            response = exports.upload_to_hub(record.export_id, ExportHubUploadRequest())
+
+        expected_repo_id = f"rllab-postech/sample-xvla-soft-fold-curated-{record.export_id[:8]}"
+        self.assertEqual(response.repo_id, expected_repo_id)
+        self.assertEqual(upload_calls["create_repo"][0]["repo_id"], response.repo_id)
+        self.assertEqual(upload_calls["create_repo"][0]["private"], True)
+        self.assertEqual(
+            upload_calls["upload_folder"][0]["folder_path"],
+            record.artifacts["lance_subset"]["root"],
+        )
+
+        manifest = json.loads(Path(record.output_uri or "").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["artifacts"]["huggingface_hub"]["repo_id"], response.repo_id)
+        self.assertEqual(
+            manifest["artifacts"]["huggingface_hub"]["uploaded_path"],
+            response.uploaded_path,
+        )
+
     def test_lance_export_writes_video_table_when_blobs_are_available(self) -> None:
         fake_pyarrow = _fake_pyarrow_module()
         fake_lance, written_paths = _fake_lance_module()
@@ -895,6 +935,28 @@ def _fake_datasets_module() -> ModuleType:
     module.Dataset = Dataset
     module.load_from_disk = load_from_disk
     return module
+
+
+def _fake_huggingface_hub_module() -> tuple[ModuleType, dict[str, list[dict]]]:
+    module = ModuleType("huggingface_hub")
+    calls: dict[str, list[dict]] = {"create_repo": [], "create_branch": [], "upload_folder": []}
+
+    class CommitInfo:
+        commit_url = "https://huggingface.co/datasets/rllab-postech/test/commit/abc123"
+
+    class HfApi:
+        def create_repo(self, **kwargs: object) -> None:
+            calls["create_repo"].append(dict(kwargs))
+
+        def create_branch(self, **kwargs: object) -> None:
+            calls["create_branch"].append(dict(kwargs))
+
+        def upload_folder(self, **kwargs: object) -> CommitInfo:
+            calls["upload_folder"].append(dict(kwargs))
+            return CommitInfo()
+
+    module.HfApi = HfApi
+    return module, calls
 
 
 class _FakePublishHandle:

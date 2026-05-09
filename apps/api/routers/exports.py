@@ -1,6 +1,11 @@
 from fastapi import APIRouter
 
-from apps.api.schemas.exports import ExportCreateRequest, ExportRecord
+from apps.api.schemas.exports import (
+    ExportCreateRequest,
+    ExportHubUploadRequest,
+    ExportHubUploadResponse,
+    ExportRecord,
+)
 from apps.api.services.export_service import exports
 
 
@@ -20,3 +25,11 @@ def list_exports(dataset_id: str | None = None) -> list[ExportRecord]:
 @router.get("/exports/{export_id}", response_model=ExportRecord)
 def get_export(export_id: str) -> ExportRecord:
     return exports.get(export_id)
+
+
+@router.post("/exports/{export_id}/upload-hub", response_model=ExportHubUploadResponse)
+def upload_export_to_hub(
+    export_id: str,
+    payload: ExportHubUploadRequest | None = None,
+) -> ExportHubUploadResponse:
+    return exports.upload_to_hub(export_id, payload or ExportHubUploadRequest())

@@ -301,6 +301,16 @@ export type ExportRecord = {
   createdAt: string | null;
 };
 
+export type ExportHubUploadResult = {
+  exportId: string;
+  repoId: string;
+  repoUrl: string;
+  uploadedPath: string;
+  revision: string | null;
+  commitUrl: string | null;
+  message: string;
+};
+
 export type ExportArtifacts = {
   lerobot_v3?: {
     root?: string;
@@ -374,6 +384,14 @@ export type ExportArtifacts = {
       errors?: string[];
       warnings?: string[];
     };
+  };
+  huggingface_hub?: {
+    repo_id?: string;
+    repo_url?: string;
+    uploaded_path?: string;
+    revision?: string | null;
+    commit_url?: string | null;
+    uploaded_at?: string;
   };
 };
 

@@ -5,6 +5,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -14,7 +15,12 @@ from fastapi import HTTPException
 
 from apps.api.schemas.common import ExportFormat, JobStatus, ReviewStatus
 from apps.api.schemas.episodes import EpisodeDetail
-from apps.api.schemas.exports import ExportCreateRequest, ExportRecord
+from apps.api.schemas.exports import (
+    ExportCreateRequest,
+    ExportHubUploadRequest,
+    ExportHubUploadResponse,
+    ExportRecord,
+)
 from apps.api.schemas.frames import FrameRecord
 from apps.api.services.annotation_service import annotation_store
 from apps.api.services.artifact_storage import (
@@ -87,6 +93,76 @@ class ExportStore:
         )
         return records
 
+    def upload_to_hub(
+        self,
+        export_id: str,
+        payload: ExportHubUploadRequest,
+    ) -> ExportHubUploadResponse:
+        record = self.get(export_id)
+        if record.status != JobStatus.succeeded:
+            raise HTTPException(status_code=400, detail="Only succeeded exports can be uploaded.")
+
+        upload_path = self._hub_upload_path(record)
+        repo_id = payload.repo_id or self._hub_repo_id(record)
+        if not repo_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Hugging Face repo is not configured. Set RLLAB_HF_NAMESPACE or "
+                    "RLLAB_HF_REPO_ID on the API process."
+                ),
+            )
+
+        private = (
+            payload.private
+            if payload.private is not None
+            else _truthy_env("RLLAB_HF_PRIVATE", True)
+        )
+        revision = payload.revision or os.getenv("RLLAB_HF_REVISION") or None
+        try:
+            from huggingface_hub import HfApi
+        except ImportError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="huggingface_hub is not installed in the API environment.",
+            ) from exc
+
+        api = HfApi()
+        try:
+            api.create_repo(repo_id=repo_id, repo_type="dataset", private=private, exist_ok=True)
+            if revision:
+                api.create_branch(
+                    repo_id=repo_id,
+                    repo_type="dataset",
+                    branch=revision,
+                    exist_ok=True,
+                )
+            result = api.upload_folder(
+                repo_id=repo_id,
+                repo_type="dataset",
+                folder_path=str(upload_path),
+                revision=revision,
+                commit_message=f"Upload Robot Data Studio export {record.export_id}",
+            )
+        except Exception as exc:  # noqa: BLE001 - surface Hub auth/config errors cleanly
+            raise HTTPException(
+                status_code=400,
+                detail=f"Hugging Face upload failed: {exc}",
+            ) from exc
+
+        repo_url = f"https://huggingface.co/datasets/{repo_id}"
+        response = ExportHubUploadResponse(
+            export_id=record.export_id,
+            repo_id=repo_id,
+            repo_url=repo_url,
+            uploaded_path=str(upload_path),
+            revision=revision,
+            commit_url=getattr(result, "commit_url", None),
+            message=f"Uploaded export {record.export_id} to {repo_id}.",
+        )
+        self._record_hub_upload(record, response)
+        return response
+
     def _load_existing_exports(self) -> None:
         if not EXPORT_ROOT.exists():
             return
@@ -121,6 +197,63 @@ class ExportStore:
             )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError):
             return None
+
+    @staticmethod
+    def _hub_upload_path(record: ExportRecord) -> Path:
+        artifacts = record.artifacts or {}
+        lance_artifact = artifacts.get("lance_subset")
+        if isinstance(lance_artifact, dict):
+            root = lance_artifact.get("root")
+            if isinstance(root, str) and Path(root).exists():
+                return Path(root)
+        if record.output_uri:
+            export_dir = Path(record.output_uri).parent
+            if export_dir.exists():
+                return export_dir
+        raise HTTPException(status_code=400, detail="Export artifact directory does not exist.")
+
+    @staticmethod
+    def _hub_repo_id(record: ExportRecord) -> str | None:
+        explicit = os.getenv("RLLAB_HF_REPO_ID")
+        if explicit:
+            return explicit
+        namespace = os.getenv("RLLAB_HF_NAMESPACE")
+        if not namespace:
+            return None
+        name = _hub_repo_name(f"{record.dataset_id}-curated-{record.export_id[:8]}")
+        return f"{namespace.rstrip('/')}/{name}"
+
+    def _record_hub_upload(
+        self,
+        record: ExportRecord,
+        response: ExportHubUploadResponse,
+    ) -> None:
+        artifacts = dict(record.artifacts or {})
+        artifacts["huggingface_hub"] = {
+            "repo_id": response.repo_id,
+            "repo_url": response.repo_url,
+            "uploaded_path": response.uploaded_path,
+            "revision": response.revision,
+            "commit_url": response.commit_url,
+            "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        }
+        updated = model_copy(record, update={"artifacts": artifacts})
+        if record.output_uri:
+            manifest_path = Path(record.output_uri)
+            if manifest_path.exists():
+                try:
+                    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    manifest["artifacts"] = artifacts
+                    manifest_path.write_text(
+                        json.dumps(manifest, indent=2, default=str),
+                        encoding="utf-8",
+                    )
+                except (OSError, json.JSONDecodeError, TypeError):
+                    logger.warning(
+                        "Failed to persist Hugging Face upload metadata for %s",
+                        record.export_id,
+                    )
+        self._records[record.export_id] = updated
 
     def _write_manifest(
         self,
@@ -468,6 +601,21 @@ class ExportStore:
 
 
 exports = ExportStore()
+
+
+def _truthy_env(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+def _hub_repo_name(value: str) -> str:
+    slug = re.sub(r"[^0-9A-Za-z._-]+", "-", value).strip(".-")
+    slug = re.sub(r"-{2,}", "-", slug)
+    if not slug:
+        slug = "robot-data-studio-export"
+    return slug[:96].strip(".-") or "robot-data-studio-export"
 
 
 def _clip_export_options(payload: ExportCreateRequest) -> dict[str, Any]:

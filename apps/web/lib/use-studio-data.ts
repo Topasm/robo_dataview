@@ -33,7 +33,8 @@ import {
   streamJobEvents,
   updateSegmentAnnotation,
   updateAnnotationReviewStatus,
-  updateFrameRecord
+  updateFrameRecord,
+  uploadExportToHub
 } from "@/lib/api";
 import { annotationHistory, annotations, datasetSummary, episodes } from "@/lib/sample-data";
 import { SKILL_LABEL_TYPE } from "@/lib/skill-vocabulary";
@@ -43,6 +44,7 @@ import type {
   DatasetSummary,
   Episode,
   EpisodeDisposition,
+  ExportHubUploadResult,
   ExportRecord,
   ExportFormat,
   FilterPreset,
@@ -1181,6 +1183,14 @@ export function useStudioData() {
     }
   }
 
+  async function handleUploadExportToHub(exportId: string): Promise<ExportHubUploadResult> {
+    const result = await uploadExportToHub(exportId);
+    const record = await fetchExport(exportId);
+    setExportRecord(record);
+    void refreshPastExports(record.datasetId);
+    return result;
+  }
+
   async function handleUpdateSelectedFrameBadFlag(isBadFrame: boolean) {
     const maxFrame = Math.max(0, selectedEpisode.length - 1);
     const frameIndex = Math.max(0, Math.min(maxFrame, Math.round(selectedFrameIndex)));
@@ -1275,6 +1285,7 @@ export function useStudioData() {
     vlmJob,
     vlmResponses,
     handleCreateExport,
+    handleUploadExportToHub,
     handleAssignAnnotation,
     handleCreateFilterPreset,
     handleCreateRerunSession,
