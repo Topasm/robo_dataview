@@ -142,9 +142,9 @@ class LanceConversionTest(unittest.TestCase):
             self.assertEqual(report["fps"], 30.0)
             self.assertEqual(report["cameras"], ["observation_images_cam_head"])
             self.assertEqual([e[0] for e in events], ["episode_converted"] * 2)
-            for name in ("episodes.lance", "frames.lance", "media.lance"):
-                self.assertTrue((target / name).exists(), f"{name} missing")
-            self.assertFalse((target / "videos.lance").exists())
+            for name in ("episodes.lance", "frames.lance", "videos.lance"):
+                self.assertTrue((target / "data" / name).exists(), f"{name} missing")
+            self.assertFalse((target / "media.lance").exists())
             self.assertTrue((target / "manifest.json").exists())
             self.assertTrue((target / "meta" / "info.json").exists())
 
@@ -154,15 +154,18 @@ class LanceConversionTest(unittest.TestCase):
             episodes = store.list_episodes(record.dataset_id, limit=10, offset=0)
             sa = store.get_state_action_summary(record.dataset_id, 1)
 
-            self.assertEqual(record.message, "Lance dataset indexed.")
+            self.assertIn("Published/HF Lance data/ layout indexed", record.message)
             self.assertEqual(summary.episode_count, 2)
             self.assertEqual(summary.frame_count, 8)
             self.assertEqual(summary.fps, 30.0)
-            self.assertEqual(summary.camera_names, ["observation_images_cam_head"])
+            self.assertEqual(summary.camera_names, ["observation.images.cam_head"])
             self.assertIsNotNone(summary.camera_info)
-            self.assertEqual(
-                summary.camera_info["observation_images_cam_head"]["codec"], "libx264"
+            camera_info = (
+                summary.camera_info.get("observation.images.cam_head")
+                or summary.camera_info.get("observation_images_cam_head")
             )
+            self.assertIsNotNone(camera_info)
+            self.assertEqual(camera_info["codec"], "libx264")
             self.assertEqual([e.length for e in episodes], [4, 4])
             self.assertEqual(episodes[0].caption, "pick-and-place")
             self.assertEqual(sa.state_dim, 3)
@@ -195,29 +198,22 @@ class LanceConversionTest(unittest.TestCase):
             self.assertEqual(report["media_written"], 1)
 
     @unittest.skipUnless(HAS_CONVERSION_DEPS, "requires optional pyarrow and lance deps")
-    def test_convert_no_video_blobs_omits_blob_payload_in_episodes_table(self) -> None:
+    def test_convert_writes_video_blobs_only_in_media_table(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir) / "lerobot"
             target = Path(tmpdir) / "lance"
             _write_v2_1_dataset(source)
 
-            convert_lerobot_to_lance(source, target, include_video_blobs=False)
+            convert_lerobot_to_lance(source, target)
 
             import lance
 
-            ds = lance.dataset(str(target / "episodes.lance"))
-            row = ds.scanner(
-                columns=["observation_images_cam_head_video_blob"], limit=1
-            ).to_table().to_pylist()[0]
-            # Lance blob columns surface as a {position, size} handle even when
-            # the underlying payload is omitted; size==0 confirms no blob bytes
-            # were written.
-            handle = row["observation_images_cam_head_video_blob"]
-            if handle is not None:
-                self.assertEqual(handle.get("size", 0), 0)
-            # And media.lance still has the canonical MP4 rows regardless.
-            media = lance.dataset(str(target / "media.lance"))
+            ds = lance.dataset(str(target / "data" / "episodes.lance"))
+            self.assertNotIn("observation_images_cam_head_video_blob", ds.schema.names)
+            media = lance.dataset(str(target / "data" / "videos.lance"))
             self.assertEqual(media.count_rows(), 2)
+            row = media.scanner(columns=["video_blob"], limit=1).to_table().to_pylist()[0]
+            self.assertTrue(row["video_blob"])
 
     @unittest.skipUnless(HAS_CONVERSION_DEPS, "requires lerobot2lance")
     def test_convert_missing_source_raises(self) -> None:

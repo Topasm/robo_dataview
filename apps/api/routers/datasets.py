@@ -27,7 +27,7 @@ class LerobotConversionRequest(BaseModel):
     overwrite: bool = False
     limit: int | None = None
     include_frames: bool = True
-    include_video_blobs: bool = True
+    include_video_blobs: bool | None = None  # Deprecated; videos.lance is the only new media store.
     open_after: bool = True
     name: str | None = None
 
@@ -120,7 +120,6 @@ def convert_lerobot(payload: LerobotConversionRequest) -> LerobotConversionRespo
             overwrite=payload.overwrite,
             limit=payload.limit,
             include_frames=payload.include_frames,
-            include_video_blobs=payload.include_video_blobs,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

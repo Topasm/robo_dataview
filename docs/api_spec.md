@@ -116,11 +116,14 @@ Request:
   "overwrite": false,
   "limit": 8,
   "include_frames": true,
-  "include_video_blobs": true,
   "open_after": true,
   "name": "raw-lance"
 }
 ```
+
+New conversions store MP4 bytes only in `media.lance` / `data/videos.lance`.
+Older `include_video_blobs` request fields are accepted by the API for
+backwards compatibility but ignored.
 
 Response:
 
