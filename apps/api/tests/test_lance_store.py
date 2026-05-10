@@ -824,6 +824,58 @@ class LanceDatasetStoreTest(unittest.TestCase):
         self.assertEqual(source.read_all(), b"seekable-videos-table")
         self.assertEqual(videos.blob_take_count, 1)
 
+    def test_v1_camera_segments_resolve_video_by_stable_media_id(self) -> None:
+        episode_rows = [
+            {
+                "episode_index": 0,
+                "task_index": 3,
+                "fps": 20.0,
+                "timestamps": [0.0],
+                "camera_segments": [
+                    {
+                        "camera_key": "observation.images.cam_head",
+                        "camera_column": "observation_images_cam_head",
+                        "media_id": "episode_00000000_observation_images_cam_head",
+                    }
+                ],
+            },
+        ]
+        video_rows = [
+            {
+                "media_id": "episode_00000000_observation_images_cam_head_old",
+                "episode_index": 0,
+                "camera_id": "observation_images_cam_head",
+                "video_blob": b"wrong-media-id",
+            },
+            {
+                "media_id": "episode_00000000_observation_images_cam_head",
+                "episode_index": 0,
+                "camera_id": "observation_images_cam_head",
+                "video_blob": b"right-media-id",
+            },
+        ]
+        videos = FakeSeekableBlobDataset(video_rows, list(video_rows[0].keys()), "video_blob")
+        fake_tables = {
+            "/datasets/v1/episodes.lance": FakeDataset(
+                episode_rows,
+                list(episode_rows[0].keys()),
+            ),
+            "/datasets/v1/frames.lance": FakeDataset([], ["episode_index"]),
+            "/datasets/v1/videos.lance": videos,
+        }
+        sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+
+        store = LanceDatasetStore()
+        record = store.open_dataset(DatasetOpenRequest(uri="/datasets/v1", name="v1"))
+        summary = store.get_summary(record.dataset_id)
+        blob = store.get_video_blob(record.dataset_id, 0, "cam_head")
+
+        self.assertIsNotNone(summary)
+        assert summary is not None
+        self.assertEqual(summary.camera_names, ["cam_head"])
+        self.assertEqual(blob, b"right-media-id")
+        self.assertEqual(videos.blob_take_count, 1)
+
     def test_video_blob_falls_back_to_videos_lance_shard_refs(self) -> None:
         episode_rows = [
             {

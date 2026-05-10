@@ -59,7 +59,7 @@ ACTION_COLUMNS = ("actions", "action")
 TIMESTAMP_COLUMNS = ("timestamps", "timestamp")
 FRAME_INDEX_COLUMNS = ("frame_index", "frame_idx", "index")
 FRAME_TIMESTAMP_COLUMNS = ("timestamp", "timestamps")
-VIDEO_CAMERA_COLUMNS = ("camera_angle", "camera", "camera_name", "video_key")
+VIDEO_CAMERA_COLUMNS = ("camera_id", "camera_angle", "camera", "camera_name", "video_key")
 VIDEO_BLOB_COLUMNS = ("video_blob", "blob", "mp4_blob", "video")
 VIDEO_CHUNK_COLUMNS = ("chunk_index", "chunk")
 VIDEO_FILE_COLUMNS = ("file_index", "file")
@@ -755,6 +755,77 @@ def _camera_matches(left: Any, right: str) -> bool:
     )
 
 
+def _display_camera_name(value: Any) -> str:
+    text = str(value or "").strip()
+    if text.startswith("observation.images."):
+        return text.removeprefix("observation.images.")
+    if text.startswith("observation_images_"):
+        return text.removeprefix("observation_images_")
+    return text
+
+
+def _video_modalities_from_manifest(manifest: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(manifest, dict):
+        return []
+    modalities = manifest.get("modalities")
+    if not isinstance(modalities, dict):
+        return []
+    out: list[dict[str, Any]] = []
+    for name, entry in modalities.items():
+        if not isinstance(entry, dict) or entry.get("kind") != "video":
+            continue
+        out.append({**entry, "_registry_name": name})
+    return out
+
+
+def _camera_names_from_manifest(manifest: dict[str, Any] | None) -> list[str]:
+    cameras: set[str] = set()
+    for entry in _video_modalities_from_manifest(manifest):
+        value = (
+            entry.get("camera_key")
+            or entry.get("camera_column")
+            or str(entry.get("_registry_name") or "").removeprefix("video.")
+        )
+        if value:
+            cameras.add(_display_camera_name(value))
+    return sorted(cameras)
+
+
+def _camera_names_from_segments(row: dict[str, Any]) -> list[str]:
+    cameras: set[str] = set()
+    segments = row.get("camera_segments")
+    if not isinstance(segments, list):
+        return []
+    for segment in segments:
+        if not isinstance(segment, dict):
+            continue
+        value = segment.get("camera_key") or segment.get("camera_column") or segment.get("camera_id")
+        if value:
+            cameras.add(_display_camera_name(value))
+    return sorted(cameras)
+
+
+def _camera_segment_media_id(row: dict[str, Any] | None, camera: str) -> str | None:
+    if not isinstance(row, dict):
+        return None
+    segments = row.get("camera_segments")
+    if not isinstance(segments, list):
+        return None
+    for segment in segments:
+        if not isinstance(segment, dict):
+            continue
+        candidates = (
+            segment.get("camera_key"),
+            segment.get("camera_column"),
+            segment.get("camera_id"),
+            segment.get("camera_name"),
+        )
+        if any(candidate is not None and _camera_matches(candidate, camera) for candidate in candidates):
+            media_id = segment.get("media_id")
+            return str(media_id) if media_id not in (None, "") else None
+    return None
+
+
 def _video_shard_ref(row: dict[str, Any], camera: str) -> tuple[int, int] | None:
     camera_keys = {
         camera,
@@ -1424,7 +1495,7 @@ class LanceMediaStore:
         )
         return sorted(
             {
-                str(row[camera_name])
+                _display_camera_name(row[camera_name])
                 for row in rows
                 if row.get(camera_name) not in (None, "")
             }
@@ -1454,17 +1525,22 @@ class LanceMediaStore:
             return None
         schema = bundle.schemas.get(table_name, [])
         camera_name = _first_present_name(schema, VIDEO_CAMERA_COLUMNS)
+        media_id_name = "media_id" if "media_id" in schema else None
         blob_name = _first_present_name(schema, VIDEO_BLOB_COLUMNS)
         path_name = _first_present_name(schema, VIDEO_PATH_COLUMNS)
-        if camera_name is None or (blob_name is None and path_name is None):
+        if camera_name is None and media_id_name is None:
+            return None
+        if blob_name is None and path_name is None:
             return None
 
         can_take_blobs = blob_name is not None and hasattr(media, "take_blobs")
         chunk_name = _first_present_name(schema, VIDEO_CHUNK_COLUMNS)
         file_name = _first_present_name(schema, VIDEO_FILE_COLUMNS)
+        segment_media_id = _camera_segment_media_id(episode_row, camera)
         columns = _unique_columns(
             schema,
             [
+                media_id_name,
                 "episode_index",
                 camera_name,
                 chunk_name,
@@ -1493,18 +1569,22 @@ class LanceMediaStore:
 
         shard_ref = _video_shard_ref(episode_row or {}, camera)
         for row in rows:
-            if not _camera_matches(row.get(camera_name), camera):
+            row_media_id = str(row.get(media_id_name)) if media_id_name and row.get(media_id_name) is not None else None
+            if segment_media_id is not None and row_media_id != segment_media_id:
                 continue
-            row_episode_index = _int_or_none(row.get("episode_index"))
-            if row_episode_index is not None and row_episode_index != episode_index:
-                continue
-            if row_episode_index is None and shard_ref is not None:
-                row_chunk = _int_or_none(row.get(chunk_name)) if chunk_name else None
-                row_file = _int_or_none(row.get(file_name)) if file_name else None
-                if row_chunk != shard_ref[0] or row_file != shard_ref[1]:
+            if segment_media_id is None:
+                if camera_name is None or not _camera_matches(row.get(camera_name), camera):
                     continue
-            elif row_episode_index is None:
-                continue
+                row_episode_index = _int_or_none(row.get("episode_index"))
+                if row_episode_index is not None and row_episode_index != episode_index:
+                    continue
+                if row_episode_index is None and shard_ref is not None:
+                    row_chunk = _int_or_none(row.get(chunk_name)) if chunk_name else None
+                    row_file = _int_or_none(row.get(file_name)) if file_name else None
+                    if row_chunk != shard_ref[0] or row_file != shard_ref[1]:
+                        continue
+                elif row_episode_index is None:
+                    continue
             if can_take_blobs and blob_name is not None:
                 source = self.owner._get_video_blob_source_by_offset(
                     media,
@@ -2736,16 +2816,19 @@ class LanceDatasetStore:
             "has_human_label": bool(row.get("has_human_label", False)),
             "split": row.get("train_val_test_split", row.get("split")),
             "fps": float(fps) if fps is not None else None,
-            "camera_names": _camera_names_with_video(row, schema_names),
+            "camera_names": _camera_names_from_segments(row) or _camera_names_with_video(row, schema_names),
             "duration_seconds": (length / float(fps)) if length is not None and fps else None,
             "language_instruction": row.get("language_instruction") or row.get("instruction"),
         }
 
     def _camera_names_for_bundle(self, bundle: LanceBundle) -> list[str]:
-        # Prefer episode-table cameras (per-camera *_video_blob columns are
-        # the canonical source). Only consult videos.lance when episodes.lance
-        # exposes nothing — some converters mis-populate `camera_angle` with a
-        # path component (e.g. "chunk-000") so unioning would pollute the list.
+        manifest_cameras = _camera_names_from_manifest(bundle.published_manifest)
+        if manifest_cameras:
+            return manifest_cameras
+
+        # Published v1.0 bundles keep video bytes only in videos.lance and
+        # expose per-episode media linkage through camera_segments. Older flat
+        # sessions used per-camera *_video_blob columns in episodes.lance.
         episode_cameras = set(self._camera_names_from_episode_rows(bundle))
         if episode_cameras:
             return sorted(episode_cameras)
@@ -2753,6 +2836,20 @@ class LanceDatasetStore:
 
     def _camera_names_from_episode_rows(self, bundle: LanceBundle) -> list[str]:
         schema = bundle.schemas["episodes"]
+        if "camera_segments" in schema:
+            episodes = bundle.tables["episodes"]
+            row_count = min(_count_rows(episodes), 100)
+            rows = _read_rows(
+                episodes,
+                columns=["episode_index", "camera_segments"],
+                limit=row_count,
+            )
+            cameras: set[str] = set()
+            for row in rows:
+                cameras.update(_camera_names_from_segments(row))
+            if cameras:
+                return sorted(cameras)
+
         blob_columns = [
             name for name in schema if _looks_like_video_blob_column(name)
         ]

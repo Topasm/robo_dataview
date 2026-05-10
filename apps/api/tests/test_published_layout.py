@@ -31,6 +31,18 @@ def _build_published_bundle(root: Path, *, dataset_id: str = "smoke-bg2-v1") -> 
             pa.field("length", pa.int64()),
             pa.field("timestamps", pa.list_(pa.float64())),
             pa.field("language_instruction", pa.string()),
+            pa.field(
+                "camera_segments",
+                pa.list_(
+                    pa.struct(
+                        [
+                            pa.field("camera_key", pa.string()),
+                            pa.field("camera_column", pa.string()),
+                            pa.field("media_id", pa.string()),
+                        ]
+                    )
+                ),
+            ),
         ]
     )
     rows = [
@@ -44,6 +56,13 @@ def _build_published_bundle(root: Path, *, dataset_id: str = "smoke-bg2-v1") -> 
             "length": 5,
             "timestamps": [j / 30.0 for j in range(5)],
             "language_instruction": "grasp the bolt",
+            "camera_segments": [
+                {
+                    "camera_key": "observation.images.cam_head",
+                    "camera_column": "observation_images_cam_head",
+                    "media_id": f"episode_{i:08d}_observation_images_cam_head",
+                }
+            ],
         }
         for i in range(3)
     ]
@@ -54,31 +73,39 @@ def _build_published_bundle(root: Path, *, dataset_id: str = "smoke-bg2-v1") -> 
     )
     videos_schema = pa.schema(
         [
+            pa.field("media_id", pa.string(), nullable=False),
             pa.field("episode_index", pa.int64(), nullable=False),
             pa.field("source_episode_index", pa.int64(), nullable=False),
             pa.field("source_session", pa.string(), nullable=False),
+            pa.field("camera_id", pa.string(), nullable=False),
             pa.field("camera_name", pa.string(), nullable=False),
-            pa.field(
-                "video_blob",
-                pa.large_binary(),
-                metadata={b"lance-encoding:blob": b"true"},
-            ),
+            lance.blob_field("video_blob"),
         ]
     )
     video_rows = [
         {
+            "media_id": f"episode_{i:08d}_observation_images_cam_head",
             "episode_index": i,
             "source_episode_index": i,
             "source_session": "session_20260101_120000_grasp",
-            "camera_name": "cam_head",
+            "camera_id": "observation_images_cam_head",
+            "camera_name": "observation.images.cam_head",
             "video_blob": f"video-{i}".encode("utf-8"),
         }
         for i in range(3)
     ]
+    video_arrays = []
+    for field in videos_schema:
+        values = [row.get(field.name) for row in video_rows]
+        if field.name == "video_blob":
+            video_arrays.append(lance.blob_array(values))
+        else:
+            video_arrays.append(pa.array(values, type=field.type))
     lance.write_dataset(
-        pa.Table.from_pylist(video_rows, schema=videos_schema),
+        pa.Table.from_arrays(video_arrays, schema=videos_schema),
         str(data_dir / "videos.lance"),
         mode="overwrite",
+        data_storage_version="2.2",
     )
 
     manifest = {
@@ -89,6 +116,14 @@ def _build_published_bundle(root: Path, *, dataset_id: str = "smoke-bg2-v1") -> 
         "tables": {
             "episodes": {"path": "data/episodes.lance", "exists": True},
             "videos": {"path": "data/videos.lance", "exists": True},
+        },
+        "modalities": {
+            "video.cam_head": {
+                "kind": "video",
+                "camera_key": "observation.images.cam_head",
+                "camera_column": "observation_images_cam_head",
+                "segment_column": "camera_segments",
+            }
         },
         "source_session_count": 2,
         "total_episodes": 3,
