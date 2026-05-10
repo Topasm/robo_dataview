@@ -220,8 +220,14 @@ class ExportStore:
         namespace = os.getenv("RLLAB_HF_NAMESPACE")
         if not namespace:
             return None
-        name = _hub_repo_name(f"{record.dataset_id}-curated-{record.export_id[:8]}")
-        return f"{namespace.rstrip('/')}/{name}"
+        # The HF dataset repo is keyed by dataset_id; each curated export becomes
+        # a new commit (and optionally a tag via RLLAB_HF_REVISION) on the same
+        # repo, not a separate <id>-curated-<hash> repo. Set
+        # RLLAB_HF_CURATED_REPO_PER_EXPORT=1 to fall back to the legacy naming.
+        if _truthy_env("RLLAB_HF_CURATED_REPO_PER_EXPORT"):
+            name = _hub_repo_name(f"{record.dataset_id}-curated-{record.export_id[:8]}")
+            return f"{namespace.rstrip('/')}/{name}"
+        return f"{namespace.rstrip('/')}/{_hub_repo_name(record.dataset_id)}"
 
     def _record_hub_upload(
         self,

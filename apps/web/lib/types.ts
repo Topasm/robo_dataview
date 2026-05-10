@@ -30,6 +30,11 @@ export type DatasetSummary = {
   reviewedCount: number;
   acceptedCount: number;
   rejectedCount: number;
+  storageLayout: "flat_session" | "published_hf";
+  primaryTrainingTable: string | null;
+  annotationStorage: "local_overlay";
+  sourceSessionCount: number | null;
+  datasetIdSource: "manifest" | "uri";
   message?: string | null;
 };
 

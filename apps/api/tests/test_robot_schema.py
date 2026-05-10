@@ -52,6 +52,7 @@ class RobotSchemaTest(unittest.TestCase):
                 "lock_expires_at",
                 "created_at",
                 "updated_at",
+                "applied_export_id",
             ],
         )
         non_nullable = {column.name for column in ANNOTATIONS_COLUMNS if not column.nullable}

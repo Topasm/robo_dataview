@@ -12,7 +12,12 @@ export const datasetSummary: DatasetSummary = {
   cameraInfo: null,
   reviewedCount: 2,
   acceptedCount: 2,
-  rejectedCount: 0
+  rejectedCount: 0,
+  storageLayout: "flat_session",
+  primaryTrainingTable: "episodes.lance",
+  annotationStorage: "local_overlay",
+  sourceSessionCount: null,
+  datasetIdSource: "uri"
 };
 
 export const episodes: Episode[] = [

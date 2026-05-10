@@ -63,6 +63,11 @@ type DatasetSummaryResponse = DatasetRecordResponse & {
   reviewed_count: number;
   accepted_count: number;
   rejected_count: number;
+  storage_layout?: "flat_session" | "published_hf";
+  primary_training_table?: string | null;
+  annotation_storage?: "local_overlay";
+  source_session_count?: number | null;
+  dataset_id_source?: "manifest" | "uri";
 };
 
 type DatasetTableHealthResponse = {
@@ -1168,6 +1173,11 @@ function toDatasetSummary(raw: DatasetSummaryResponse): DatasetSummary {
     reviewedCount: raw.reviewed_count,
     acceptedCount: raw.accepted_count,
     rejectedCount: raw.rejected_count,
+    storageLayout: raw.storage_layout ?? "flat_session",
+    primaryTrainingTable: raw.primary_training_table ?? null,
+    annotationStorage: raw.annotation_storage ?? "local_overlay",
+    sourceSessionCount: raw.source_session_count ?? null,
+    datasetIdSource: raw.dataset_id_source ?? "uri",
     message: raw.message
   };
 }

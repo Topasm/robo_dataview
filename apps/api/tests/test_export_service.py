@@ -461,7 +461,7 @@ class ExportServiceTest(unittest.TestCase):
         annotation_store.delete(accepted.annotation_id)
         annotation_store.delete(rejected.annotation_id)
 
-    def test_upload_lance_export_to_hub_uses_curated_artifact_root(self) -> None:
+    def test_upload_lance_export_to_hub_uses_dataset_repo_and_curated_artifact_root(self) -> None:
         fake_pyarrow = _fake_pyarrow_module()
         fake_lance, _written_paths = _fake_lance_module()
         fake_hub, upload_calls = _fake_huggingface_hub_module()
@@ -484,7 +484,7 @@ class ExportServiceTest(unittest.TestCase):
         ):
             response = exports.upload_to_hub(record.export_id, ExportHubUploadRequest())
 
-        expected_repo_id = f"rllab-postech/sample-xvla-soft-fold-curated-{record.export_id[:8]}"
+        expected_repo_id = "rllab-postech/sample-xvla-soft-fold"
         self.assertEqual(response.repo_id, expected_repo_id)
         self.assertEqual(upload_calls["create_repo"][0]["repo_id"], response.repo_id)
         self.assertEqual(upload_calls["create_repo"][0]["private"], True)

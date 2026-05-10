@@ -36,6 +36,43 @@ class DatasetSummary(BaseModel):
     reviewed_count: int = 0
     accepted_count: int = 0
     rejected_count: int = 0
+    storage_layout: str = Field(
+        default="flat_session",
+        description=(
+            "Either 'flat_session' (raw rllab session bundle with tables at the "
+            "root) or 'published_hf' (HF-style root with manifest.json at the top "
+            "and tables under data/)."
+        ),
+    )
+    primary_training_table: str | None = Field(
+        default=None,
+        description=(
+            "Manifest-declared primary training table (e.g. data/train_skill_clips.lance). "
+            "Resolved relative to the bundle root; null when the manifest does not "
+            "specify one."
+        ),
+    )
+    annotation_storage: str = Field(
+        default="local_overlay",
+        description=(
+            "Where the viewer writes review/annotation state. Always 'local_overlay' — "
+            "HF/published bundles are treated as immutable source tables."
+        ),
+    )
+    source_session_count: int | None = Field(
+        default=None,
+        description=(
+            "Number of source raw sessions that were merged to produce this published "
+            "bundle. Null when the dataset is a single flat session."
+        ),
+    )
+    dataset_id_source: str = Field(
+        default="uri",
+        description=(
+            "'manifest' when dataset_id was adopted from manifest.json (published "
+            "bundles), 'uri' when derived from the open URI slug."
+        ),
+    )
     message: str | None = None
 
 

@@ -124,6 +124,20 @@ def _table_uri(base_uri: str, table_name: str) -> str:
     return _join_uri(base_uri, f"{table_name}.lance")
 
 
+def _table_base_uri_candidates(base_uri: str) -> list[str]:
+    """Probe both legacy flat bundles and HF-style bundles.
+
+    Existing RLLAB collection sessions keep tables at the bundle root:
+    ``episodes.lance``, ``frames.lance``. Published/HF bundles keep the same
+    tables under ``data/``. The first candidate whose ``episodes`` table opens
+    becomes the base for all optional table lookups.
+    """
+
+    if base_uri.rstrip("/").endswith(".lance"):
+        return [base_uri]
+    return [base_uri, _join_uri(base_uri, "data")]
+
+
 def _normalize_camera_name(value: str) -> str:
     return re.sub(r"[^0-9A-Za-z_]", "_", value)
 
@@ -264,25 +278,44 @@ def _joint_names_from_info(
     return None, None
 
 
+PUBLISHED_LANCE_FORMAT = "rllab_published_lance_dataset_v1"
+
+
+def _read_manifest(uri: str | None) -> dict[str, Any] | None:
+    if not uri:
+        return None
+    candidate = _join_uri(uri.rstrip("/"), "manifest.json")
+    try:
+        text = _fetch_text_uri(candidate)
+    except Exception:
+        return None
+    if text is None:
+        return None
+    try:
+        manifest = json.loads(text)
+    except (ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(manifest, dict):
+        return None
+    return manifest
+
+
+def _read_published_manifest(uri: str) -> dict[str, Any] | None:
+    """Return manifest.json only when it carries the published Lance marker."""
+
+    manifest = _read_manifest(uri)
+    if manifest is None or manifest.get("format") != PUBLISHED_LANCE_FORMAT:
+        return None
+    return manifest
+
+
 def _joint_names_from_manifest(
     uri: str | None,
 ) -> tuple[list[str] | None, list[str] | None]:
     """rllab raw collection manifest.json carries joint_order. The same list
     applies to both state and action since collection enforces matching DoF."""
-    if not uri:
-        return None, None
-    candidate = _join_uri(uri.rstrip("/"), "manifest.json")
-    try:
-        text = _fetch_text_uri(candidate)
-    except Exception:
-        return None, None
-    if text is None:
-        return None, None
-    try:
-        manifest = json.loads(text)
-    except (ValueError, json.JSONDecodeError):
-        return None, None
-    if not isinstance(manifest, dict):
+    manifest = _read_manifest(uri)
+    if manifest is None:
         return None, None
     joint_order = manifest.get("joint_order")
     if isinstance(joint_order, list) and joint_order:
@@ -1166,6 +1199,8 @@ class LanceBundle:
     tables: dict[str, Any]
     schemas: dict[str, list[str]]
     camera_info: dict[str, dict[str, Any]] | None = None
+    published_layout: bool = False
+    published_manifest: dict[str, Any] | None = None
 
 
 @dataclass
@@ -1683,12 +1718,32 @@ class LanceDatasetStore:
                 self._persist_dataset_registry()
             return record
 
+        # Published bundles carry the canonical dataset_id inside manifest.json;
+        # adopt it so annotation overlays (keyed by dataset_id) follow the
+        # bundle across HF clones / local copies regardless of the URI slug.
+        if (
+            bundle.published_layout
+            and payload.name is None
+            and isinstance(bundle.published_manifest, dict)
+        ):
+            manifest_dataset_id = bundle.published_manifest.get("dataset_id")
+            if isinstance(manifest_dataset_id, str) and manifest_dataset_id.strip():
+                canonical = _slug(manifest_dataset_id.strip())
+                if canonical and canonical != dataset_id:
+                    dataset_id = canonical
+                    name = manifest_dataset_id.strip()
+
         record = DatasetRecord(
             dataset_id=dataset_id,
             name=name,
             uri=payload.uri,
             status="indexed",
-            message="Lance dataset indexed.",
+            message=(
+                "Published/HF Lance data/ layout indexed. Annotation edits are stored "
+                "as a local overlay; source tables are not modified."
+                if bundle.published_layout
+                else "Lance dataset indexed."
+            ),
         )
         self._datasets[dataset_id] = record
         self._bundles[dataset_id] = bundle
@@ -2189,7 +2244,7 @@ class LanceDatasetStore:
         # Lance tables take precedence: a converted bundle copies the source
         # info.json for camera_info discovery, which would otherwise misroute
         # this dataset to the metadata-only LeRobot snapshot path.
-        if (path / "episodes.lance").exists():
+        if (path / "episodes.lance").exists() or (path / "data" / "episodes.lance").exists():
             return None
         return read_lerobot_snapshot_episodes(path, dataset_id=dataset_id)
 
@@ -2203,20 +2258,40 @@ class LanceDatasetStore:
             ) from exc
 
         tables: dict[str, Any] = {}
-        for table_name in TABLE_NAMES:
-            candidate_uri = _table_uri(uri, table_name)
+        table_base_uri: str | None = None
+        episode_errors: list[Exception] = []
+        for candidate_base_uri in _table_base_uri_candidates(uri):
             try:
-                tables[table_name] = lance.dataset(candidate_uri)
+                tables["episodes"] = lance.dataset(_table_uri(candidate_base_uri, "episodes"))
+                table_base_uri = candidate_base_uri
+                break
+            except Exception as exc:
+                episode_errors.append(exc)
+        if table_base_uri is None:
+            if uri.rstrip("/").endswith(".lance"):
+                tables["episodes"] = lance.dataset(uri)
+                table_base_uri = uri
+            elif episode_errors:
+                raise episode_errors[-1]
+            else:
+                raise FileNotFoundError(f"Missing episodes.lance under {uri}")
+
+        for table_name in TABLE_NAMES:
+            if table_name == "episodes":
+                continue
+            try:
+                tables[table_name] = lance.dataset(_table_uri(table_base_uri, table_name))
             except Exception:
-                if table_name == "episodes" and uri.rstrip("/").endswith(".lance"):
-                    tables[table_name] = lance.dataset(uri)
-                elif table_name == "episodes":
-                    raise
+                pass
+        published_layout = table_base_uri.rstrip("/") != uri.rstrip("/")
+        published_manifest = _read_published_manifest(uri) if published_layout else None
         return LanceBundle(
-            base_uri=uri,
+            base_uri=table_base_uri,
             tables=tables,
             schemas={name: _schema_names(dataset) for name, dataset in tables.items()},
             camera_info=_load_lerobot_camera_info(uri),
+            published_layout=published_layout,
+            published_manifest=published_manifest,
         )
 
     def _table_health(self, bundle: LanceBundle) -> list[DatasetTableHealth]:
@@ -2235,6 +2310,26 @@ class LanceDatasetStore:
                 episode.length or 0
                 for episode in self._all_episode_items(record.dataset_id)
             )
+
+        manifest = bundle.published_manifest if isinstance(bundle.published_manifest, dict) else None
+        primary_training_table: str | None = None
+        source_session_count: int | None = None
+        dataset_id_source = "uri"
+        if manifest is not None:
+            primary = manifest.get("primary_training_table")
+            if isinstance(primary, str) and primary.strip():
+                primary_training_table = primary.strip()
+            count = manifest.get("source_session_count")
+            if isinstance(count, int):
+                source_session_count = count
+            manifest_id = manifest.get("dataset_id")
+            if (
+                isinstance(manifest_id, str)
+                and manifest_id.strip()
+                and _slug(manifest_id.strip()) == record.dataset_id
+            ):
+                dataset_id_source = "manifest"
+
         return DatasetSummary(
             dataset_id=record.dataset_id,
             name=record.name,
@@ -2248,6 +2343,11 @@ class LanceDatasetStore:
             reviewed_count=0,
             accepted_count=0,
             rejected_count=0,
+            storage_layout="published_hf" if bundle.published_layout else "flat_session",
+            primary_training_table=primary_training_table,
+            annotation_storage="local_overlay",
+            source_session_count=source_session_count,
+            dataset_id_source=dataset_id_source,
             message=record.message,
         )
 
