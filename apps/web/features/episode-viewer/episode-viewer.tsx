@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 
 import { episodePreviewUrl, episodeVideoUrl, fetchEpisodeTimeseries } from "@/lib/api";
-import type { Episode, EpisodeTimeseries, SegmentAnnotation } from "@/lib/types";
+import type { Episode, EpisodeTimeseries, SegmentAnnotation, TaskSegment } from "@/lib/types";
 import { HUMANOID_SIGNAL_PRESETS, type SignalPreset } from "./signal-presets";
 
 type EpisodeViewerProps = {
@@ -75,6 +75,18 @@ export function EpisodeViewer({
   );
   const [activePreset, setActivePreset] = useState<string>("overview");
   const [enlargedCamera, setEnlargedCamera] = useState<string | null>(null);
+  const taskSegments = useMemo(
+    () => normalizeTaskSegments(episode.taskSegments ?? [], frameCount),
+    [episode.taskSegments, frameCount]
+  );
+  const activeTaskSegment = useMemo(
+    () =>
+      taskSegments.find(
+        (segment) =>
+          currentFrame >= segment.startFrame && currentFrame < segment.endFrameExclusive
+      ) ?? null,
+    [currentFrame, taskSegments]
+  );
 
   // Esc to close per-camera enlarge overlay (without triggering native
   // requestFullscreen exit). Only attached when something is enlarged.
@@ -295,6 +307,12 @@ export function EpisodeViewer({
       <div className="viewer-toolbar">
         <div className="muted viewer-meta">
           {frameCount} frames · {fps} FPS
+          {activeTaskSegment ? (
+            <>
+              {" · "}
+              {taskSegmentLabel(activeTaskSegment)}
+            </>
+          ) : null}
         </div>
         <div className="toolbar-actions">
           {onToggleSignals ? (
@@ -455,6 +473,15 @@ export function EpisodeViewer({
         </span>
       </section>
 
+      {taskSegments.length > 0 ? (
+        <TaskSegmentStrip
+          activeFrame={currentFrame}
+          frameCount={frameCount}
+          onSelectFrame={setFrame}
+          segments={taskSegments}
+        />
+      ) : null}
+
       {showSignals ? (
         <section className="state-action-panel">
           <div className="frame-quick-labels" style={{ marginBottom: "8px" }}>
@@ -522,6 +549,46 @@ export function EpisodeViewer({
         </section>
       ) : null}
     </main>
+  );
+}
+
+function TaskSegmentStrip({
+  activeFrame,
+  frameCount,
+  onSelectFrame,
+  segments
+}: {
+  activeFrame: number;
+  frameCount: number;
+  onSelectFrame: (frame: number) => void;
+  segments: TaskSegment[];
+}) {
+  const denominator = Math.max(1, frameCount);
+  return (
+    <section className="task-segment-strip" aria-label="Task segments">
+      {segments.map((segment, index) => {
+        const start = Math.max(0, Math.min(frameCount, segment.startFrame));
+        const end = Math.max(start + 1, Math.min(frameCount, segment.endFrameExclusive));
+        const isActive = activeFrame >= start && activeFrame < end;
+        const left = (start / denominator) * 100;
+        const width = Math.max(0.75, ((end - start) / denominator) * 100);
+        return (
+          <button
+            className={`task-segment-chip${isActive ? " active" : ""}`}
+            key={`${segment.taskIndex ?? "task"}-${start}-${end}-${index}`}
+            onClick={() => onSelectFrame(start)}
+            style={{ left: `${left}%`, width: `${width}%` }}
+            title={`${taskSegmentLabel(segment)} · f${start}-${end}`}
+            type="button"
+          >
+            <span>{taskSegmentLabel(segment)}</span>
+            <small className="mono">
+              [{start},{end})
+            </small>
+          </button>
+        );
+      })}
+    </section>
   );
 }
 
@@ -1130,6 +1197,35 @@ function normalizePoints(
     })
     .join(" ");
   return { polyline, min, max };
+}
+
+function normalizeTaskSegments(segments: TaskSegment[], frameCount: number): TaskSegment[] {
+  if (!segments || frameCount <= 0) {
+    return [];
+  }
+  return segments
+    .map((segment) => {
+      const startFrame = Math.max(0, Math.min(frameCount - 1, Math.floor(segment.startFrame)));
+      const endFrameExclusive = Math.max(
+        startFrame + 1,
+        Math.min(frameCount, Math.ceil(segment.endFrameExclusive))
+      );
+      return {
+        ...segment,
+        startFrame,
+        endFrameExclusive
+      };
+    })
+    .filter((segment) => segment.endFrameExclusive > segment.startFrame)
+    .sort((a, b) => a.startFrame - b.startFrame);
+}
+
+function taskSegmentLabel(segment: TaskSegment): string {
+  const text = segment.languageInstruction?.trim();
+  if (text) {
+    return text;
+  }
+  return segment.taskIndex === null ? "task" : `task ${segment.taskIndex}`;
 }
 
 function formatTime(seconds: number) {

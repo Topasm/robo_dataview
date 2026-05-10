@@ -17,6 +17,15 @@ from apps.api.schemas.common import ReviewStatus
 _ALLOWED_DISPOSITIONS = {"kept", "deleted", "flagged"}
 
 
+class TaskSegment(BaseModel):
+    task_index: int | None = None
+    language_instruction: str | None = None
+    start_frame: int
+    end_frame_exclusive: int
+    start_timestamp: float | None = None
+    end_timestamp_exclusive: float | None = None
+
+
 class EpisodeListItem(BaseModel):
     dataset_id: str
     episode_index: int
@@ -38,6 +47,7 @@ class EpisodeListItem(BaseModel):
     disposition_reason: str | None = None
     disposition_updated_at: datetime | None = None
     dirty_annotation_count: int = 0
+    task_segments: list[TaskSegment] = Field(default_factory=list)
 
 
 class EpisodeListPage(BaseModel):

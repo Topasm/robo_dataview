@@ -824,7 +824,7 @@ class LanceDatasetStoreTest(unittest.TestCase):
         self.assertEqual(source.read_all(), b"seekable-videos-table")
         self.assertEqual(videos.blob_take_count, 1)
 
-    def test_v1_camera_segments_resolve_video_by_stable_media_id(self) -> None:
+    def test_v2_camera_segments_resolve_video_by_stable_media_id(self) -> None:
         episode_rows = [
             {
                 "episode_index": 0,
@@ -836,6 +836,16 @@ class LanceDatasetStoreTest(unittest.TestCase):
                         "camera_key": "observation.images.cam_head",
                         "camera_column": "observation_images_cam_head",
                         "media_id": "episode_00000000_observation_images_cam_head",
+                    }
+                ],
+                "task_segments": [
+                    {
+                        "task_index": 3,
+                        "language_instruction": "Fold the cloth.",
+                        "start_frame": 0,
+                        "end_frame_exclusive": 1,
+                        "start_timestamp": 0.0,
+                        "end_timestamp_exclusive": 0.05,
                     }
                 ],
             },
@@ -855,24 +865,71 @@ class LanceDatasetStoreTest(unittest.TestCase):
             },
         ]
         videos = FakeSeekableBlobDataset(video_rows, list(video_rows[0].keys()), "video_blob")
-        fake_tables = {
-            "/datasets/v1/episodes.lance": FakeDataset(
-                episode_rows,
-                list(episode_rows[0].keys()),
-            ),
-            "/datasets/v1/frames.lance": FakeDataset([], ["episode_index"]),
-            "/datasets/v1/videos.lance": videos,
-        }
-        sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
+        with tempfile.TemporaryDirectory() as tmp:
+            dataset_root = Path(tmp) / "v2"
+            dataset_root.mkdir()
+            (dataset_root / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "format": "rllab_published_lance_dataset_v2",
+                        "schema_version": "2.0",
+                        "dataset_id": "v2",
+                        "tables": {
+                            "episodes": "data/episodes.lance",
+                            "frames": "data/frames.lance",
+                            "videos": "data/videos.lance",
+                        },
+                        "modalities": {
+                            "state.body": {
+                                "kind": "state",
+                                "column": "observation_state",
+                                "frame_column": "observation_state",
+                                "shape": [2],
+                            },
+                            "video.cam_head": {
+                                "kind": "video",
+                                "camera_key": "observation.images.cam_head",
+                                "camera_column": "observation_images_cam_head",
+                            },
+                        },
+                        "actions": {
+                            "action.body": {
+                                "kind": "action",
+                                "column": "actions",
+                                "frame_column": "action",
+                                "shape": [2],
+                            }
+                        },
+                        "counts": {"episodes": 1, "frames": 1, "videos": 2},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            data_root = dataset_root / "data"
+            fake_tables = {
+                str(data_root / "episodes.lance"): FakeDataset(
+                    episode_rows,
+                    list(episode_rows[0].keys()),
+                ),
+                str(data_root / "frames.lance"): FakeDataset([], ["episode_index"]),
+                str(data_root / "videos.lance"): videos,
+            }
+            sys.modules["lance"] = types.SimpleNamespace(dataset=lambda uri: fake_tables[uri])
 
-        store = LanceDatasetStore()
-        record = store.open_dataset(DatasetOpenRequest(uri="/datasets/v1", name="v1"))
-        summary = store.get_summary(record.dataset_id)
-        blob = store.get_video_blob(record.dataset_id, 0, "cam_head")
+            store = LanceDatasetStore()
+            record = store.open_dataset(DatasetOpenRequest(uri=str(dataset_root), name="v2"))
+            summary = store.get_summary(record.dataset_id)
+            detail = store.get_episode(record.dataset_id, 0)
+            blob = store.get_video_blob(record.dataset_id, 0, "cam_head")
 
         self.assertIsNotNone(summary)
         assert summary is not None
+        self.assertIsNotNone(detail)
+        assert detail is not None
         self.assertEqual(summary.camera_names, ["cam_head"])
+        self.assertEqual(len(detail.task_segments), 1)
+        self.assertEqual(detail.task_segments[0].start_frame, 0)
+        self.assertEqual(detail.task_segments[0].end_frame_exclusive, 1)
         self.assertEqual(blob, b"right-media-id")
         self.assertEqual(videos.blob_take_count, 1)
 

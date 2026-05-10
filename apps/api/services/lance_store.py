@@ -47,12 +47,7 @@ DATASET_REGISTRY_PATH = Path("data/lance/dataset_registry.jsonl")
 TABLE_NAMES = (
     "episodes",
     "frames",
-    "media",
-    "train_episodes",
     "videos",
-    "cameras",
-    "tasks",
-    "splits",
 )
 STATE_COLUMNS = ("observation_state", "observation.state", "state")
 ACTION_COLUMNS = ("actions", "action")
@@ -278,7 +273,7 @@ def _joint_names_from_info(
     return None, None
 
 
-PUBLISHED_LANCE_FORMAT = "rllab_published_lance_dataset_v1"
+PUBLISHED_LANCE_FORMAT = "rllab_published_lance_dataset_v2"
 
 
 def _read_manifest(uri: str | None) -> dict[str, Any] | None:
@@ -306,7 +301,58 @@ def _read_published_manifest(uri: str) -> dict[str, Any] | None:
     manifest = _read_manifest(uri)
     if manifest is None or manifest.get("format") != PUBLISHED_LANCE_FORMAT:
         return None
+    schema_version = str(manifest.get("schema_version", ""))
+    if not schema_version.startswith("2."):
+        return None
     return manifest
+
+
+def _manifest_table_path(manifest: dict[str, Any], logical_name: str) -> str | None:
+    tables = manifest.get("tables")
+    if not isinstance(tables, dict):
+        return None
+    entry = tables.get(logical_name)
+    if isinstance(entry, str) and entry:
+        return entry
+    if isinstance(entry, dict):
+        path = entry.get("path")
+        if isinstance(path, str) and path:
+            return path
+    return None
+
+
+def _manifest_registry_entry(
+    manifest: dict[str, Any] | None,
+    registry_name: str,
+    key: str,
+) -> str | None:
+    if not isinstance(manifest, dict):
+        return None
+    registry = manifest.get("modalities") if registry_name == "modalities" else manifest.get("actions")
+    if not isinstance(registry, dict):
+        return None
+    entry_name = "state.body" if registry_name == "modalities" else "action.body"
+    entry = registry.get(entry_name)
+    if not isinstance(entry, dict):
+        return None
+    value = entry.get(key)
+    return str(value) if isinstance(value, str) and value else None
+
+
+def _bundle_state_column(bundle: "LanceBundle") -> str | None:
+    return _manifest_registry_entry(bundle.published_manifest, "modalities", "column")
+
+
+def _bundle_action_column(bundle: "LanceBundle") -> str | None:
+    return _manifest_registry_entry(bundle.published_manifest, "actions", "column")
+
+
+def _bundle_frame_state_column(bundle: "LanceBundle") -> str | None:
+    return _manifest_registry_entry(bundle.published_manifest, "modalities", "frame_column")
+
+
+def _bundle_frame_action_column(bundle: "LanceBundle") -> str | None:
+    return _manifest_registry_entry(bundle.published_manifest, "actions", "frame_column")
 
 
 def _joint_names_from_manifest(
@@ -1119,6 +1165,40 @@ def _metadata_columns(schema_names: list[str], include_arrays: bool = False) -> 
     return columns
 
 
+def _task_segments_from_row(row: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_segments = row.get("task_segments")
+    if not isinstance(raw_segments, list):
+        return []
+    segments: list[dict[str, Any]] = []
+    for raw in raw_segments:
+        if not isinstance(raw, dict):
+            continue
+        start_frame = _int_or_none(raw.get("start_frame"))
+        end_frame_exclusive = _int_or_none(raw.get("end_frame_exclusive"))
+        if start_frame is None:
+            continue
+        if end_frame_exclusive is None:
+            legacy_end = _int_or_none(raw.get("end_frame"))
+            if legacy_end is None:
+                continue
+            end_frame_exclusive = legacy_end + 1
+        if end_frame_exclusive <= start_frame:
+            continue
+        segments.append(
+            {
+                "task_index": _int_or_none(raw.get("task_index")),
+                "language_instruction": raw.get("language_instruction"),
+                "start_frame": start_frame,
+                "end_frame_exclusive": end_frame_exclusive,
+                "start_timestamp": _number_or_none(raw.get("start_timestamp")),
+                "end_timestamp_exclusive": _number_or_none(
+                    raw.get("end_timestamp_exclusive", raw.get("end_timestamp"))
+                ),
+            }
+        )
+    return segments
+
+
 def _parse_filter_query(query: str) -> list[tuple[str, str, Any]]:
     clauses = [clause.strip() for clause in re.split(r"\s+AND\s+", query, flags=re.IGNORECASE)]
     filters: list[tuple[str, str, Any]] = []
@@ -1203,6 +1283,17 @@ def _lance_literal(value: Any) -> str | None:
     if isinstance(value, str):
         return "'" + value.replace("'", "''") + "'"
     return None
+
+
+def _matches_simple_lance_filter(row: dict[str, Any], filter: str | None) -> bool:
+    if not filter:
+        return True
+    match = re.match(r"^\s*([A-Za-z_][\w.]*)\s*=\s*(.+?)\s*$", filter)
+    if match is None:
+        return True
+    field, raw_expected = match.groups()
+    expected = _parse_filter_value(raw_expected)
+    return row.get(field) == expected
 
 
 def _matches_filter(
@@ -1423,14 +1514,9 @@ class LanceHealthService:
 
     def table_health(self, bundle: "LanceBundle") -> list[DatasetTableHealth]:
         required = {
-            "episodes": ["episode_index"],
+            "episodes": ["episode_index", "camera_segments"],
             "frames": ["episode_index", "frame_index"],
-            "media": [],
-            "train_episodes": [],
-            "videos": [],
-            "cameras": [],
-            "tasks": [],
-            "splits": [],
+            "videos": ["media_id", "video_blob"],
         }
         health: list[DatasetTableHealth] = []
         for table_name in TABLE_NAMES:
@@ -1440,23 +1526,15 @@ class LanceHealthService:
                 column for column in required.get(table_name, []) if column not in columns
             ]
             table_warnings: list[str] = []
-            if dataset is not None and table_name in {"episodes", "train_episodes"}:
-                has_state = _first_present_name(columns, STATE_COLUMNS) is not None
-                has_action = _first_present_name(columns, ACTION_COLUMNS) is not None
-                has_video = any(_looks_like_video_blob_column(column) for column in columns)
+            if dataset is not None and table_name == "episodes":
+                state_name = _bundle_state_column(bundle)
+                action_name = _bundle_action_column(bundle)
+                has_state = state_name in columns if state_name else False
+                has_action = action_name in columns if action_name else False
                 if not has_state:
-                    table_warnings.append("no episode-level state array column")
+                    table_warnings.append("registry state column missing from episodes table")
                 if not has_action:
-                    table_warnings.append("no episode-level action array column")
-                if not has_video:
-                    table_warnings.append("no episode-level video blob columns")
-            if table_name in {"media", "videos"}:
-                has_media_ref = (
-                    _first_present_name(columns, VIDEO_BLOB_COLUMNS) is not None
-                    or _first_present_name(columns, VIDEO_PATH_COLUMNS) is not None
-                )
-                if dataset is not None and not has_media_ref:
-                    table_warnings.append("no media blob/path column detected")
+                    table_warnings.append("registry action column missing from episodes table")
             health.append(
                 DatasetTableHealth(
                     table=table_name,
@@ -1475,8 +1553,6 @@ class LanceMediaStore:
         self.owner = owner
 
     def media_table(self, bundle: "LanceBundle") -> tuple[str, Any | None]:
-        if "media" in bundle.tables:
-            return "media", bundle.tables["media"]
         return "videos", bundle.tables.get("videos")
 
     def camera_names_from_media_table(self, bundle: "LanceBundle") -> list[str]:
@@ -1524,81 +1600,33 @@ class LanceMediaStore:
         if media is None or _count_rows(media) == 0:
             return None
         schema = bundle.schemas.get(table_name, [])
-        camera_name = _first_present_name(schema, VIDEO_CAMERA_COLUMNS)
         media_id_name = "media_id" if "media_id" in schema else None
         blob_name = _first_present_name(schema, VIDEO_BLOB_COLUMNS)
-        path_name = _first_present_name(schema, VIDEO_PATH_COLUMNS)
-        if camera_name is None and media_id_name is None:
-            return None
-        if blob_name is None and path_name is None:
+        if media_id_name is None or blob_name is None:
             return None
 
-        can_take_blobs = blob_name is not None and hasattr(media, "take_blobs")
-        chunk_name = _first_present_name(schema, VIDEO_CHUNK_COLUMNS)
-        file_name = _first_present_name(schema, VIDEO_FILE_COLUMNS)
         segment_media_id = _camera_segment_media_id(episode_row, camera)
-        columns = _unique_columns(
-            schema,
-            [
-                media_id_name,
-                "episode_index",
-                camera_name,
-                chunk_name,
-                file_name,
-                path_name,
-                None if can_take_blobs else blob_name,
-            ],
-        )
-        if "episode_index" in schema:
-            rows = self.owner._read_video_rows(
-                media,
-                schema,
-                columns=columns,
-                filter=f"episode_index = {episode_index}",
-                limit=_count_rows(media),
-                include_offsets=can_take_blobs,
-            )
-        else:
-            rows = self.owner._read_video_rows(
-                media,
-                schema,
-                columns=columns,
-                limit=_count_rows(media),
-                include_offsets=can_take_blobs,
-            )
+        if not segment_media_id:
+            return None
 
-        shard_ref = _video_shard_ref(episode_row or {}, camera)
+        rows = self.owner._read_video_rows(
+            media,
+            schema,
+            columns=[media_id_name],
+            filter=f"media_id = {_lance_literal(segment_media_id)}",
+            limit=1,
+            include_offsets=True,
+        )
         for row in rows:
-            row_media_id = str(row.get(media_id_name)) if media_id_name and row.get(media_id_name) is not None else None
-            if segment_media_id is not None and row_media_id != segment_media_id:
+            if str(row.get(media_id_name)) != segment_media_id:
                 continue
-            if segment_media_id is None:
-                if camera_name is None or not _camera_matches(row.get(camera_name), camera):
-                    continue
-                row_episode_index = _int_or_none(row.get("episode_index"))
-                if row_episode_index is not None and row_episode_index != episode_index:
-                    continue
-                if row_episode_index is None and shard_ref is not None:
-                    row_chunk = _int_or_none(row.get(chunk_name)) if chunk_name else None
-                    row_file = _int_or_none(row.get(file_name)) if file_name else None
-                    if row_chunk != shard_ref[0] or row_file != shard_ref[1]:
-                        continue
-                elif row_episode_index is None:
-                    continue
-            if can_take_blobs and blob_name is not None:
-                source = self.owner._get_video_blob_source_by_offset(
-                    media,
-                    blob_name,
-                    _int_or_none(row.get("__row_offset")),
-                )
-                if source is not None:
-                    return source
-            blob = _blob_to_bytes(row.get(blob_name))
-            if blob is not None:
-                return VideoSource(size=len(blob), data=blob)
-            file_source = _video_file_source_from_row(bundle.base_uri, row, path_name)
-            if file_source is not None:
-                return file_source
+            source = self.owner._get_video_blob_source_by_offset(
+                media,
+                blob_name,
+                _int_or_none(row.get("__row_offset")),
+            )
+            if source is not None:
+                return source
         return None
 
 
@@ -1606,10 +1634,10 @@ class LanceDatasetStore:
     """Thin service boundary for Lance-backed dataset access.
 
     Lance itself is an optional dependency. When it is installed this service
-    indexes canonical `episodes.lance`, `frames.lance`, and `media.lance`
-    tables from a dataset root URI, with `videos.lance` kept as a compatibility
-    media alias. A small sample fixture stays available for local UI
-    development.
+    indexes RLLAB Lance v2 `data/episodes.lance`, `data/frames.lance`, and
+    `data/videos.lance` tables from a dataset root URI. v1/flat Lance bundles
+    must be re-converted before opening. A small sample fixture stays available
+    for local UI development.
     """
 
     def __init__(
@@ -2065,35 +2093,12 @@ class LanceDatasetStore:
         if bundle is None:
             return None
         schema = bundle.schemas["episodes"]
-        column = _video_column_for_camera(schema, camera)
-        dataset = bundle.tables["episodes"]
-
         episode_row = self._read_lance_episode_row_by_index(
             dataset_id,
             bundle,
             episode_index,
             columns=_metadata_columns(schema, include_arrays=False),
         )
-        if column is not None and hasattr(dataset, "take_blobs"):
-            source = self._get_episode_blob_source_by_offset(
-                dataset,
-                column,
-                self._episode_row_offset(dataset_id, bundle, episode_index),
-            )
-            if source is not None:
-                return source
-
-        if column is not None:
-            row = self._read_lance_episode_row_by_index(
-                dataset_id,
-                bundle,
-                episode_index,
-                columns=["episode_index", column],
-            )
-            if row is not None:
-                blob = _blob_to_bytes(row.get(column))
-                if blob:
-                    return VideoSource(size=len(blob), data=blob)
         return self._get_video_source_from_videos_table(bundle, episode_row, episode_index, camera)
 
     def get_episode_timeseries(
@@ -2337,40 +2342,40 @@ class LanceDatasetStore:
                 "before opening real .lance datasets."
             ) from exc
 
-        tables: dict[str, Any] = {}
-        table_base_uri: str | None = None
-        episode_errors: list[Exception] = []
-        for candidate_base_uri in _table_base_uri_candidates(uri):
-            try:
-                tables["episodes"] = lance.dataset(_table_uri(candidate_base_uri, "episodes"))
-                table_base_uri = candidate_base_uri
-                break
-            except Exception as exc:
-                episode_errors.append(exc)
-        if table_base_uri is None:
-            if uri.rstrip("/").endswith(".lance"):
-                tables["episodes"] = lance.dataset(uri)
-                table_base_uri = uri
-            elif episode_errors:
-                raise episode_errors[-1]
-            else:
-                raise FileNotFoundError(f"Missing episodes.lance under {uri}")
+        published_manifest = _read_published_manifest(uri)
+        if published_manifest is None:
+            manifest = _read_manifest(uri)
+            if isinstance(manifest, dict):
+                fmt = manifest.get("format")
+                version = manifest.get("schema_version")
+                raise ValueError(
+                    "Unsupported Lance bundle manifest "
+                    f"format={fmt!r}, schema_version={version!r}; "
+                    f"robo_dataview expects {PUBLISHED_LANCE_FORMAT} v2.x"
+                )
+            raise ValueError(
+                "RLLAB Lance v2 manifest.json is required; reconvert this dataset "
+                "with the v2 lerobot2lance converter."
+            )
 
-        for table_name in TABLE_NAMES:
-            if table_name == "episodes":
+        tables: dict[str, Any] = {}
+        for table_name in ("episodes", "frames", "videos"):
+            table_path = _manifest_table_path(published_manifest, table_name)
+            if table_path is None:
+                if table_name == "episodes":
+                    raise FileNotFoundError("v2 manifest is missing tables.episodes")
                 continue
             try:
-                tables[table_name] = lance.dataset(_table_uri(table_base_uri, table_name))
+                tables[table_name] = lance.dataset(_join_uri(uri, table_path))
             except Exception:
-                pass
-        published_layout = table_base_uri.rstrip("/") != uri.rstrip("/")
-        published_manifest = _read_published_manifest(uri) if published_layout else None
+                if table_name == "episodes":
+                    raise
         return LanceBundle(
-            base_uri=table_base_uri,
+            base_uri=uri,
             tables=tables,
             schemas={name: _schema_names(dataset) for name, dataset in tables.items()},
             camera_info=_load_lerobot_camera_info(uri),
-            published_layout=published_layout,
+            published_layout=True,
             published_manifest=published_manifest,
         )
 
@@ -2544,8 +2549,8 @@ class LanceDatasetStore:
         episode_index: int,
     ) -> StateActionSummary | None:
         schema = bundle.schemas["episodes"]
-        state_name = _first_present_name(schema, STATE_COLUMNS)
-        action_name = _first_present_name(schema, ACTION_COLUMNS)
+        state_name = _bundle_state_column(bundle)
+        action_name = _bundle_action_column(bundle)
 
         metadata_row = self._read_lance_episode_row_by_index(
             dataset_id,
@@ -2605,9 +2610,8 @@ class LanceDatasetStore:
         frames = bundle.tables.get("frames")
         if frames is None or _count_rows(frames) == 0:
             return None, None
-        frames_schema = bundle.schemas.get("frames", [])
-        state_name = _first_present_name(frames_schema, STATE_COLUMNS)
-        action_name = _first_present_name(frames_schema, ACTION_COLUMNS)
+        state_name = _bundle_frame_state_column(bundle)
+        action_name = _bundle_frame_action_column(bundle)
         columns = [column for column in (state_name, action_name) if column]
         if not columns:
             return None, None
@@ -2632,8 +2636,8 @@ class LanceDatasetStore:
         episode_index: int,
     ) -> dict[str, Any] | None:
         schema = bundle.schemas["episodes"]
-        state_name = _first_present_name(schema, STATE_COLUMNS)
-        action_name = _first_present_name(schema, ACTION_COLUMNS)
+        state_name = _bundle_state_column(bundle)
+        action_name = _bundle_action_column(bundle)
         timestamp_name = _first_present_name(schema, TIMESTAMP_COLUMNS)
         columns = [
             column
@@ -2674,8 +2678,8 @@ class LanceDatasetStore:
         schema = bundle.schemas.get("frames", [])
         frame_name = _first_present_name(schema, FRAME_INDEX_COLUMNS)
         timestamp_name = _first_present_name(schema, FRAME_TIMESTAMP_COLUMNS)
-        state_name = _first_present_name(schema, STATE_COLUMNS)
-        action_name = _first_present_name(schema, ACTION_COLUMNS)
+        state_name = _bundle_frame_state_column(bundle)
+        action_name = _bundle_frame_action_column(bundle)
         columns = _unique_columns(
             schema,
             [
@@ -2819,6 +2823,7 @@ class LanceDatasetStore:
             "camera_names": _camera_names_from_segments(row) or _camera_names_with_video(row, schema_names),
             "duration_seconds": (length / float(fps)) if length is not None and fps else None,
             "language_instruction": row.get("language_instruction") or row.get("instruction"),
+            "task_segments": _task_segments_from_row(row),
         }
 
     def _camera_names_for_bundle(self, bundle: LanceBundle) -> list[str]:
@@ -2826,9 +2831,6 @@ class LanceDatasetStore:
         if manifest_cameras:
             return manifest_cameras
 
-        # Published v1.0 bundles keep video bytes only in videos.lance and
-        # expose per-episode media linkage through camera_segments. Older flat
-        # sessions used per-camera *_video_blob columns in episodes.lance.
         episode_cameras = set(self._camera_names_from_episode_rows(bundle))
         if episode_cameras:
             return sorted(episode_cameras)
@@ -2957,15 +2959,11 @@ class LanceDatasetStore:
                 limit=_count_rows(dataset),
                 offset=0,
             )
-            if filter and filter.startswith("episode_index = "):
-                episode_index = int(filter.removeprefix("episode_index = "))
-                rows = [
-                    {**row, "__row_offset": offset}
-                    for offset, row in enumerate(rows)
-                    if _int_or_none(row.get("episode_index")) == episode_index
-                ]
-            else:
-                rows = [{**row, "__row_offset": offset} for offset, row in enumerate(rows)]
+            rows = [
+                {**row, "__row_offset": offset}
+                for offset, row in enumerate(rows)
+                if _matches_simple_lance_filter(row, filter)
+            ]
             return rows[:limit]
         if hasattr(dataset, "scanner"):
             try:
@@ -2991,13 +2989,8 @@ class LanceDatasetStore:
             limit=limit,
             offset=0,
         )
-        if filter and filter.startswith("episode_index = "):
-            episode_index = int(filter.removeprefix("episode_index = "))
-            rows = [
-                row
-                for row in rows
-                if _int_or_none(row.get("episode_index")) == episode_index
-            ]
+        if filter:
+            rows = [row for row in rows if _matches_simple_lance_filter(row, filter)]
         return rows
 
     def _get_video_blob_source_by_offset(

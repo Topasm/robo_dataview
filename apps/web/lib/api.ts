@@ -118,6 +118,16 @@ type EpisodeResponse = {
   disposition_reason?: string | null;
   disposition_updated_at?: string | null;
   dirty_annotation_count?: number | null;
+  task_segments?: TaskSegmentResponse[] | null;
+};
+
+type TaskSegmentResponse = {
+  task_index?: number | null;
+  language_instruction?: string | null;
+  start_frame: number;
+  end_frame_exclusive: number;
+  start_timestamp?: number | null;
+  end_timestamp_exclusive?: number | null;
 };
 
 type EpisodeListPageResponse = {
@@ -1230,7 +1240,15 @@ function toEpisode(raw: EpisodeResponse): Episode {
       raw.disposition === "kept" ? null : raw.disposition ?? null,
     dispositionReason: raw.disposition_reason ?? null,
     dispositionUpdatedAt: raw.disposition_updated_at ?? null,
-    dirtyAnnotationCount: raw.dirty_annotation_count ?? 0
+    dirtyAnnotationCount: raw.dirty_annotation_count ?? 0,
+    taskSegments: (raw.task_segments ?? []).map((segment) => ({
+      taskIndex: segment.task_index ?? null,
+      languageInstruction: segment.language_instruction ?? null,
+      startFrame: segment.start_frame,
+      endFrameExclusive: segment.end_frame_exclusive,
+      startTimestamp: segment.start_timestamp ?? null,
+      endTimestampExclusive: segment.end_timestamp_exclusive ?? null
+    }))
   };
 }
 

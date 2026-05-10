@@ -9,6 +9,15 @@ export type WorkspaceDrawerTab = "episodes" | "frames" | "rerun" | "export";
  */
 export type EpisodeDisposition = "deleted" | "flagged";
 
+export type TaskSegment = {
+  taskIndex: number | null;
+  languageInstruction: string | null;
+  startFrame: number;
+  endFrameExclusive: number;
+  startTimestamp: number | null;
+  endTimestampExclusive: number | null;
+};
+
 export type SkillExportOptions = {
   clipLabelType?: string;
   acceptedClipsOnly?: boolean;
@@ -81,6 +90,7 @@ export type Episode = {
   dispositionReason?: string | null;
   dispositionUpdatedAt?: string | null;
   dirtyAnnotationCount: number;
+  taskSegments: TaskSegment[];
 };
 
 export type EpisodeListPage = {
