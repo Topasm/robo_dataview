@@ -154,11 +154,11 @@ class LanceConversionTest(unittest.TestCase):
             episodes = store.list_episodes(record.dataset_id, limit=10, offset=0)
             sa = store.get_state_action_summary(record.dataset_id, 1)
 
-            self.assertIn("Published/HF Lance data/ layout indexed", record.message)
+            self.assertIn("Published v2 Lance data/ layout indexed", record.message)
             self.assertEqual(summary.episode_count, 2)
             self.assertEqual(summary.frame_count, 8)
             self.assertEqual(summary.fps, 30.0)
-            self.assertEqual(summary.camera_names, ["observation.images.cam_head"])
+            self.assertEqual(summary.camera_names, ["cam_head"])
             self.assertIsNotNone(summary.camera_info)
             camera_info = (
                 summary.camera_info.get("observation.images.cam_head")

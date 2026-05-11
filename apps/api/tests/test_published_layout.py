@@ -109,8 +109,8 @@ def _build_published_bundle(root: Path, *, dataset_id: str = "smoke-bg2-v1") -> 
     )
 
     manifest = {
-        "format": "rllab_published_lance_dataset_v1",
-        "schema_version": "1.0",
+        "format": "rllab_published_lance_dataset_v2",
+        "schema_version": "2.0",
         "dataset_id": dataset_id,
         "primary_training_table": "data/episodes.lance",
         "tables": {
