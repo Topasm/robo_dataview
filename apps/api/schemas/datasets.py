@@ -3,6 +3,25 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+class ActionSemantics(BaseModel):
+    """Mirrors `manifest.actions.action.body.semantics` from the v2 contract.
+
+    Surfaces what the action vector actually means so the viewer can label
+    joint-position vs. EE pose, absolute vs. delta, units, etc., instead of
+    showing a bare numeric strip.
+    """
+
+    command_type: str | None = Field(
+        default=None,
+        description="e.g. 'joint_position', 'ee_pose', 'velocity', 'unknown'.",
+    )
+    absolute_or_delta: str | None = None
+    units: str | None = None
+    control_frame: str | None = None
+    applies_to_interval: str | None = None
+    normalized: bool | None = None
+
+
 class DatasetOpenRequest(BaseModel):
     uri: str = Field(..., description="Local path, hf:// URI, s3:// URI, or other Lance location.")
     name: str | None = Field(default=None, description="Optional display name.")
@@ -71,6 +90,15 @@ class DatasetSummary(BaseModel):
         description=(
             "'manifest' when dataset_id was adopted from manifest.json (published "
             "bundles), 'uri' when derived from the open URI slug."
+        ),
+    )
+    action_semantics: ActionSemantics | None = Field(
+        default=None,
+        description=(
+            "Resolved from manifest.actions.action.body.semantics. Tells the UI "
+            "what the action vector represents (joint vs EE pose, absolute vs "
+            "delta, units, normalized). Null on bundles without an actions "
+            "registry."
         ),
     )
     message: str | None = None

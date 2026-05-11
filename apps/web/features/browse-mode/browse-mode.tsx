@@ -121,6 +121,7 @@ export function BrowseMode({
       <PanelResizeHandle className="panel-resize-handle" />
       <Panel id="browse-stage" order={2} defaultSize={58} minSize={32} className="browse-mode-stage">
         <EpisodeViewer
+          actionSemantics={studio.selectedSummary?.actionSemantics ?? null}
           annotations={annotationsForOverlay}
           episode={studio.selectedEpisode}
           initialLayout="stack"

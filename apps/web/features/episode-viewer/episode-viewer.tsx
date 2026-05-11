@@ -25,7 +25,13 @@ import {
 } from "lucide-react";
 
 import { episodePreviewUrl, episodeVideoUrl, fetchEpisodeTimeseries } from "@/lib/api";
-import type { Episode, EpisodeTimeseries, SegmentAnnotation, TaskSegment } from "@/lib/types";
+import type {
+  ActionSemantics,
+  Episode,
+  EpisodeTimeseries,
+  SegmentAnnotation,
+  TaskSegment
+} from "@/lib/types";
 import { HUMANOID_SIGNAL_PRESETS, type SignalPreset } from "./signal-presets";
 
 type EpisodeViewerProps = {
@@ -37,6 +43,7 @@ type EpisodeViewerProps = {
   showSignals?: boolean;
   enableInternalKeymap?: boolean;
   initialLayout?: "focus" | "grid" | "stack";
+  actionSemantics?: ActionSemantics | null;
 };
 
 type CameraLayout = "focus" | "grid" | "stack";
@@ -55,7 +62,8 @@ export function EpisodeViewer({
   onToggleSignals,
   showSignals = false,
   enableInternalKeymap = true,
-  initialLayout = "focus"
+  initialLayout = "focus",
+  actionSemantics = null
 }: EpisodeViewerProps) {
   const cameraNames = episode.cameraNames;
   const fps = episode.fps > 0 ? episode.fps : 20;
@@ -536,6 +544,15 @@ export function EpisodeViewer({
             normValues={timeseries?.actionNorms ?? null}
             valueIndices={timeseries?.sampleIndices ?? null}
           />
+          {actionSemantics ? (
+            <div
+              className="action-semantics-meta"
+              data-test-id="action-semantics"
+              title="manifest.actions.action.body.semantics"
+            >
+              {summarizeActionSemantics(actionSemantics)}
+            </div>
+          ) : null}
           <div className="state-action-meta">
             <span>{frameCount.toLocaleString()} frames</span>
             <span>
@@ -1218,6 +1235,28 @@ function normalizeTaskSegments(segments: TaskSegment[], frameCount: number): Tas
     })
     .filter((segment) => segment.endFrameExclusive > segment.startFrame)
     .sort((a, b) => a.startFrame - b.startFrame);
+}
+
+function summarizeActionSemantics(semantics: ActionSemantics): string {
+  const parts: string[] = [];
+  if (semantics.commandType) {
+    parts.push(semantics.commandType);
+  }
+  if (semantics.absoluteOrDelta) {
+    parts.push(semantics.absoluteOrDelta);
+  }
+  if (semantics.units) {
+    parts.push(semantics.units);
+  }
+  if (semantics.controlFrame) {
+    parts.push(semantics.controlFrame);
+  }
+  if (semantics.normalized === true) {
+    parts.push("normalized");
+  } else if (semantics.normalized === false) {
+    parts.push("unnormalized");
+  }
+  return parts.length > 0 ? `Action: ${parts.join(" · ")}` : "Action: semantics unavailable";
 }
 
 function taskSegmentLabel(segment: TaskSegment): string {

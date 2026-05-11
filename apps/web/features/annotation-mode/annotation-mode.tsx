@@ -264,6 +264,7 @@ export function AnnotationMode({
         ) : null}
         <div className="annotation-stage-preview">
           <EpisodeViewer
+            actionSemantics={studio.selectedSummary?.actionSemantics ?? null}
             annotations={studio.annotationRows}
             episode={studio.selectedEpisode}
             initialLayout="stack"

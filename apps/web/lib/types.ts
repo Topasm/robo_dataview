@@ -26,6 +26,18 @@ export type SkillExportOptions = {
   copiesPerClip?: number;
 };
 
+/** Mirrors `manifest.actions.action.body.semantics` from the v2 contract.
+ * Surfaces what the action vector actually means so the viewer can label
+ * joint-position vs. EE pose, absolute vs. delta, units, etc. */
+export type ActionSemantics = {
+  commandType: string | null;
+  absoluteOrDelta: string | null;
+  units: string | null;
+  controlFrame: string | null;
+  appliesToInterval: string | null;
+  normalized: boolean | null;
+};
+
 export type DatasetSummary = {
   datasetId: string;
   name: string;
@@ -44,6 +56,7 @@ export type DatasetSummary = {
   annotationStorage: "local_overlay";
   sourceSessionCount: number | null;
   datasetIdSource: "manifest" | "uri";
+  actionSemantics: ActionSemantics | null;
   message?: string | null;
 };
 

@@ -933,6 +933,89 @@ class LanceDatasetStoreTest(unittest.TestCase):
         self.assertEqual(blob, b"right-media-id")
         self.assertEqual(videos.blob_take_count, 1)
 
+    def test_v2_dataset_summary_surfaces_action_semantics(self) -> None:
+        """B2.7: a v2 manifest with `actions.action.body.semantics` should
+        end up exposed on ``DatasetSummary.action_semantics`` so the UI can
+        label joint-position vs EE-pose, units, etc."""
+
+        episode_rows = [
+            {
+                "episode_index": 0,
+                "task_index": 0,
+                "fps": 20.0,
+                "timestamps": [0.0],
+                "camera_segments": [],
+                "task_segments": [],
+            },
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            dataset_root = Path(tmp) / "v2_semantics"
+            dataset_root.mkdir()
+            (dataset_root / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "format": "rllab_published_lance_dataset_v2",
+                        "schema_version": "2.0",
+                        "dataset_id": "v2_semantics",
+                        "tables": {
+                            "episodes": "data/episodes.lance",
+                            "frames": "data/frames.lance",
+                        },
+                        "modalities": {
+                            "state.body": {
+                                "kind": "state",
+                                "column": "observation_state",
+                                "shape": [2],
+                            },
+                        },
+                        "actions": {
+                            "action.body": {
+                                "kind": "action",
+                                "column": "actions",
+                                "shape": [2],
+                                "semantics": {
+                                    "command_type": "joint_position",
+                                    "absolute_or_delta": "absolute",
+                                    "units": "rad",
+                                    "control_frame": "robot_base",
+                                    "applies_to_interval": "[t_i, t_{i+1})",
+                                    "normalized": False,
+                                },
+                            }
+                        },
+                        "counts": {"episodes": 1, "frames": 1, "videos": 0},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            data_root = dataset_root / "data"
+            fake_tables = {
+                str(data_root / "episodes.lance"): FakeDataset(
+                    episode_rows,
+                    list(episode_rows[0].keys()),
+                ),
+                str(data_root / "frames.lance"): FakeDataset([], ["episode_index"]),
+            }
+            sys.modules["lance"] = types.SimpleNamespace(
+                dataset=lambda uri: fake_tables[uri]
+            )
+
+            store = LanceDatasetStore()
+            record = store.open_dataset(
+                DatasetOpenRequest(uri=str(dataset_root), name="v2_semantics")
+            )
+            summary = store.get_summary(record.dataset_id)
+
+        self.assertIsNotNone(summary)
+        assert summary is not None
+        self.assertIsNotNone(summary.action_semantics)
+        assert summary.action_semantics is not None
+        self.assertEqual(summary.action_semantics.command_type, "joint_position")
+        self.assertEqual(summary.action_semantics.absolute_or_delta, "absolute")
+        self.assertEqual(summary.action_semantics.units, "rad")
+        self.assertEqual(summary.action_semantics.control_frame, "robot_base")
+        self.assertFalse(summary.action_semantics.normalized)
+
     def test_video_blob_falls_back_to_videos_lance_shard_refs(self) -> None:
         episode_rows = [
             {

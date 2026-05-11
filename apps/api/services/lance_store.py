@@ -16,6 +16,7 @@ from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from apps.api.schemas.datasets import (
+    ActionSemantics,
     DatasetHealth,
     DatasetOpenRequest,
     DatasetRecord,
@@ -1163,6 +1164,46 @@ def _metadata_columns(schema_names: list[str], include_arrays: bool = False) -> 
             continue
         columns.append(name)
     return columns
+
+
+def _action_semantics_from_manifest(
+    manifest: dict[str, Any] | None,
+) -> ActionSemantics | None:
+    """Pull `manifest.actions.action.body.semantics` out of a v2 manifest.
+
+    Returns None when the registry is absent (legacy bundles, or non-v2
+    manifests) so the UI can hide the panel rather than show empty fields.
+    """
+
+    if not isinstance(manifest, dict):
+        return None
+    actions = manifest.get("actions")
+    if not isinstance(actions, dict):
+        return None
+    body = actions.get("action.body")
+    if not isinstance(body, dict):
+        return None
+    semantics = body.get("semantics")
+    if not isinstance(semantics, dict):
+        return None
+    normalized_raw = semantics.get("normalized")
+    normalized: bool | None = None
+    if isinstance(normalized_raw, bool):
+        normalized = normalized_raw
+
+    def _str_or_none(value: Any) -> str | None:
+        if isinstance(value, str) and value:
+            return value
+        return None
+
+    return ActionSemantics(
+        command_type=_str_or_none(semantics.get("command_type")),
+        absolute_or_delta=_str_or_none(semantics.get("absolute_or_delta")),
+        units=_str_or_none(semantics.get("units")),
+        control_frame=_str_or_none(semantics.get("control_frame")),
+        applies_to_interval=_str_or_none(semantics.get("applies_to_interval")),
+        normalized=normalized,
+    )
 
 
 def _task_segments_from_row(row: dict[str, Any]) -> list[dict[str, Any]]:
@@ -2400,6 +2441,7 @@ class LanceDatasetStore:
         primary_training_table: str | None = None
         source_session_count: int | None = None
         dataset_id_source = "uri"
+        action_semantics = _action_semantics_from_manifest(manifest)
         if manifest is not None:
             primary = manifest.get("primary_training_table")
             if isinstance(primary, str) and primary.strip():
@@ -2433,6 +2475,7 @@ class LanceDatasetStore:
             annotation_storage="local_overlay",
             source_session_count=source_session_count,
             dataset_id_source=dataset_id_source,
+            action_semantics=action_semantics,
             message=record.message,
         )
 

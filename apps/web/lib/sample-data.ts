@@ -17,7 +17,8 @@ export const datasetSummary: DatasetSummary = {
   primaryTrainingTable: "episodes.lance",
   annotationStorage: "local_overlay",
   sourceSessionCount: null,
-  datasetIdSource: "uri"
+  datasetIdSource: "uri",
+  actionSemantics: null
 };
 
 export const episodes: Episode[] = [

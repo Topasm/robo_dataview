@@ -54,6 +54,15 @@ type DatasetRecordResponse = {
   message?: string | null;
 };
 
+type ActionSemanticsResponse = {
+  command_type?: string | null;
+  absolute_or_delta?: string | null;
+  units?: string | null;
+  control_frame?: string | null;
+  applies_to_interval?: string | null;
+  normalized?: boolean | null;
+};
+
 type DatasetSummaryResponse = DatasetRecordResponse & {
   episode_count: number;
   frame_count: number;
@@ -68,6 +77,7 @@ type DatasetSummaryResponse = DatasetRecordResponse & {
   annotation_storage?: "local_overlay";
   source_session_count?: number | null;
   dataset_id_source?: "manifest" | "uri";
+  action_semantics?: ActionSemanticsResponse | null;
 };
 
 type DatasetTableHealthResponse = {
@@ -1169,6 +1179,22 @@ function toVlmResponseRecord(raw: VlmResponseRecordResponse): VlmResponseRecord 
   };
 }
 
+function toActionSemantics(
+  raw: ActionSemanticsResponse | null | undefined
+): import("./types").ActionSemantics | null {
+  if (!raw) {
+    return null;
+  }
+  return {
+    commandType: raw.command_type ?? null,
+    absoluteOrDelta: raw.absolute_or_delta ?? null,
+    units: raw.units ?? null,
+    controlFrame: raw.control_frame ?? null,
+    appliesToInterval: raw.applies_to_interval ?? null,
+    normalized: raw.normalized ?? null
+  };
+}
+
 function toDatasetSummary(raw: DatasetSummaryResponse): DatasetSummary {
   return {
     datasetId: raw.dataset_id,
@@ -1188,6 +1214,7 @@ function toDatasetSummary(raw: DatasetSummaryResponse): DatasetSummary {
     annotationStorage: raw.annotation_storage ?? "local_overlay",
     sourceSessionCount: raw.source_session_count ?? null,
     datasetIdSource: raw.dataset_id_source ?? "uri",
+    actionSemantics: toActionSemantics(raw.action_semantics),
     message: raw.message
   };
 }
