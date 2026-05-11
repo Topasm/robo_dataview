@@ -120,20 +120,6 @@ def _table_uri(base_uri: str, table_name: str) -> str:
     return _join_uri(base_uri, f"{table_name}.lance")
 
 
-def _table_base_uri_candidates(base_uri: str) -> list[str]:
-    """Probe both legacy flat bundles and HF-style bundles.
-
-    Existing RLLAB collection sessions keep tables at the bundle root:
-    ``episodes.lance``, ``frames.lance``. Published/HF bundles keep the same
-    tables under ``data/``. The first candidate whose ``episodes`` table opens
-    becomes the base for all optional table lookups.
-    """
-
-    if base_uri.rstrip("/").endswith(".lance"):
-        return [base_uri]
-    return [base_uri, _join_uri(base_uri, "data")]
-
-
 def _normalize_camera_name(value: str) -> str:
     return re.sub(r"[^0-9A-Za-z_]", "_", value)
 
@@ -721,70 +707,6 @@ def _episode_length(row: dict[str, Any]) -> int | None:
         if length is not None:
             return length
     return None
-
-
-def _camera_names_from_schema(names: list[str]) -> list[str]:
-    cameras = []
-    for name in names:
-        if name.endswith("_video_blob"):
-            cameras.append(name[: -len("_video_blob")])
-        elif name.endswith("_video"):
-            cameras.append(name[: -len("_video")])
-    return cameras
-
-
-def _camera_names_with_video(row: dict[str, Any], schema_names: list[str]) -> list[str]:
-    cameras: list[str] = []
-    for camera in _camera_names_from_schema(schema_names):
-        column = _video_column_for_camera(schema_names, camera)
-        if column is None:
-            continue
-        value = row.get(column)
-        if isinstance(value, dict):
-            if int(value.get("size") or 0) > 0:
-                cameras.append(camera)
-        elif value:
-            cameras.append(camera)
-    return cameras
-
-
-def _video_column_for_camera(names: list[str], camera: str) -> str | None:
-    normalized_camera = _normalize_camera_key(camera)
-    candidates = (
-        f"{camera}_video_blob",
-        f"{camera}_video",
-        f"{camera}_mp4_blob",
-        f"{camera}_mp4",
-        camera,
-    )
-    for candidate in candidates:
-        if candidate in names:
-            return candidate
-    for name in names:
-        if not _looks_like_video_blob_column(name):
-            continue
-        base = _video_column_base_name(name)
-        if _normalize_camera_key(base) == normalized_camera:
-            return name
-        if _normalize_camera_key(base).endswith(f"_{normalized_camera}"):
-            return name
-    return None
-
-
-def _looks_like_video_blob_column(name: str) -> bool:
-    lower_name = name.lower()
-    return (
-        lower_name.endswith("_video_blob")
-        or lower_name.endswith("_mp4_blob")
-        or lower_name in {"video_blob", "mp4_blob"}
-    )
-
-
-def _video_column_base_name(name: str) -> str:
-    for suffix in ("_video_blob", "_mp4_blob", "_video", "_mp4"):
-        if name.endswith(suffix):
-            return name[: -len(suffix)]
-    return name
 
 
 def _normalize_camera_key(value: Any) -> str:
@@ -1402,7 +1324,6 @@ class LanceBundle:
     tables: dict[str, Any]
     schemas: dict[str, list[str]]
     camera_info: dict[str, dict[str, Any]] | None = None
-    published_layout: bool = False
     published_manifest: dict[str, Any] | None = None
 
 
@@ -1870,11 +1791,7 @@ class LanceDatasetStore:
         # Published bundles carry the canonical dataset_id inside manifest.json;
         # adopt it so annotation overlays (keyed by dataset_id) follow the
         # bundle across HF clones / local copies regardless of the URI slug.
-        if (
-            bundle.published_layout
-            and payload.name is None
-            and isinstance(bundle.published_manifest, dict)
-        ):
+        if payload.name is None and isinstance(bundle.published_manifest, dict):
             manifest_dataset_id = bundle.published_manifest.get("dataset_id")
             if isinstance(manifest_dataset_id, str) and manifest_dataset_id.strip():
                 canonical = _slug(manifest_dataset_id.strip())
@@ -1888,10 +1805,8 @@ class LanceDatasetStore:
             uri=payload.uri,
             status="indexed",
             message=(
-                "Published/HF Lance data/ layout indexed. Annotation edits are stored "
-                "as a local overlay; source tables are not modified."
-                if bundle.published_layout
-                else "Lance dataset indexed."
+                "Published v2 Lance data/ layout indexed. Annotation edits are "
+                "stored as a local overlay; source tables are not modified."
             ),
         )
         self._datasets[dataset_id] = record
@@ -2416,7 +2331,6 @@ class LanceDatasetStore:
             tables=tables,
             schemas={name: _schema_names(dataset) for name, dataset in tables.items()},
             camera_info=_load_lerobot_camera_info(uri),
-            published_layout=True,
             published_manifest=published_manifest,
         )
 
@@ -2470,7 +2384,7 @@ class LanceDatasetStore:
             reviewed_count=0,
             accepted_count=0,
             rejected_count=0,
-            storage_layout="published_hf" if bundle.published_layout else "flat_session",
+            storage_layout="published_hf",
             primary_training_table=primary_training_table,
             annotation_storage="local_overlay",
             source_session_count=source_session_count,
@@ -2863,7 +2777,7 @@ class LanceDatasetStore:
             "has_human_label": bool(row.get("has_human_label", False)),
             "split": row.get("train_val_test_split", row.get("split")),
             "fps": float(fps) if fps is not None else None,
-            "camera_names": _camera_names_from_segments(row) or _camera_names_with_video(row, schema_names),
+            "camera_names": _camera_names_from_segments(row),
             "duration_seconds": (length / float(fps)) if length is not None and fps else None,
             "language_instruction": row.get("language_instruction") or row.get("instruction"),
             "task_segments": _task_segments_from_row(row),
@@ -2880,63 +2794,23 @@ class LanceDatasetStore:
         return sorted(self._camera_names_from_videos_table(bundle))
 
     def _camera_names_from_episode_rows(self, bundle: LanceBundle) -> list[str]:
+        # v2 contract: episodes.lance carries `camera_segments` and no
+        # legacy `*_video_blob` alias columns. If the registry didn't already
+        # surface the cameras (`_camera_names_for_bundle`), scan
+        # `camera_segments` here as the second source of truth.
         schema = bundle.schemas["episodes"]
-        if "camera_segments" in schema:
-            episodes = bundle.tables["episodes"]
-            row_count = min(_count_rows(episodes), 100)
-            rows = _read_rows(
-                episodes,
-                columns=["episode_index", "camera_segments"],
-                limit=row_count,
-            )
-            cameras: set[str] = set()
-            for row in rows:
-                cameras.update(_camera_names_from_segments(row))
-            if cameras:
-                return sorted(cameras)
-
-        blob_columns = [
-            name for name in schema if _looks_like_video_blob_column(name)
-        ]
-        if not blob_columns:
+        if "camera_segments" not in schema:
             return []
         episodes = bundle.tables["episodes"]
         row_count = min(_count_rows(episodes), 100)
-        if hasattr(episodes, "scanner"):
-            try:
-                scanner = episodes.scanner(
-                    columns=["episode_index", *blob_columns],
-                    limit=row_count,
-                )
-                rows = scanner.to_table().to_pylist()
-                cameras: set[str] = set()
-                for row in rows:
-                    cameras.update(_camera_names_with_video(row, schema))
-                return sorted(cameras)
-            except Exception:
-                pass
-        if hasattr(episodes, "take_blobs"):
-            cameras: set[str] = set()
-            indices = list(range(row_count))
-            for column in blob_columns:
-                try:
-                    blob_files = episodes.take_blobs(column, indices=indices)
-                except Exception:
-                    continue
-                for blob_file in blob_files:
-                    source = _video_source_from_blob_file(blob_file)
-                    if source is not None and source.size > 0:
-                        cameras.add(_video_column_base_name(column))
-                        break
-            return sorted(cameras)
         rows = _read_rows(
             episodes,
-            columns=["episode_index", *blob_columns],
+            columns=["episode_index", "camera_segments"],
             limit=row_count,
         )
         cameras: set[str] = set()
         for row in rows:
-            cameras.update(_camera_names_with_video(row, schema))
+            cameras.update(_camera_names_from_segments(row))
         return sorted(cameras)
 
     def _camera_names_from_videos_table(self, bundle: LanceBundle) -> list[str]:

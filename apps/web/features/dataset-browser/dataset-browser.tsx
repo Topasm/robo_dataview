@@ -156,30 +156,29 @@ export function DatasetMeta({ summary, health }: DatasetMetaProps) {
       ? `${healthIssues.length.toLocaleString()} warning${healthIssues.length === 1 ? "" : "s"}`
       : "OK";
 
-  const isPublished = summary.storageLayout === "published_hf";
+  // dataview only ever opens v2 published bundles; the legacy flat-session
+  // path was removed when the v2 contract became mandatory.
   const sourceCountSuffix =
-    isPublished && summary.sourceSessionCount && summary.sourceSessionCount > 1
+    summary.sourceSessionCount && summary.sourceSessionCount > 1
       ? ` · merged from ${summary.sourceSessionCount} sessions`
       : "";
 
   return (
     <section className="dataset-meta">
-      {isPublished ? (
-        <div
-          className="muted"
-          style={{
-            fontSize: "11px",
-            padding: "4px 8px",
-            border: "1px solid var(--surface-3)",
-            borderRadius: "var(--radius-pill, 999px)",
-            display: "inline-block",
-            marginBottom: "8px",
-          }}
-          title="Tables under data/ are treated as immutable; review and annotation edits are stored locally and never written back to this bundle."
-        >
-          HF dataset · annotations stored locally{sourceCountSuffix}
-        </div>
-      ) : null}
+      <div
+        className="muted"
+        style={{
+          fontSize: "11px",
+          padding: "4px 8px",
+          border: "1px solid var(--surface-3)",
+          borderRadius: "var(--radius-pill, 999px)",
+          display: "inline-block",
+          marginBottom: "8px",
+        }}
+        title="Tables under data/ are treated as immutable; review and annotation edits are stored locally and never written back to this bundle."
+      >
+        HF dataset · annotations stored locally{sourceCountSuffix}
+      </div>
       <section className="panel-section review-progress-section">
         <div className="section-title">
           <span>Dataset Progress</span>

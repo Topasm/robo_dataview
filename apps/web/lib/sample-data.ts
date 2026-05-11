@@ -13,7 +13,7 @@ export const datasetSummary: DatasetSummary = {
   reviewedCount: 2,
   acceptedCount: 2,
   rejectedCount: 0,
-  storageLayout: "flat_session",
+  storageLayout: "published_hf",
   primaryTrainingTable: "episodes.lance",
   annotationStorage: "local_overlay",
   sourceSessionCount: null,
