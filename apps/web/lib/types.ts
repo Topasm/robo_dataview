@@ -99,11 +99,21 @@ export type Episode = {
   fps: number;
   cameraNames: string[];
   languageInstruction: string | null;
+  hasInstruction: boolean;
+  hasWristCamera: boolean;
   disposition?: EpisodeDisposition | null;
   dispositionReason?: string | null;
   dispositionUpdatedAt?: string | null;
   dirtyAnnotationCount: number;
   taskSegments: TaskSegment[];
+};
+
+export type InstructionFilter = "all" | "with_instruction" | "without_instruction";
+export type WristCameraFilter = "all" | "with_wrist" | "without_wrist";
+
+export type EpisodeMetadataFilters = {
+  instruction: InstructionFilter;
+  wristCamera: WristCameraFilter;
 };
 
 export type EpisodeListPage = {

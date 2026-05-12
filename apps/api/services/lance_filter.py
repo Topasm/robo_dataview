@@ -101,7 +101,11 @@ class LanceFilterEngine:
                 dataset_id,
                 self.owner._episode_payload(dataset_id, row, bundle.schemas["episodes"]),
             )
-            payload["camera_names"] = camera_names
+            if not payload.get("camera_names"):
+                payload["camera_names"] = camera_names
+                payload["has_wrist_camera"] = any(
+                    "wrist" in str(camera).lower() for camera in camera_names
+                )
             item = EpisodeListItem(**payload)
             if all(
                 self.matches_filter(item, field, operator, expected)

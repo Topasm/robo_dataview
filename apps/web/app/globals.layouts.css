@@ -1347,6 +1347,45 @@ kbd {
   outline: none;
 }
 
+.episode-list-search-row {
+  display: grid;
+  gap: var(--space-1);
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.episode-list-search-box {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 9px;
+}
+
+.episode-list-search-box:focus-within {
+  border-color: var(--accent);
+}
+
+.episode-list-search-box input {
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  height: 30px;
+  min-width: 0;
+  outline: 0;
+  width: 100%;
+}
+
+.episode-list-metadata-row {
+  display: grid;
+  gap: var(--space-1);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .episode-list-disposition-row {
   display: flex;
   flex-wrap: wrap;

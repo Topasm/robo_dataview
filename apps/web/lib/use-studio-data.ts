@@ -17,7 +17,7 @@ import {
   fetchCurrentUser,
   fetchDatasetHealth,
   fetchDatasetSummaries,
-  fetchEpisodes,
+  fetchEpisodePage,
   fetchExport,
   listExports,
   fetchFilterPresets,
@@ -44,6 +44,7 @@ import type {
   DatasetSummary,
   Episode,
   EpisodeDisposition,
+  EpisodeMetadataFilters,
   ExportHubUploadResult,
   ExportRecord,
   ExportFormat,
@@ -70,6 +71,37 @@ type SegmentDraft = {
 };
 
 const TERMINAL_JOB_STATUSES = new Set(["succeeded", "failed"]);
+const EPISODE_PAGE_LIMIT = 1000;
+const DEFAULT_EPISODE_METADATA_FILTERS: EpisodeMetadataFilters = {
+  instruction: "all",
+  wristCamera: "all"
+};
+
+function episodePageFilterQuery(
+  filters: EpisodeMetadataFilters,
+  searchText: string
+): string | undefined {
+  const clauses: string[] = [];
+  const query = searchText.trim();
+  if (query) {
+    clauses.push(`instruction_text contains ${filterQueryLiteral(query)}`);
+  }
+  if (filters.instruction === "with_instruction") {
+    clauses.push("has_instruction == true");
+  } else if (filters.instruction === "without_instruction") {
+    clauses.push("has_instruction == false");
+  }
+  if (filters.wristCamera === "with_wrist") {
+    clauses.push("has_wrist_camera == true");
+  } else if (filters.wristCamera === "without_wrist") {
+    clauses.push("has_wrist_camera == false");
+  }
+  return clauses.length > 0 ? clauses.join(" AND ") : undefined;
+}
+
+function filterQueryLiteral(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
 
 function sortAnnotations(rows: SegmentAnnotation[]): SegmentAnnotation[] {
   return [...rows].sort((a, b) => a.startFrame - b.startFrame);
@@ -147,6 +179,14 @@ function mergeJobEvent(record: JobRecord, event: JobProgressEvent): JobRecord {
 export function useStudioData() {
   const [summaries, setSummaries] = useState<DatasetSummary[]>([datasetSummary]);
   const [episodeRows, setEpisodeRows] = useState<Episode[]>(episodes);
+  const [episodeTotal, setEpisodeTotal] = useState(episodes.length);
+  const [episodeNextOffset, setEpisodeNextOffset] = useState<number | null>(null);
+  const [episodeListStatus, setEpisodeListStatus] = useState<
+    "idle" | "loading" | "loading_more" | "ready" | "error"
+  >("idle");
+  const [episodeMetadataFilters, setEpisodeMetadataFilters] =
+    useState<EpisodeMetadataFilters>(DEFAULT_EPISODE_METADATA_FILTERS);
+  const [episodeSearchText, setEpisodeSearchText] = useState("");
   const [selectedDatasetId, setSelectedDatasetId] = useState(datasetSummary.datasetId);
   const [selectedEpisodeIndex, setSelectedEpisodeIndex] = useState(episodes[0].episodeIndex);
   const [annotationRows, setAnnotationRows] = useState<SegmentAnnotation[]>(annotations);
@@ -184,13 +224,36 @@ export function useStudioData() {
     summaries[0] ??
     datasetSummary;
 
-  const selectedEpisode = useMemo(
-    () =>
+  const selectedEpisode = useMemo(() => {
+    const matched =
       episodeRows.find((episode) => episode.episodeIndex === selectedEpisodeIndex) ??
-      episodeRows[0] ??
-      episodes[0],
-    [episodeRows, selectedEpisodeIndex]
-  );
+      episodeRows[0];
+    if (matched) {
+      return matched;
+    }
+    return {
+      ...episodes[0],
+      datasetId: selectedDatasetId,
+      episodeIndex: selectedEpisodeIndex,
+      taskIndex: 0,
+      length: 0,
+      successLabel: null,
+      qualityScore: null,
+      reviewStatus: "pending" as const,
+      caption: "No episode matches the current filters.",
+      failureReason: "",
+      hasVlmLabel: false,
+      hasHumanLabel: false,
+      split: null,
+      fps: 0,
+      cameraNames: [],
+      languageInstruction: null,
+      hasInstruction: false,
+      hasWristCamera: false,
+      taskSegments: [],
+      dirtyAnnotationCount: 0
+    };
+  }, [episodeRows, selectedDatasetId, selectedEpisodeIndex]);
 
   const rerunViewerUrl = process.env.NEXT_PUBLIC_RERUN_IFRAME_URL ?? null;
   const rerunJobId = rerunJob?.jobId ?? null;
@@ -221,6 +284,41 @@ export function useStudioData() {
       setReviewQueueRows(annotations.filter((annotation) => annotation.datasetId === datasetId));
     }
   }, []);
+
+  const loadEpisodePage = useCallback(
+    async (
+      datasetId: string,
+      offset = 0,
+      append = false,
+      filters: EpisodeMetadataFilters = DEFAULT_EPISODE_METADATA_FILTERS,
+      searchText = ""
+    ) => {
+      setEpisodeListStatus(append ? "loading_more" : "loading");
+      try {
+        const page = await fetchEpisodePage(datasetId, {
+          limit: EPISODE_PAGE_LIMIT,
+          offset,
+          filterQuery: episodePageFilterQuery(filters, searchText)
+        });
+        setEpisodeRows((current) => {
+          if (!append) {
+            return page.items;
+          }
+          const seen = new Set(current.map((episode) => episode.episodeIndex));
+          const nextItems = page.items.filter((episode) => !seen.has(episode.episodeIndex));
+          return [...current, ...nextItems];
+        });
+        setEpisodeTotal(page.total);
+        setEpisodeNextOffset(page.nextOffset);
+        setEpisodeListStatus("ready");
+        return page;
+      } catch (error) {
+        setEpisodeListStatus("error");
+        throw error;
+      }
+    },
+    []
+  );
 
   const handleAnnotationMutationError = useCallback(
     async (error: unknown, datasetId: string, episodeIndex: number) => {
@@ -275,14 +373,13 @@ export function useStudioData() {
           apiSummaries.find((summary) => !summary.uri.startsWith("sample://")) ??
           apiSummaries[0];
         const datasetId = preferredSummary.datasetId;
-        const apiEpisodes = await fetchEpisodes(datasetId);
+        const page = await loadEpisodePage(datasetId);
         if (!isMounted) {
           return;
         }
         setSummaries(apiSummaries);
         setSelectedDatasetId(datasetId);
-        setEpisodeRows(apiEpisodes.length > 0 ? apiEpisodes : []);
-        setSelectedEpisodeIndex(apiEpisodes[0]?.episodeIndex ?? 0);
+        setSelectedEpisodeIndex(page.items[0]?.episodeIndex ?? -1);
         resetDerivedState();
         setDataStatus("api");
       } catch {
@@ -292,6 +389,11 @@ export function useStudioData() {
         setSummaries([datasetSummary]);
         setSelectedDatasetId(datasetSummary.datasetId);
         setEpisodeRows(episodes);
+        setEpisodeTotal(episodes.length);
+        setEpisodeNextOffset(null);
+        setEpisodeListStatus("ready");
+        setEpisodeMetadataFilters(DEFAULT_EPISODE_METADATA_FILTERS);
+        setEpisodeSearchText("");
         setSelectedEpisodeIndex(episodes[0].episodeIndex);
         resetDerivedState();
         setDataStatus("sample");
@@ -302,7 +404,7 @@ export function useStudioData() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [loadEpisodePage]);
 
   useEffect(() => {
     if (dataStatus !== "api" || !selectedDatasetId) {
@@ -722,14 +824,21 @@ export function useStudioData() {
 
   async function handleOpenDataset(uri: string) {
     const summary = await openDataset(uri);
-    const apiEpisodes = await fetchEpisodes(summary.datasetId);
+    setEpisodeMetadataFilters(DEFAULT_EPISODE_METADATA_FILTERS);
+    setEpisodeSearchText("");
+    const page = await loadEpisodePage(
+      summary.datasetId,
+      0,
+      false,
+      DEFAULT_EPISODE_METADATA_FILTERS,
+      ""
+    );
     setSummaries((current) => {
       const existing = current.filter((item) => item.datasetId !== summary.datasetId);
       return [summary, ...existing];
     });
     setSelectedDatasetId(summary.datasetId);
-    setEpisodeRows(apiEpisodes);
-    setSelectedEpisodeIndex(apiEpisodes[0]?.episodeIndex ?? 0);
+    setSelectedEpisodeIndex(page.items[0]?.episodeIndex ?? -1);
     resetDerivedState();
     setDataStatus("api");
   }
@@ -738,12 +847,58 @@ export function useStudioData() {
     if (datasetId === selectedDatasetId) {
       return;
     }
-    const apiEpisodes = await fetchEpisodes(datasetId);
+    setEpisodeMetadataFilters(DEFAULT_EPISODE_METADATA_FILTERS);
+    setEpisodeSearchText("");
+    const page = await loadEpisodePage(datasetId, 0, false, DEFAULT_EPISODE_METADATA_FILTERS, "");
     setSelectedDatasetId(datasetId);
-    setEpisodeRows(apiEpisodes);
-    setSelectedEpisodeIndex(apiEpisodes[0]?.episodeIndex ?? 0);
+    setSelectedEpisodeIndex(page.items[0]?.episodeIndex ?? -1);
     resetDerivedState();
     setDataStatus("api");
+  }
+
+  async function handleLoadMoreEpisodes() {
+    if (
+      dataStatus !== "api" ||
+      episodeNextOffset === null ||
+      episodeListStatus === "loading" ||
+      episodeListStatus === "loading_more"
+    ) {
+      return;
+    }
+    await loadEpisodePage(
+      selectedDatasetId,
+      episodeNextOffset,
+      true,
+      episodeMetadataFilters,
+      episodeSearchText
+    );
+  }
+
+  async function handleEpisodeMetadataFiltersChange(filters: EpisodeMetadataFilters) {
+    setEpisodeMetadataFilters(filters);
+    if (dataStatus !== "api") {
+      return;
+    }
+    const page = await loadEpisodePage(selectedDatasetId, 0, false, filters, episodeSearchText);
+    setSelectedEpisodeIndex(page.items[0]?.episodeIndex ?? -1);
+    resetDerivedState();
+  }
+
+  async function handleEpisodeSearchTextChange(text: string) {
+    const nextText = text.trim();
+    setEpisodeSearchText(nextText);
+    if (dataStatus !== "api") {
+      return;
+    }
+    const page = await loadEpisodePage(
+      selectedDatasetId,
+      0,
+      false,
+      episodeMetadataFilters,
+      nextText
+    );
+    setSelectedEpisodeIndex(page.items[0]?.episodeIndex ?? -1);
+    resetDerivedState();
   }
 
   function handleSelectEpisode(episodeIndex: number) {
@@ -1256,7 +1411,12 @@ export function useStudioData() {
     annotationHistoryRows,
     annotationRows,
     dataStatus,
+    episodeListStatus,
+    episodeMetadataFilters,
+    episodeNextOffset,
     episodeRows,
+    episodeSearchText,
+    episodeTotal,
     exportJob,
     exportRecord,
     pastExports,
@@ -1285,6 +1445,9 @@ export function useStudioData() {
     vlmJob,
     vlmResponses,
     handleCreateExport,
+    handleEpisodeMetadataFiltersChange,
+    handleEpisodeSearchTextChange,
+    handleLoadMoreEpisodes,
     handleUploadExportToHub,
     handleAssignAnnotation,
     handleCreateFilterPreset,

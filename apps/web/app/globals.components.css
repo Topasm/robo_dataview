@@ -81,6 +81,18 @@
   font-size: var(--text-xs);
 }
 
+.chart-legend-actions {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+.chart-legend-actions .btn {
+  height: 24px;
+  min-width: 48px;
+  padding-inline: 8px;
+}
+
 .chart-legend-group {
   display: flex;
   flex-direction: column;
@@ -1982,6 +1994,29 @@ textarea {
   display: none;
 }
 
+.episode-list-load-more {
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: center;
+  padding: 8px 12px;
+}
+
+.episode-table-compact .episode-list-load-more {
+  padding: 6px 8px;
+}
+
+.episode-list-load-more .btn {
+  justify-content: center;
+  width: 100%;
+}
+
+.episode-list-empty {
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  padding: 14px 12px;
+}
+
 .episode-row {
   align-items: center;
   background: transparent;
@@ -1994,7 +2029,7 @@ textarea {
   /* Sidebar-friendly: status takes flexible width, others stay tight. The
    * trailing 50px holds two inline action buttons (flag, delete/undo);
    * Quality column was dropped because the per-row actions cover it. */
-  grid-template-columns: 56px 36px 48px minmax(0, 1fr) 56px 50px;
+  grid-template-columns: 56px 36px 48px minmax(0, 1fr) 74px 50px;
   height: 38px;
   padding: 0 12px;
   text-align: left;
@@ -2100,6 +2135,10 @@ textarea {
   color: var(--accent);
   display: flex;
   gap: 5px;
+}
+
+.label-icons > span {
+  display: inline-flex;
 }
 
 .export-strip {

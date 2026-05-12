@@ -38,6 +38,8 @@ export const episodes: Episode[] = [
     fps: 20,
     cameraNames: datasetSummary.cameraNames,
     languageInstruction: null,
+    hasInstruction: false,
+    hasWristCamera: true,
     taskSegments: [],
     dirtyAnnotationCount: 0
   },
@@ -57,6 +59,8 @@ export const episodes: Episode[] = [
     fps: 20,
     cameraNames: datasetSummary.cameraNames,
     languageInstruction: null,
+    hasInstruction: false,
+    hasWristCamera: true,
     taskSegments: [],
     dirtyAnnotationCount: 0
   },
@@ -76,6 +80,8 @@ export const episodes: Episode[] = [
     fps: 20,
     cameraNames: datasetSummary.cameraNames,
     languageInstruction: null,
+    hasInstruction: false,
+    hasWristCamera: true,
     taskSegments: [],
     dirtyAnnotationCount: 0
   }

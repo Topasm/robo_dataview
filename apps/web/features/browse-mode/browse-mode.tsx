@@ -89,6 +89,15 @@ export function BrowseMode({
         <EpisodeList
           compact={false}
           episodes={studio.episodeRows}
+          episodeTotal={studio.episodeTotal}
+          hasMoreEpisodes={studio.episodeNextOffset !== null}
+          isFilteringEpisodes={studio.episodeListStatus === "loading"}
+          isLoadingMore={studio.episodeListStatus === "loading_more"}
+          metadataFilters={studio.episodeMetadataFilters}
+          onMetadataFiltersChange={studio.handleEpisodeMetadataFiltersChange}
+          searchText={studio.episodeSearchText}
+          onSearchTextChange={studio.handleEpisodeSearchTextChange}
+          onLoadMoreEpisodes={studio.handleLoadMoreEpisodes}
           onSelectEpisode={studio.handleSelectEpisode}
           onMarkDisposition={(idx, kind, reason) =>
             void studio.handleSetEpisodeDisposition(idx, kind, reason)

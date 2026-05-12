@@ -119,6 +119,8 @@ type EpisodeResponse = {
   fps?: number | null;
   camera_names?: string[];
   language_instruction?: string | null;
+  has_instruction?: boolean;
+  has_wrist_camera?: boolean;
   /**
    * Backend may still emit the legacy "kept" value for older records;
    * the parser normalizes it to null so the in-app type only carries
@@ -1263,6 +1265,10 @@ function toEpisode(raw: EpisodeResponse): Episode {
     fps: raw.fps ?? 0,
     cameraNames: raw.camera_names ?? [],
     languageInstruction: raw.language_instruction ?? null,
+    hasInstruction: raw.has_instruction ?? Boolean(raw.language_instruction?.trim()),
+    hasWristCamera:
+      raw.has_wrist_camera ??
+      (raw.camera_names ?? []).some((camera) => camera.toLowerCase().includes("wrist")),
     disposition:
       raw.disposition === "kept" ? null : raw.disposition ?? null,
     dispositionReason: raw.disposition_reason ?? null,

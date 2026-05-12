@@ -317,6 +317,10 @@ function ChartCard({
     });
   }
 
+  function setAll(on: boolean) {
+    setVisibleKeys(on ? new Set(dimSeries.map((dim) => dim.key)) : new Set());
+  }
+
   return (
     <section
       className={`episode-chart-card${fullscreen ? " is-fullscreen" : ""}`}
@@ -480,6 +484,7 @@ function ChartCard({
           currentRow={currentRow}
           onToggleKey={toggleKey}
           onSetGroup={setGroup}
+          onSetAll={setAll}
         />
       ) : null}
     </section>
@@ -491,17 +496,27 @@ function ChartLegend({
   visibleKeys,
   currentRow,
   onToggleKey,
-  onSetGroup
+  onSetGroup,
+  onSetAll
 }: {
   grouped: { groups: Record<string, DimSeries[]>; singles: DimSeries[] };
   visibleKeys: Set<string>;
   currentRow: ChartRow | null;
   onToggleKey: (key: string) => void;
   onSetGroup: (group: string, on: boolean) => void;
+  onSetAll: (on: boolean) => void;
 }) {
   const groupNames = Object.keys(grouped.groups);
   return (
     <div className="chart-legend">
+      <div className="chart-legend-actions">
+        <button className="btn btn--ghost btn--sm" type="button" onClick={() => onSetAll(true)}>
+          All
+        </button>
+        <button className="btn btn--ghost btn--sm" type="button" onClick={() => onSetAll(false)}>
+          Clear
+        </button>
+      </div>
       {groupNames.map((groupName) => {
         const members = grouped.groups[groupName];
         const allOn = members.every((d) => visibleKeys.has(d.key));
@@ -519,7 +534,7 @@ function ChartLegend({
                 onChange={() => onSetGroup(groupName, !allOn)}
                 style={{ accentColor: groupColor }}
               />
-              <span className="chart-legend-group-name">{groupName}</span>
+              <span className="chart-legend-group-name">{groupLabel(groupName)}</span>
             </label>
             <div className="chart-legend-members">
               {members.map((dim) => (
@@ -588,7 +603,7 @@ function buildDimSeries(
   fallback: "s" | "a"
 ): DimSeries[] {
   return Array.from({ length: dim }, (_, d) => {
-    const name = names?.[d] ?? `${fallback}${d}`;
+    const name = names && names.length === dim ? names[d] : `${fallback}${d}`;
     const group = groupOf(name);
     return {
       key: name,
@@ -608,6 +623,21 @@ function groupOf(name: string): string {
   const idx = name.lastIndexOf("_");
   if (idx > 0) return name.slice(0, idx);
   return "—";
+}
+
+const GROUP_LABELS: Record<string, string> = {
+  arm_l: "Left Arm",
+  arm_r: "Right Arm",
+  gripper_l: "Left Gripper",
+  gripper_r: "Right Gripper",
+  head: "Head",
+  lift: "Lift"
+};
+
+const KEEP_SINGLE_MEMBER_GROUPS = new Set(["gripper_l", "gripper_r", "head", "lift"]);
+
+function groupLabel(group: string): string {
+  return GROUP_LABELS[group] ?? group;
 }
 
 function shortLabel(name: string, group: string): string {
@@ -657,7 +687,7 @@ function groupDimSeries(dims: DimSeries[]): {
   // doesn't show a one-row group header.
   const singles: DimSeries[] = [];
   for (const [name, members] of Object.entries(groups)) {
-    if (members.length <= 1) {
+    if (members.length <= 1 && !KEEP_SINGLE_MEMBER_GROUPS.has(name)) {
       singles.push(...members);
       delete groups[name];
     }

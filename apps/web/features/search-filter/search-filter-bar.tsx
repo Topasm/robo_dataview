@@ -37,6 +37,9 @@ const FILTER_FIELDS: FilterField[] = [
   { key: "quality_score", label: "Quality", operators: [">=", ">", "<=", "<", "==", "!="], valueType: "number" },
   { key: "task_index", label: "Task", operators: ["==", "!=", ">=", ">", "<=", "<"], valueType: "number" },
   { key: "episode_index", label: "Episode", operators: ["==", "!=", ">=", ">", "<=", "<"], valueType: "number" },
+  { key: "instruction_text", label: "Instruction", operators: ["contains", "==", "!="], valueType: "text" },
+  { key: "has_instruction", label: "Has Instruction", operators: ["==", "!="], valueType: "boolean" },
+  { key: "has_wrist_camera", label: "Wrist Camera", operators: ["==", "!="], valueType: "boolean" },
   { key: "caption", label: "Caption", operators: ["contains", "==", "!="], valueType: "text" },
   { key: "split", label: "Split", operators: ["==", "!=", "contains"], valueType: "text" }
 ];

@@ -43,7 +43,7 @@ export function IconRail({
           aria-pressed={activePanel === "episodes"}
         >
           <Film size={18} />
-          <span className="icon-rail-badge">{studio.episodeRows.length}</span>
+          <span className="icon-rail-badge">{studio.episodeTotal}</span>
         </button>
         <button
           type="button"
@@ -106,6 +106,15 @@ export function IconRail({
               <EpisodeList
                 compact
                 episodes={studio.episodeRows}
+                episodeTotal={studio.episodeTotal}
+                hasMoreEpisodes={studio.episodeNextOffset !== null}
+                isFilteringEpisodes={studio.episodeListStatus === "loading"}
+                isLoadingMore={studio.episodeListStatus === "loading_more"}
+                metadataFilters={studio.episodeMetadataFilters}
+                onMetadataFiltersChange={studio.handleEpisodeMetadataFiltersChange}
+                searchText={studio.episodeSearchText}
+                onSearchTextChange={studio.handleEpisodeSearchTextChange}
+                onLoadMoreEpisodes={studio.handleLoadMoreEpisodes}
                 onSelectEpisode={studio.handleSelectEpisode}
                 selectedEpisodeIndex={studio.selectedEpisodeIndex}
               />

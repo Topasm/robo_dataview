@@ -1,10 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowDownUp, Bot, Check, Flag, RotateCcw, Trash2, UserCheck, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  ArrowDownUp,
+  Bot,
+  Camera,
+  Check,
+  ChevronsDown,
+  Flag,
+  Loader2,
+  MessageSquareText,
+  RotateCcw,
+  Search,
+  Trash2,
+  UserCheck,
+  X
+} from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
-import type { Episode, EpisodeDisposition } from "@/lib/types";
+import type { Episode, EpisodeDisposition, EpisodeMetadataFilters } from "@/lib/types";
 
 type EpisodeListProps = {
   episodes: Episode[];
@@ -24,6 +38,15 @@ type EpisodeListProps = {
     kind: "deleted" | "flagged" | null,
     reason: string | null
   ) => void;
+  episodeTotal?: number;
+  hasMoreEpisodes?: boolean;
+  isLoadingMore?: boolean;
+  onLoadMoreEpisodes?: () => void;
+  metadataFilters?: EpisodeMetadataFilters;
+  isFilteringEpisodes?: boolean;
+  onMetadataFiltersChange?: (filters: EpisodeMetadataFilters) => void;
+  searchText?: string;
+  onSearchTextChange?: (text: string) => void | Promise<void>;
   compact?: boolean;
 };
 
@@ -49,6 +72,11 @@ const DISPOSITION_FILTERS: { key: DispositionFilter; label: string }[] = [
   { key: "deleted", label: "Deleted" },
   { key: "flagged", label: "Flagged" }
 ];
+
+const DEFAULT_METADATA_FILTERS: EpisodeMetadataFilters = {
+  instruction: "all",
+  wristCamera: "all"
+};
 
 const DISPOSITION_BADGE_LABEL: Record<EpisodeDisposition, string> = {
   deleted: "Deleted",
@@ -97,8 +125,17 @@ function sortEpisodes(episodes: Episode[], key: SortKey, desc: boolean): Episode
 
 export function EpisodeList({
   episodes,
+  episodeTotal,
+  hasMoreEpisodes = false,
+  isLoadingMore = false,
+  metadataFilters = DEFAULT_METADATA_FILTERS,
+  isFilteringEpisodes = false,
+  searchText = "",
   selectedEpisodeIndex,
   onSelectEpisode,
+  onLoadMoreEpisodes,
+  onMetadataFiltersChange,
+  onSearchTextChange,
   onMarkDisposition,
   compact = false
 }: EpisodeListProps) {
@@ -107,6 +144,11 @@ export function EpisodeList({
   const [sortKey, setSortKey] = useState<SortKey>("episode_index");
   const [sortDesc, setSortDesc] = useState(false);
   const [flagTarget, setFlagTarget] = useState<{ index: number; reason: string } | null>(null);
+  const [searchDraft, setSearchDraft] = useState(searchText);
+
+  useEffect(() => {
+    setSearchDraft(searchText);
+  }, [searchText]);
 
   const filtered = episodes.filter((ep) => {
     if (!matchFilter(ep, filter)) {
@@ -118,6 +160,11 @@ export function EpisodeList({
     return true;
   });
   const sorted = sortEpisodes(filtered, sortKey, sortDesc);
+  const total = episodeTotal ?? episodes.length;
+  const countLabel =
+    total > episodes.length
+      ? `${filtered.length}/${episodes.length} of ${total}`
+      : `${filtered.length}/${episodes.length}`;
 
   function handleSort() {
     const keys: SortKey[] = ["episode_index", "quality", "status"];
@@ -130,15 +177,69 @@ export function EpisodeList({
     }
   }
 
+  function updateMetadataFilters(patch: Partial<EpisodeMetadataFilters>) {
+    onMetadataFiltersChange?.({ ...metadataFilters, ...patch });
+  }
+
+  function applySearch(nextText = searchDraft) {
+    void onSearchTextChange?.(nextText.trim());
+  }
+
+  function clearSearch() {
+    setSearchDraft("");
+    void onSearchTextChange?.("");
+  }
+
   return (
     <section className={`episode-table-wrap${compact ? " episode-table-compact" : ""}`}>
       <div className="table-toolbar">
-        <div className="section-title">Episodes ({filtered.length}/{episodes.length})</div>
+        <div className="section-title">Episodes ({countLabel})</div>
         <button className="icon-button" title={`Sort: ${sortKey} ${sortDesc ? "desc" : "asc"}`} onClick={handleSort} type="button">
           <ArrowDownUp size={16} />
         </button>
       </div>
       <div className="episode-list-filters">
+        <form
+          className="episode-list-search-row"
+          onSubmit={(event) => {
+            event.preventDefault();
+            applySearch();
+          }}
+        >
+          <label className="episode-list-search-box">
+            <Search size={14} />
+            <input
+              aria-label="Search episode instructions"
+              disabled={isFilteringEpisodes || !onSearchTextChange}
+              onChange={(event) => setSearchDraft(event.target.value)}
+              placeholder="Search instruction"
+              value={searchDraft}
+            />
+          </label>
+          {searchDraft || searchText ? (
+            <button
+              className="icon-button"
+              disabled={isFilteringEpisodes || !onSearchTextChange}
+              onClick={clearSearch}
+              title="Clear instruction search"
+              type="button"
+            >
+              <X size={15} />
+            </button>
+          ) : null}
+          <button
+            className="icon-button"
+            disabled={
+              isFilteringEpisodes ||
+              !onSearchTextChange ||
+              searchDraft.trim() === searchText.trim()
+            }
+            title="Search instructions"
+            type="submit"
+          >
+            {isFilteringEpisodes ? <Loader2 className="spin-icon" size={15} /> : <Search size={15} />}
+          </button>
+        </form>
         <select
           aria-label="Filter by review status"
           className="episode-list-status-select"
@@ -151,6 +252,38 @@ export function EpisodeList({
             </option>
           ))}
         </select>
+        <div className="episode-list-metadata-row">
+          <select
+            aria-label="Filter by instruction presence"
+            className="episode-list-status-select"
+            disabled={isFilteringEpisodes}
+            onChange={(event) =>
+              updateMetadataFilters({
+                instruction: event.target.value as EpisodeMetadataFilters["instruction"]
+              })
+            }
+            value={metadataFilters.instruction}
+          >
+            <option value="all">Any instruction</option>
+            <option value="with_instruction">Has instruction</option>
+            <option value="without_instruction">No instruction</option>
+          </select>
+          <select
+            aria-label="Filter by wrist camera presence"
+            className="episode-list-status-select"
+            disabled={isFilteringEpisodes}
+            onChange={(event) =>
+              updateMetadataFilters({
+                wristCamera: event.target.value as EpisodeMetadataFilters["wristCamera"]
+              })
+            }
+            value={metadataFilters.wristCamera}
+          >
+            <option value="all">Any wrist cams</option>
+            <option value="with_wrist">Has wrist cam</option>
+            <option value="without_wrist">No wrist cam</option>
+          </select>
+        </div>
         <div className="episode-list-disposition-row">
           <div className="episode-list-filter-pills">
             {DISPOSITION_FILTERS.map((f) => (
@@ -190,6 +323,7 @@ export function EpisodeList({
               }}
               role="row"
               tabIndex={0}
+              title={episode.languageInstruction ?? episode.caption}
             >
               <span className="mono">#{episode.episodeIndex}</span>
               <span>{episode.taskIndex}</span>
@@ -222,6 +356,16 @@ export function EpisodeList({
                 {episode.successLabel ? <Check size={14} /> : null}
                 {episode.hasVlmLabel ? <Bot size={14} /> : null}
                 {episode.hasHumanLabel ? <UserCheck size={14} /> : null}
+                {episode.hasInstruction ? (
+                  <span title={episode.languageInstruction ?? "Has instruction"}>
+                    <MessageSquareText size={14} />
+                  </span>
+                ) : null}
+                {episode.hasWristCamera ? (
+                  <span title="Has wrist camera">
+                    <Camera size={14} />
+                  </span>
+                ) : null}
               </span>
               {onMarkDisposition ? (
                 <span className="episode-row-actions" onClick={(event) => event.stopPropagation()}>
@@ -269,6 +413,28 @@ export function EpisodeList({
             </div>
           );
         })}
+        {sorted.length === 0 ? (
+          <div className="episode-list-empty" role="row">
+            No episodes match the current filters.
+          </div>
+        ) : null}
+        {hasMoreEpisodes && onLoadMoreEpisodes ? (
+          <div className="episode-list-load-more" role="row">
+            <button
+              className="btn btn--sm"
+              disabled={isLoadingMore}
+              onClick={onLoadMoreEpisodes}
+              type="button"
+            >
+              {isLoadingMore ? (
+                <Loader2 className="spin-icon" size={14} />
+              ) : (
+                <ChevronsDown size={14} />
+              )}
+              <span>{isLoadingMore ? "Loading" : "Load More"}</span>
+            </button>
+          </div>
+        ) : null}
         {flagTarget !== null && onMarkDisposition ? (
           <div
             className="modal-overlay"

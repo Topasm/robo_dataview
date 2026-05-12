@@ -43,6 +43,8 @@ class EpisodeListItem(BaseModel):
     camera_names: list[str] = Field(default_factory=list)
     duration_seconds: float | None = None
     language_instruction: str | None = None
+    has_instruction: bool = False
+    has_wrist_camera: bool = False
     disposition: str | None = None
     disposition_reason: str | None = None
     disposition_updated_at: datetime | None = None

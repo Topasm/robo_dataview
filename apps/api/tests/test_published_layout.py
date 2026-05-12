@@ -216,6 +216,185 @@ def _build_published_v2_bundle(root: Path, *, dataset_id: str = "smoke-bg2-v2") 
     (root / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
 
+def _build_published_19d_generic_names_bundle(
+    root: Path,
+    *,
+    dataset_id: str = "smoke-aiworker-19d",
+) -> None:
+    data_dir = root / "data"
+    meta_dir = root / "meta"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    meta_dir.mkdir(parents=True, exist_ok=True)
+    vector = [float(index) for index in range(19)]
+    episodes_schema = pa.schema(
+        [
+            pa.field("episode_index", pa.int64(), nullable=False),
+            pa.field("fps", pa.float64()),
+            pa.field("length", pa.int64()),
+            pa.field("timestamps", pa.list_(pa.float64())),
+            pa.field("observation_state", pa.list_(pa.list_(pa.float32()))),
+            pa.field("actions", pa.list_(pa.list_(pa.float32()))),
+        ]
+    )
+    lance.write_dataset(
+        pa.Table.from_pylist(
+            [
+                {
+                    "episode_index": 0,
+                    "fps": 10.0,
+                    "length": 2,
+                    "timestamps": [0.0, 0.1],
+                    "observation_state": [vector, vector],
+                    "actions": [vector, vector],
+                }
+            ],
+            schema=episodes_schema,
+        ),
+        str(data_dir / "episodes.lance"),
+        mode="overwrite",
+    )
+    (meta_dir / "info.json").write_text(
+        json.dumps(
+            {
+                "repo_id": "rllab-postech/pretrain_aiworker_bg2_lance",
+                "robot_type": "aiworker_19d_mixture",
+                "features": {
+                    "observation.state": {"shape": [19], "names": ["state"]},
+                    "action": {"shape": [19], "names": ["action"]},
+                },
+            }
+        )
+    )
+    manifest = {
+        "format": "rllab_published_lance_dataset_v2",
+        "schema_version": "2.0",
+        "dataset_id": dataset_id,
+        "primary_training_table": "data/episodes.lance",
+        "tables": {"episodes": "data/episodes.lance"},
+        "modalities": {
+            "state.body": {
+                "kind": "state",
+                "column": "observation_state",
+                "names_ref": "meta/info.json#/features/observation.state/names",
+                "shape": [19],
+            }
+        },
+        "actions": {
+            "action.body": {
+                "kind": "action",
+                "column": "actions",
+                "names_ref": "meta/info.json#/features/action/names",
+                "shape": [19],
+            }
+        },
+        "training_targets": ["action.body"],
+    }
+    (root / "manifest.json").write_text(json.dumps(manifest, indent=2))
+
+
+def _build_published_filter_bundle(root: Path, *, dataset_id: str = "smoke-filter-v2") -> None:
+    data_dir = root / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    segment_type = pa.list_(
+        pa.struct(
+            [
+                pa.field("camera_key", pa.string()),
+                pa.field("camera_column", pa.string()),
+                pa.field("media_id", pa.string()),
+            ]
+        )
+    )
+    episodes_schema = pa.schema(
+        [
+            pa.field("episode_index", pa.int64(), nullable=False),
+            pa.field("task_index", pa.int64()),
+            pa.field("fps", pa.float64()),
+            pa.field("length", pa.int64()),
+            pa.field("timestamps", pa.list_(pa.float64())),
+            pa.field("language_instruction", pa.string()),
+            pa.field("camera_segments", segment_type),
+        ]
+    )
+    rows = [
+        {
+            "episode_index": 0,
+            "task_index": 0,
+            "fps": 10.0,
+            "length": 2,
+            "timestamps": [0.0, 0.1],
+            "language_instruction": "pick",
+            "camera_segments": [
+                {
+                    "camera_key": "observation.images.cam_head",
+                    "camera_column": "observation_images_cam_head",
+                    "media_id": "episode_0_head",
+                }
+            ],
+        },
+        {
+            "episode_index": 1,
+            "task_index": 0,
+            "fps": 10.0,
+            "length": 2,
+            "timestamps": [0.0, 0.1],
+            "language_instruction": None,
+            "camera_segments": [
+                {
+                    "camera_key": "observation.images.cam_head",
+                    "camera_column": "observation_images_cam_head",
+                    "media_id": "episode_1_head",
+                }
+            ],
+        },
+        {
+            "episode_index": 2,
+            "task_index": 0,
+            "fps": 10.0,
+            "length": 2,
+            "timestamps": [0.0, 0.1],
+            "language_instruction": "place",
+            "camera_segments": [
+                {
+                    "camera_key": "observation.images.cam_head",
+                    "camera_column": "observation_images_cam_head",
+                    "media_id": "episode_2_head",
+                },
+                {
+                    "camera_key": "observation.images.cam_wrist_left",
+                    "camera_column": "observation_images_cam_wrist_left",
+                    "media_id": "episode_2_wrist_left",
+                },
+            ],
+        },
+    ]
+    lance.write_dataset(
+        pa.Table.from_pylist(rows, schema=episodes_schema),
+        str(data_dir / "episodes.lance"),
+        mode="overwrite",
+    )
+    manifest = {
+        "format": "rllab_published_lance_dataset_v2",
+        "schema_version": "2.0",
+        "dataset_id": dataset_id,
+        "primary_training_table": "data/episodes.lance",
+        "tables": {"episodes": "data/episodes.lance"},
+        "modalities": {
+            "video.cam_head": {
+                "kind": "video",
+                "camera_key": "observation.images.cam_head",
+                "camera_column": "observation_images_cam_head",
+            },
+            "video.cam_wrist_left": {
+                "kind": "video",
+                "camera_key": "observation.images.cam_wrist_left",
+                "camera_column": "observation_images_cam_wrist_left",
+            },
+        },
+    }
+    (root / "manifest.json").write_text(json.dumps(manifest, indent=2))
+
+
 class PublishedLayoutTest(unittest.TestCase):
     def test_open_published_bundle_uses_manifest_dataset_id(self) -> None:
         with tempfile.TemporaryDirectory() as workdir:
@@ -261,6 +440,96 @@ class PublishedLayoutTest(unittest.TestCase):
             assert timeseries is not None
             self.assertEqual(timeseries.state_names, ["arm_l_joint1", "gripper_l_joint1"])
             self.assertEqual(timeseries.action_names, ["arm_l_joint1", "gripper_l_joint1"])
+
+    def test_open_published_19d_bundle_infers_bg2_names_when_info_names_are_generic(self) -> None:
+        with tempfile.TemporaryDirectory() as workdir:
+            bundle_root = Path(workdir) / "bundle-19d"
+            _build_published_19d_generic_names_bundle(bundle_root)
+
+            store = LanceDatasetStore()
+            record = store.open_dataset(DatasetOpenRequest(uri=str(bundle_root)))
+            timeseries = store.get_episode_norm_series(record.dataset_id, 0)
+
+            self.assertIsNotNone(timeseries)
+            assert timeseries is not None
+            self.assertEqual(timeseries.state_dim, 19)
+            self.assertEqual(timeseries.action_dim, 19)
+            self.assertEqual(timeseries.state_names[:8], [
+                "arm_l_joint1",
+                "arm_l_joint2",
+                "arm_l_joint3",
+                "arm_l_joint4",
+                "arm_l_joint5",
+                "arm_l_joint6",
+                "arm_l_joint7",
+                "gripper_l_joint1",
+            ])
+            self.assertEqual(timeseries.action_names[-3:], [
+                "head_joint1",
+                "head_joint2",
+                "lift_joint",
+            ])
+
+    def test_episode_page_filters_instruction_and_wrist_camera_presence(self) -> None:
+        with tempfile.TemporaryDirectory() as workdir:
+            bundle_root = Path(workdir) / "bundle-filter"
+            _build_published_filter_bundle(bundle_root)
+
+            store = LanceDatasetStore()
+            record = store.open_dataset(DatasetOpenRequest(uri=str(bundle_root)))
+
+            page = store.list_episode_page(record.dataset_id, limit=10, offset=0)
+            self.assertEqual([item.camera_names for item in page.items], [
+                ["cam_head"],
+                ["cam_head"],
+                ["cam_head", "cam_wrist_left"],
+            ])
+            self.assertEqual([item.has_instruction for item in page.items], [True, False, True])
+            self.assertEqual([item.has_wrist_camera for item in page.items], [False, False, True])
+
+            with_instruction = store.list_episode_page(
+                record.dataset_id,
+                limit=10,
+                offset=0,
+                filter_query="has_instruction == true",
+            )
+            self.assertEqual(with_instruction.total, 2)
+            self.assertEqual([item.episode_index for item in with_instruction.items], [0, 2])
+
+            instruction_search = store.list_episode_page(
+                record.dataset_id,
+                limit=10,
+                offset=0,
+                filter_query='instruction_text contains "place"',
+            )
+            self.assertEqual(instruction_search.total, 1)
+            self.assertEqual(instruction_search.items[0].episode_index, 2)
+
+            phrase_search = store.list_episode_page(
+                record.dataset_id,
+                limit=10,
+                offset=0,
+                filter_query='instruction_text contains "pick and place"',
+            )
+            self.assertEqual(phrase_search.total, 0)
+
+            with_wrist = store.list_episode_page(
+                record.dataset_id,
+                limit=10,
+                offset=0,
+                filter_query="has_wrist_camera == true",
+            )
+            self.assertEqual(with_wrist.total, 1)
+            self.assertEqual(with_wrist.items[0].episode_index, 2)
+
+            no_wrist = store.list_episode_page(
+                record.dataset_id,
+                limit=10,
+                offset=0,
+                filter_query="has_wrist_camera == false",
+            )
+            self.assertEqual(no_wrist.total, 2)
+            self.assertEqual([item.episode_index for item in no_wrist.items], [0, 1])
 
     def test_flat_session_keeps_uri_dataset_id(self) -> None:
         with tempfile.TemporaryDirectory() as workdir:

@@ -68,6 +68,13 @@ FILTER_ALIASES = {
     "review": "review_status",
     "task": "task_index",
     "episode": "episode_index",
+    "instruction": "has_instruction",
+    "instruction_text": "instruction_text",
+    "search": "search_text",
+    "search_text": "search_text",
+    "text": "search_text",
+    "wrist": "has_wrist_camera",
+    "wrist_camera": "has_wrist_camera",
 }
 EPISODE_SORT_FIELDS = {
     "episode_index",
@@ -89,6 +96,27 @@ EPISODE_OVERLAY_FIELDS = {
     "split",
     "language_instruction",
 }
+FFW_BG2_REV4_JOINT_ORDER = [
+    "arm_l_joint1",
+    "arm_l_joint2",
+    "arm_l_joint3",
+    "arm_l_joint4",
+    "arm_l_joint5",
+    "arm_l_joint6",
+    "arm_l_joint7",
+    "gripper_l_joint1",
+    "arm_r_joint1",
+    "arm_r_joint2",
+    "arm_r_joint3",
+    "arm_r_joint4",
+    "arm_r_joint5",
+    "arm_r_joint6",
+    "arm_r_joint7",
+    "gripper_r_joint1",
+    "head_joint1",
+    "head_joint2",
+    "lift_joint",
+]
 
 
 def _slug(value: str) -> str:
@@ -230,20 +258,90 @@ def _state_action_dims_from_features(features: Any) -> tuple[int | None, int | N
     return _dim("observation.state"), _dim("action")
 
 
+def _feature_dim(feature: Any) -> int | None:
+    if not isinstance(feature, dict):
+        return None
+    shape = feature.get("shape")
+    if isinstance(shape, (list, tuple)) and shape:
+        try:
+            return int(shape[0])
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _valid_dim_names(names: Any, dim: int | None) -> list[str] | None:
+    if not isinstance(names, (list, tuple)) or not names:
+        return None
+    values = [str(name) for name in names]
+    if dim is not None and len(values) != dim:
+        return None
+    return values
+
+
+def _known_joint_names_for_dim(
+    uri: str | None,
+    dim: int | None,
+    *,
+    manifest: dict[str, Any] | None = None,
+    info: dict[str, Any] | None = None,
+) -> list[str] | None:
+    if dim == 19:
+        names = FFW_BG2_REV4_JOINT_ORDER
+    elif dim == 16:
+        names = FFW_BG2_REV4_JOINT_ORDER[:16]
+    else:
+        return None
+
+    hints: list[str] = []
+    if uri:
+        hints.append(uri)
+    if isinstance(manifest, dict):
+        for key in ("dataset_id", "repo_id", "robot_type", "robot_name"):
+            value = manifest.get(key)
+            if isinstance(value, str):
+                hints.append(value)
+    info_items: list[dict[str, Any]] = []
+    if isinstance(info, dict):
+        info_items.append(info)
+    else:
+        info_items.extend(_iter_lerobot_info(uri))
+    for item in info_items:
+        for key in ("robot_type", "robot_name", "repo_id", "codebase_version"):
+            value = item.get(key)
+            if isinstance(value, str):
+                hints.append(value)
+
+    haystack = " ".join(hints).lower()
+    if any(token in haystack for token in ("ffw_bg2", "bg2", "aiworker_19d", "ai_worker_19d")):
+        return list(names)
+    return None
+
+
 def _joint_names_from_features(
     features: Any,
 ) -> tuple[list[str] | None, list[str] | None]:
     if not isinstance(features, dict):
         return None, None
 
+    def _dim(key: str) -> int | None:
+        feature = features.get(key)
+        if not isinstance(feature, dict):
+            return None
+        shape = feature.get("shape")
+        if isinstance(shape, (list, tuple)) and shape:
+            try:
+                return int(shape[0])
+            except (TypeError, ValueError):
+                return None
+        return None
+
     def _names(key: str) -> list[str] | None:
         feature = features.get(key)
         if not isinstance(feature, dict):
             return None
         names = feature.get("names")
-        if isinstance(names, (list, tuple)) and names:
-            return [str(n) for n in names]
-        return None
+        return _valid_dim_names(names, _dim(key))
 
     return _names("observation.state"), _names("action")
 
@@ -255,6 +353,12 @@ def _joint_names_from_info(
     so charts can label series with joint names instead of s0/s1/..."""
     for info in _iter_lerobot_info(uri):
         state_names, action_names = _joint_names_from_features(info.get("features"))
+        features = info.get("features")
+        if isinstance(features, dict):
+            state_dim = _feature_dim(features.get("observation.state"))
+            action_dim = _feature_dim(features.get("action"))
+            state_names = state_names or _known_joint_names_for_dim(uri, state_dim, info=info)
+            action_names = action_names or _known_joint_names_for_dim(uri, action_dim, info=info)
         if state_names or action_names:
             return state_names, action_names
     return None, None
@@ -355,7 +459,7 @@ def _joint_names_from_manifest(
     if manifest is None:
         return None, None
 
-    def _names_from_ref(ref: Any) -> list[str] | None:
+    def _names_from_ref(ref: Any, dim: int | None) -> list[str] | None:
         if not isinstance(ref, str) or not ref.startswith("meta/info.json#/"):
             return None
         for info in _iter_lerobot_info(uri):
@@ -365,8 +469,9 @@ def _joint_names_from_manifest(
                     value = value.get(part)
                 else:
                     return None
-            if isinstance(value, (list, tuple)) and value:
-                return [str(n) for n in value]
+            names = _valid_dim_names(value, dim)
+            if names:
+                return names
         return None
 
     def _generic_vector_names(names: list[str] | None) -> bool:
@@ -377,7 +482,16 @@ def _joint_names_from_manifest(
             for name in names
         )
 
-    def _layout_names(entry: dict[str, Any]) -> list[str] | None:
+    def _entry_dim(entry: dict[str, Any]) -> int | None:
+        shape = entry.get("shape")
+        if isinstance(shape, (list, tuple)) and shape:
+            try:
+                return int(shape[0])
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    def _layout_names(entry: dict[str, Any], dim: int | None) -> list[str] | None:
         semantics = entry.get("semantics")
         if not isinstance(semantics, dict):
             return None
@@ -385,9 +499,7 @@ def _joint_names_from_manifest(
         if not isinstance(layout, dict):
             return None
         joint_order = layout.get("joint_order")
-        if isinstance(joint_order, list) and joint_order:
-            return [str(n) for n in joint_order]
-        return None
+        return _valid_dim_names(joint_order, dim)
 
     modalities = manifest.get("modalities")
     actions = manifest.get("actions")
@@ -396,9 +508,15 @@ def _joint_names_from_manifest(
     if isinstance(modalities, dict):
         state_entry = modalities.get("state.body")
         if isinstance(state_entry, dict):
-            state_names = _names_from_ref(state_entry.get("names_ref"))
+            state_dim = _entry_dim(state_entry)
+            state_names = _names_from_ref(state_entry.get("names_ref"), state_dim)
             if _generic_vector_names(state_names):
-                state_names = _layout_names(state_entry) or state_names
+                state_names = (
+                    _layout_names(state_entry, state_dim)
+                    or _known_joint_names_for_dim(uri, state_dim, manifest=manifest)
+                    or state_names
+                )
+            state_names = state_names or _known_joint_names_for_dim(uri, state_dim, manifest=manifest)
     if isinstance(actions, dict):
         training_targets = manifest.get("training_targets")
         action_key = None
@@ -408,9 +526,15 @@ def _joint_names_from_manifest(
             action_key = next(iter(actions))
         action_entry = actions.get(action_key) if isinstance(action_key, str) else None
         if isinstance(action_entry, dict):
-            action_names = _names_from_ref(action_entry.get("names_ref"))
+            action_dim = _entry_dim(action_entry)
+            action_names = _names_from_ref(action_entry.get("names_ref"), action_dim)
             if _generic_vector_names(action_names):
-                action_names = _layout_names(action_entry) or action_names
+                action_names = (
+                    _layout_names(action_entry, action_dim)
+                    or _known_joint_names_for_dim(uri, action_dim, manifest=manifest)
+                    or action_names
+                )
+            action_names = action_names or _known_joint_names_for_dim(uri, action_dim, manifest=manifest)
     if state_names is not None or action_names is not None:
         return state_names, action_names
 
@@ -838,6 +962,27 @@ def _camera_names_from_segments(row: dict[str, Any]) -> list[str]:
     return sorted(cameras)
 
 
+def _has_meaningful_text(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _has_episode_instruction(
+    instruction: Any,
+    task_segments: list[dict[str, Any]],
+) -> bool:
+    if _has_meaningful_text(instruction):
+        return True
+    return any(
+        isinstance(segment, dict)
+        and _has_meaningful_text(segment.get("language_instruction"))
+        for segment in task_segments
+    )
+
+
+def _has_wrist_camera(camera_names: list[str]) -> bool:
+    return any("wrist" in str(camera).lower() for camera in camera_names)
+
+
 def _camera_segment_media_id(row: dict[str, Any] | None, camera: str) -> str | None:
     if not isinstance(row, dict):
         return None
@@ -1227,7 +1372,7 @@ def _task_segments_from_row(row: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _parse_filter_query(query: str) -> list[tuple[str, str, Any]]:
-    clauses = [clause.strip() for clause in re.split(r"\s+AND\s+", query, flags=re.IGNORECASE)]
+    clauses = _split_filter_clauses(query)
     filters: list[tuple[str, str, Any]] = []
     for clause in clauses:
         if not clause:
@@ -1245,12 +1390,59 @@ def _parse_filter_query(query: str) -> list[tuple[str, str, Any]]:
     return filters
 
 
+def _split_filter_clauses(query: str) -> list[str]:
+    clauses: list[str] = []
+    current: list[str] = []
+    quote: str | None = None
+    escaped = False
+    index = 0
+    while index < len(query):
+        char = query[index]
+        if quote is not None:
+            current.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            current.append(char)
+            index += 1
+            continue
+        if (
+            query[index : index + 3].lower() == "and"
+            and (index == 0 or query[index - 1].isspace())
+            and (index + 3 == len(query) or query[index + 3].isspace())
+        ):
+            clause = "".join(current).strip()
+            if clause:
+                clauses.append(clause)
+            current = []
+            index += 3
+            continue
+        current.append(char)
+        index += 1
+    clause = "".join(current).strip()
+    if clause:
+        clauses.append(clause)
+    return clauses
+
+
 def _parse_filter_value(value: str) -> Any:
     stripped = value.strip()
     if (stripped.startswith('"') and stripped.endswith('"')) or (
         stripped.startswith("'") and stripped.endswith("'")
     ):
-        return stripped[1:-1]
+        return (
+            stripped[1:-1]
+            .replace(r"\\", "\\")
+            .replace(r"\"", '"')
+            .replace(r"\'", "'")
+        )
     lowered = stripped.lower()
     if lowered == "true":
         return True
@@ -1329,7 +1521,7 @@ def _matches_filter(
     operator: str,
     expected: Any,
 ) -> bool:
-    actual = model_dump(episode).get(field)
+    actual = _episode_filter_value(episode, field)
     if operator == "contains":
         return str(expected).lower() in str(actual or "").lower()
     if operator == "==":
@@ -1353,6 +1545,36 @@ def _matches_filter(
         if operator == "<=":
             return actual_number <= expected_number
     return False
+
+
+def _episode_filter_value(episode: EpisodeListItem, field: str) -> Any:
+    payload = model_dump(episode)
+    if field == "instruction_text":
+        segment_text = [
+            segment.get("language_instruction")
+            for segment in payload.get("task_segments", [])
+            if isinstance(segment, dict)
+        ]
+        return " ".join(
+            str(value)
+            for value in [payload.get("language_instruction"), payload.get("caption"), *segment_text]
+            if _has_meaningful_text(value)
+        )
+    if field == "search_text":
+        return " ".join(
+            str(value)
+            for value in [
+                payload.get("episode_index"),
+                payload.get("task_index"),
+                payload.get("language_instruction"),
+                payload.get("caption"),
+                payload.get("failure_reason"),
+                payload.get("split"),
+                " ".join(payload.get("camera_names", [])),
+            ]
+            if value not in (None, "")
+        )
+    return payload.get(field)
 
 
 def _sort_episodes(
@@ -2474,7 +2696,9 @@ class LanceDatasetStore:
                 dataset_id,
                 self._episode_payload(dataset_id, row, bundle.schemas["episodes"]),
             )
-            payload["camera_names"] = camera_names
+            if not payload.get("camera_names"):
+                payload["camera_names"] = camera_names
+                payload["has_wrist_camera"] = _has_wrist_camera(camera_names)
             items.append(EpisodeListItem(**payload))
         return items
 
@@ -2560,7 +2784,10 @@ class LanceDatasetStore:
             dataset_id,
             self._episode_payload(dataset_id, row, bundle.schemas["episodes"]),
         )
-        payload["camera_names"] = self._camera_names_for_bundle(bundle)
+        if not payload.get("camera_names"):
+            camera_names = self._camera_names_for_bundle(bundle)
+            payload["camera_names"] = camera_names
+            payload["has_wrist_camera"] = _has_wrist_camera(camera_names)
         return EpisodeDetail(**payload)
 
     def _get_lance_state_action_summary(
@@ -2827,6 +3054,9 @@ class LanceDatasetStore:
         caption = _first_present(row, EPISODE_TEXT_COLUMNS)
         fps = row.get("fps")
         length = _episode_length(row)
+        camera_names = _camera_names_from_segments(row)
+        language_instruction = row.get("language_instruction") or row.get("instruction")
+        task_segments = _task_segments_from_row(row)
         return {
             "dataset_id": dataset_id,
             "episode_index": episode_index,
@@ -2841,10 +3071,12 @@ class LanceDatasetStore:
             "has_human_label": bool(row.get("has_human_label", False)),
             "split": row.get("train_val_test_split", row.get("split")),
             "fps": float(fps) if fps is not None else None,
-            "camera_names": _camera_names_from_segments(row),
+            "camera_names": camera_names,
             "duration_seconds": (length / float(fps)) if length is not None and fps else None,
-            "language_instruction": row.get("language_instruction") or row.get("instruction"),
-            "task_segments": _task_segments_from_row(row),
+            "language_instruction": language_instruction,
+            "has_instruction": _has_episode_instruction(language_instruction, task_segments),
+            "has_wrist_camera": _has_wrist_camera(camera_names),
+            "task_segments": task_segments,
         }
 
     def _camera_names_for_bundle(self, bundle: LanceBundle) -> list[str]:
