@@ -131,6 +131,91 @@ def _build_published_bundle(root: Path, *, dataset_id: str = "smoke-bg2-v1") -> 
     (root / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
 
+def _build_published_v2_bundle(root: Path, *, dataset_id: str = "smoke-bg2-v2") -> None:
+    data_dir = root / "data"
+    meta_dir = root / "meta"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    meta_dir.mkdir(parents=True, exist_ok=True)
+
+    state_names = ["arm_l_joint1", "gripper_l_joint1"]
+    action_names = ["arm_l_joint1", "gripper_l_joint1"]
+    episodes_schema = pa.schema(
+        [
+            pa.field("episode_index", pa.int64(), nullable=False),
+            pa.field("task_index", pa.int64()),
+            pa.field("fps", pa.float64()),
+            pa.field("length", pa.int64()),
+            pa.field("timestamps", pa.list_(pa.float64())),
+            pa.field("observation_state", pa.list_(pa.list_(pa.float32()))),
+            pa.field("actions", pa.list_(pa.list_(pa.float32()))),
+            pa.field("language_instruction", pa.string()),
+        ]
+    )
+    lance.write_dataset(
+        pa.Table.from_pylist(
+            [
+                {
+                    "episode_index": 0,
+                    "task_index": 0,
+                    "fps": 30.0,
+                    "length": 2,
+                    "timestamps": [0.0, 1 / 30.0],
+                    "observation_state": [[0.0, 0.1], [0.2, 0.3]],
+                    "actions": [[1.0, 1.1], [1.2, 1.3]],
+                    "language_instruction": "pick",
+                }
+            ],
+            schema=episodes_schema,
+        ),
+        str(data_dir / "episodes.lance"),
+        mode="overwrite",
+    )
+    (meta_dir / "info.json").write_text(
+        json.dumps(
+            {
+                "features": {
+                    "observation.state": {"shape": [2], "names": state_names},
+                    "action": {"shape": [2], "names": action_names},
+                }
+            }
+        )
+    )
+    manifest = {
+        "format": "rllab_published_lance_dataset_v2",
+        "schema_version": "2.0",
+        "dataset_id": dataset_id,
+        "primary_training_table": "data/episodes.lance",
+        "tables": {"episodes": "data/episodes.lance"},
+        "modalities": {
+            "state.body": {
+                "kind": "state",
+                "column": "observation_state",
+                "names_ref": "meta/info.json#/features/observation.state/names",
+                "shape": [2],
+            }
+        },
+        "actions": {
+            "action.body": {
+                "kind": "action",
+                "column": "actions",
+                "names_ref": "meta/info.json#/features/action/names",
+                "shape": [2],
+                "semantics": {
+                    "command_type": "joint_position",
+                    "absolute_or_delta": "absolute",
+                    "units": "mixed",
+                    "control_frame": "robot_base",
+                    "applies_to_interval": "[t_i, t_{i+1})",
+                    "normalized": False,
+                },
+            }
+        },
+        "training_targets": ["action.body"],
+        "counts": {"episodes": 1, "frames": 2, "videos": 0},
+    }
+    (root / "manifest.json").write_text(json.dumps(manifest, indent=2))
+
+
 class PublishedLayoutTest(unittest.TestCase):
     def test_open_published_bundle_uses_manifest_dataset_id(self) -> None:
         with tempfile.TemporaryDirectory() as workdir:
@@ -154,6 +239,28 @@ class PublishedLayoutTest(unittest.TestCase):
             self.assertEqual(summary.episode_count, 3)
             self.assertEqual(summary.camera_names, ["cam_head"])
             self.assertEqual(store.get_video_blob("smoke-bg2-v1", 0, "cam_head"), b"video-0")
+
+    def test_open_published_v2_bundle_uses_registry_joint_names(self) -> None:
+        with tempfile.TemporaryDirectory() as workdir:
+            bundle_root = Path(workdir) / "bundle-v2"
+            _build_published_v2_bundle(bundle_root, dataset_id="smoke-bg2-v2")
+
+            store = LanceDatasetStore()
+            record = store.open_dataset(DatasetOpenRequest(uri=str(bundle_root)))
+            self.assertEqual(record.dataset_id, "smoke-bg2-v2")
+
+            summary = store.get_summary("smoke-bg2-v2")
+            self.assertIsNotNone(summary)
+            assert summary is not None
+            self.assertEqual(summary.storage_layout, "published_hf")
+            self.assertEqual(summary.primary_training_table, "data/episodes.lance")
+            self.assertEqual(summary.dataset_id_source, "manifest")
+
+            timeseries = store.get_episode_norm_series("smoke-bg2-v2", 0)
+            self.assertIsNotNone(timeseries)
+            assert timeseries is not None
+            self.assertEqual(timeseries.state_names, ["arm_l_joint1", "gripper_l_joint1"])
+            self.assertEqual(timeseries.action_names, ["arm_l_joint1", "gripper_l_joint1"])
 
     def test_flat_session_keeps_uri_dataset_id(self) -> None:
         with tempfile.TemporaryDirectory() as workdir:

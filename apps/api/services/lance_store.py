@@ -261,6 +261,7 @@ def _joint_names_from_info(
 
 
 PUBLISHED_LANCE_FORMAT = "rllab_published_lance_dataset_v2"
+PUBLISHED_LANCE_FORMATS = {PUBLISHED_LANCE_FORMAT}
 
 
 def _read_manifest(uri: str | None) -> dict[str, Any] | None:
@@ -286,7 +287,7 @@ def _read_published_manifest(uri: str) -> dict[str, Any] | None:
     """Return manifest.json only when it carries the published Lance marker."""
 
     manifest = _read_manifest(uri)
-    if manifest is None or manifest.get("format") != PUBLISHED_LANCE_FORMAT:
+    if manifest is None or manifest.get("format") not in PUBLISHED_LANCE_FORMATS:
         return None
     schema_version = str(manifest.get("schema_version", ""))
     if not schema_version.startswith("2."):
@@ -345,11 +346,74 @@ def _bundle_frame_action_column(bundle: "LanceBundle") -> str | None:
 def _joint_names_from_manifest(
     uri: str | None,
 ) -> tuple[list[str] | None, list[str] | None]:
-    """rllab raw collection manifest.json carries joint_order. The same list
-    applies to both state and action since collection enforces matching DoF."""
+    """Pull joint labels from RLLAB manifests.
+
+    v2 published bundles keep names in meta/info.json and point to them via
+    registry names_ref fields. v1/raw collection bundles carry joint_order.
+    """
     manifest = _read_manifest(uri)
     if manifest is None:
         return None, None
+
+    def _names_from_ref(ref: Any) -> list[str] | None:
+        if not isinstance(ref, str) or not ref.startswith("meta/info.json#/"):
+            return None
+        for info in _iter_lerobot_info(uri):
+            value: Any = info
+            for part in ref.removeprefix("meta/info.json#/").split("/"):
+                if isinstance(value, dict):
+                    value = value.get(part)
+                else:
+                    return None
+            if isinstance(value, (list, tuple)) and value:
+                return [str(n) for n in value]
+        return None
+
+    def _generic_vector_names(names: list[str] | None) -> bool:
+        if not names:
+            return True
+        return all(
+            re.fullmatch(r"(?:joint|state|action|dim|q)_\d+", name) is not None
+            for name in names
+        )
+
+    def _layout_names(entry: dict[str, Any]) -> list[str] | None:
+        semantics = entry.get("semantics")
+        if not isinstance(semantics, dict):
+            return None
+        layout = semantics.get("joint_layout")
+        if not isinstance(layout, dict):
+            return None
+        joint_order = layout.get("joint_order")
+        if isinstance(joint_order, list) and joint_order:
+            return [str(n) for n in joint_order]
+        return None
+
+    modalities = manifest.get("modalities")
+    actions = manifest.get("actions")
+    state_names: list[str] | None = None
+    action_names: list[str] | None = None
+    if isinstance(modalities, dict):
+        state_entry = modalities.get("state.body")
+        if isinstance(state_entry, dict):
+            state_names = _names_from_ref(state_entry.get("names_ref"))
+            if _generic_vector_names(state_names):
+                state_names = _layout_names(state_entry) or state_names
+    if isinstance(actions, dict):
+        training_targets = manifest.get("training_targets")
+        action_key = None
+        if isinstance(training_targets, list) and training_targets:
+            action_key = training_targets[0]
+        elif len(actions) == 1:
+            action_key = next(iter(actions))
+        action_entry = actions.get(action_key) if isinstance(action_key, str) else None
+        if isinstance(action_entry, dict):
+            action_names = _names_from_ref(action_entry.get("names_ref"))
+            if _generic_vector_names(action_names):
+                action_names = _layout_names(action_entry) or action_names
+    if state_names is not None or action_names is not None:
+        return state_names, action_names
+
     joint_order = manifest.get("joint_order")
     if isinstance(joint_order, list) and joint_order:
         names = [str(n) for n in joint_order]
