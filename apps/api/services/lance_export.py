@@ -360,6 +360,8 @@ def write_lance_subset(
     training_stats_rows = train_skill_clip_rows if train_skill_clip_rows else train_episode_rows
     stats_payload = _build_training_stats_json(training_stats_rows)
     stats_summary = _stats_summary(stats_payload)
+    published_stats_payload = _build_training_stats_json(train_episode_rows)
+    published_stats_summary = _stats_summary(published_stats_payload)
 
     metadata = {
         "dataset_id": dataset_id,
@@ -510,18 +512,18 @@ def write_lance_subset(
         pa=pa,
         lance=lance,
         dataset_id=dataset_id,
-        source_rows=training_stats_rows,
+        source_rows=train_episode_rows,
         frame_rows=frame_rows,
         video_blobs_by_episode=_remap_video_blobs_by_episode(
             video_blobs_by_episode or {},
             episode_index_by_source,
         ),
         camera_feature_keys=camera_feature_keys,
-        stats_payload=stats_payload,
-        stats_summary=stats_summary,
+        stats_payload=published_stats_payload,
+        stats_summary=published_stats_summary,
         fps=fps,
-        state_dim=stats_summary["state_dim"] or state_dim,
-        action_dim=stats_summary["action_dim"] or action_dim,
+        state_dim=published_stats_summary["state_dim"] or state_dim,
+        action_dim=published_stats_summary["action_dim"] or action_dim,
         version_description=version_description,
         source_lance_subset_root=final_root,
     )
@@ -2339,6 +2341,7 @@ def _annotation_row(
     episode_index_by_source: dict[int, int] | None = None,
 ) -> dict[str, Any]:
     row = model_dump(annotation)
+    metadata = row.pop("metadata", {}) or {}
     row["episode_index"] = _local_episode_index(
         int(annotation.episode_index),
         episode_index_by_source,
@@ -2347,6 +2350,7 @@ def _annotation_row(
         **row,
         "source": annotation.source.value,
         "review_status": annotation.review_status.value,
+        "metadata_json": json.dumps(metadata, sort_keys=True),
     }
 
 

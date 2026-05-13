@@ -477,8 +477,11 @@ class ExportServiceTest(unittest.TestCase):
         self.assertTrue(metadata["frame_table"]["action_dim_consistent"])
         episode_rows = written_paths.lookup(artifact["files"]["episodes"])["rows"]
         train_episode_rows = written_paths.lookup(artifact["files"]["train_episodes"])["rows"]
+        annotation_rows = written_paths.lookup(artifact["files"]["annotations_current"])["rows"]
         self.assertEqual(len(episode_rows), 1)
         self.assertEqual(len(train_episode_rows), 1)
+        self.assertEqual(annotation_rows[0]["metadata_json"], "{}")
+        self.assertNotIn("metadata", annotation_rows[0])
         self.assertNotIn("timestamps", episode_rows[0])
         self.assertNotIn("observation_state", episode_rows[0])
         self.assertNotIn("actions", episode_rows[0])
@@ -646,6 +649,18 @@ class ExportServiceTest(unittest.TestCase):
                 metadata={"skillId": 0, "qualityScore": 1.0, "successLabel": True},
             )
         )
+        second_skill = annotation_store.create(
+            AnnotationCreate(
+                dataset_id="sample-xvla-soft-fold",
+                episode_index=0,
+                start_frame=9,
+                end_frame=11,
+                label_type="skill",
+                label_value="grasp_part",
+                review_status=ReviewStatus.accepted,
+                metadata={"skillId": 1},
+            )
+        )
         fake_pyarrow = _fake_pyarrow_module()
         fake_lance, written_paths = _fake_lance_module()
         versions = VersionStore(storage_root=self.version_root, mirror_lance=False)
@@ -666,7 +681,11 @@ class ExportServiceTest(unittest.TestCase):
 
         manifest = json.loads(Path(record.output_uri or "").read_text(encoding="utf-8"))
         artifact = manifest["artifacts"]["lance_subset"]
+        published_artifact = manifest["artifacts"]["published_lance"]
         metadata = json.loads(Path(artifact["files"]["manifest"]).read_text(encoding="utf-8"))
+        published_metadata = json.loads(
+            Path(published_artifact["files"]["manifest"]).read_text(encoding="utf-8")
+        )
         vocabulary_rows = written_paths.lookup(artifact["files"]["skills"])["rows"]
         skill_rows = written_paths.lookup(artifact["files"]["skill_segments"])["rows"]
         frame_skill_rows = written_paths.lookup(artifact["files"]["frame_skill_labels"])["rows"]
@@ -679,31 +698,39 @@ class ExportServiceTest(unittest.TestCase):
         self.assertEqual(metadata["video_frame_offset_column"], "video_frame_offset")
         self.assertEqual(metadata["skill_vocabulary"]["table"], "skills.lance")
         self.assertEqual(metadata["total_skills"], 10)
-        self.assertEqual(metadata["total_skill_segments"], 1)
-        self.assertEqual(metadata["total_frame_skill_labels"], 5)
-        self.assertEqual(metadata["total_train_skill_clips"], 1)
+        self.assertEqual(metadata["total_skill_segments"], 2)
+        self.assertEqual(metadata["total_frame_skill_labels"], 8)
+        self.assertEqual(metadata["total_train_skill_clips"], 2)
         self.assertEqual(metadata["clip_export"]["skills"], 10)
-        self.assertEqual(metadata["clip_export"]["train_skill_clips"], 1)
+        self.assertEqual(metadata["clip_export"]["train_skill_clips"], 2)
         self.assertEqual(metadata["clip_export"]["jitter_offsets_applied"], [0])
         self.assertEqual(metadata["clip_export"]["copies_per_clip_applied"], 1)
         self.assertEqual(metadata["clip_export"]["warnings"], [])
         self.assertEqual(metadata["stats"]["source_table"], "train_skill_clips.lance")
         self.assertEqual(metadata["stats"]["source_row_unit"], "skill_clip")
-        self.assertEqual(metadata["stats"]["state_count"], 5)
-        self.assertEqual(metadata["stats"]["action_count"], 5)
-        self.assertEqual(artifact["materialized"]["state_stats_count"], 5)
-        self.assertEqual(artifact["materialized"]["action_stats_count"], 5)
+        self.assertEqual(metadata["stats"]["state_count"], 8)
+        self.assertEqual(metadata["stats"]["action_count"], 8)
+        self.assertEqual(artifact["materialized"]["state_stats_count"], 8)
+        self.assertEqual(artifact["materialized"]["action_stats_count"], 8)
         self.assertEqual(artifact["validation"]["skill_count"], 10)
-        self.assertEqual(artifact["validation"]["frame_skill_label_count"], 5)
-        self.assertEqual(artifact["validation"]["train_skill_clip_count"], 1)
-        self.assertEqual(artifact["validation"]["state_stats_count"], 5)
-        self.assertEqual(artifact["validation"]["action_stats_count"], 5)
+        self.assertEqual(artifact["validation"]["frame_skill_label_count"], 8)
+        self.assertEqual(artifact["validation"]["train_skill_clip_count"], 2)
+        self.assertEqual(artifact["validation"]["state_stats_count"], 8)
+        self.assertEqual(artifact["validation"]["action_stats_count"], 8)
+        self.assertEqual(published_artifact["validation"]["episode_count"], 1)
+        self.assertEqual(published_artifact["validation"]["frame_count"], 180)
+        self.assertEqual(published_metadata["total_episodes"], 1)
+        self.assertEqual(published_metadata["total_frames"], 180)
+        self.assertEqual(published_metadata["stats"]["state_count"], 180)
+        self.assertEqual(published_metadata["stats"]["action_count"], 180)
         self.assertEqual(vocabulary_rows[0]["skill_name"], "approach")
         self.assertEqual(skill_rows[0]["clip_id"], skill.annotation_id)
         self.assertEqual(skill_rows[0]["failure_reason"], None)
-        self.assertEqual(frame_skill_rows[0]["segment_id"], skill.annotation_id)
-        self.assertEqual(frame_skill_rows[0]["frame_index"], 3)
-        self.assertEqual(frame_skill_rows[-1]["frame_index"], 7)
+        first_segment_frame_rows = [
+            row for row in frame_skill_rows if row["segment_id"] == skill.annotation_id
+        ]
+        self.assertEqual(first_segment_frame_rows[0]["frame_index"], 3)
+        self.assertEqual(first_segment_frame_rows[-1]["frame_index"], 7)
         self.assertEqual(train_clip_rows[0]["clip_id"], skill.annotation_id)
         self.assertEqual(train_clip_rows[0]["source_episode_index"], 0)
         self.assertEqual(train_clip_rows[0]["episode_index"], 0)
@@ -711,6 +738,7 @@ class ExportServiceTest(unittest.TestCase):
         self.assertEqual(train_clip_rows[0]["video_frame_offset"], 3)
 
         annotation_store.delete(skill.annotation_id)
+        annotation_store.delete(second_skill.annotation_id)
 
     def test_lance_export_warns_on_overlapping_skill_clips_and_pending_jitter(self) -> None:
         first = annotation_store.create(

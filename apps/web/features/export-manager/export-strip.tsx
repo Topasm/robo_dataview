@@ -55,6 +55,7 @@ export function ExportStrip({
   const [hubUploadError, setHubUploadError] = useState<string | null>(null);
   const [hubUploading, setHubUploading] = useState(false);
   const [applySubmitting, setApplySubmitting] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
   const applyLocalProgressPercent = useOperationProgress(applySubmitting);
   const hubUploadProgressPercent = useOperationProgress(hubUploading);
   const defaultHubRepoId = exportRecord?.hubRepoId ?? hubArtifact?.repo_id ?? "";
@@ -66,6 +67,7 @@ export function ExportStrip({
     setHubUpload(null);
     setHubUploadError(null);
     setHubUploading(false);
+    setApplyError(null);
     setHubRepoDraft(defaultHubRepoId);
   }, [defaultHubRepoId, exportRecord?.exportId]);
 
@@ -93,8 +95,11 @@ export function ExportStrip({
       return;
     }
     setApplySubmitting(true);
+    setApplyError(null);
     try {
       await onCreateExport(format, scope, options);
+    } catch (error) {
+      setApplyError(error instanceof Error ? error.message : String(error));
     } finally {
       setApplySubmitting(false);
     }
@@ -131,6 +136,11 @@ export function ExportStrip({
             label="Apply 진행 중"
             percent={applyProgressPercent}
           />
+        ) : null}
+        {applyError ? (
+          <div className="export-hub-error" role="alert">
+            {applyError}
+          </div>
         ) : null}
         {lerobotArtifact ? (
           <div className="export-artifact">
