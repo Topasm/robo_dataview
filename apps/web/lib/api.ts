@@ -288,6 +288,8 @@ type ExportRecordResponse = {
   artifacts?: ExportRecord["artifacts"];
   num_episodes?: number | null;
   created_at?: string | null;
+  hub_repo_id?: string | null;
+  hub_repo_source?: string | null;
 };
 
 type ExportHubUploadResponse = {
@@ -1522,7 +1524,9 @@ function toExportRecord(raw: ExportRecordResponse): ExportRecord {
     message: raw.message,
     artifacts: raw.artifacts ?? null,
     numEpisodes: raw.num_episodes ?? raw.episode_indices.length,
-    createdAt: raw.created_at ?? null
+    createdAt: raw.created_at ?? null,
+    hubRepoId: raw.hub_repo_id ?? null,
+    hubRepoSource: raw.hub_repo_source ?? null
   };
 }
 

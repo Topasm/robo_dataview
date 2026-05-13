@@ -30,6 +30,8 @@ class ExportRecord(BaseModel):
     artifacts: dict | None = None
     num_episodes: int = 0
     created_at: datetime | None = None
+    hub_repo_id: str | None = None
+    hub_repo_source: str | None = None
 
 
 class ExportHubUploadRequest(BaseModel):

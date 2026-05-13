@@ -2164,6 +2164,37 @@ textarea {
   white-space: nowrap;
 }
 
+.export-hub-panel {
+  max-width: min(760px, 70vw);
+}
+
+.export-hub-repo-row {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 58px minmax(180px, 1fr);
+}
+
+.export-hub-repo-row input {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  min-width: 0;
+  padding: 6px 8px;
+}
+
+.export-artifact .export-hub-guide,
+.export-artifact .export-hub-error {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.export-artifact .export-hub-error {
+  color: var(--danger);
+}
+
 .export-actions {
   align-items: center;
   display: flex;

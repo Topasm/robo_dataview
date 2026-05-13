@@ -1338,8 +1338,11 @@ export function useStudioData() {
     }
   }
 
-  async function handleUploadExportToHub(exportId: string): Promise<ExportHubUploadResult> {
-    const result = await uploadExportToHub(exportId);
+  async function handleUploadExportToHub(
+    exportId: string,
+    repoId?: string,
+  ): Promise<ExportHubUploadResult> {
+    const result = await uploadExportToHub(exportId, repoId);
     const record = await fetchExport(exportId);
     setExportRecord(record);
     void refreshPastExports(record.datasetId);

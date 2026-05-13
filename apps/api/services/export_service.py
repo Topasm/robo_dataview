@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 from typing import Any
+from urllib.parse import urlparse
 from uuid import uuid4
 
 logger = logging.getLogger(__name__)
@@ -70,7 +71,7 @@ class ExportStore:
             output_uri=str(manifest_path),
             message=None,
         )
-        record = self._write_manifest(record, payload, manifest_path)
+        record = self._with_hub_defaults(self._write_manifest(record, payload, manifest_path))
         self._records[export_id] = record
         return record
 
@@ -80,11 +81,12 @@ class ExportStore:
             record = self._record_from_manifest(EXPORT_ROOT / export_id / "manifest.json")
         if record is None:
             raise HTTPException(status_code=404, detail="Export not found")
+        record = self._with_hub_defaults(record)
         self._records[export_id] = record
         return record
 
     def list(self, *, dataset_id: str | None = None) -> list[ExportRecord]:
-        records = list(self._records.values())
+        records = [self._with_hub_defaults(record) for record in self._records.values()]
         if dataset_id is not None:
             records = [record for record in records if record.dataset_id == dataset_id]
         records.sort(
@@ -108,8 +110,11 @@ class ExportStore:
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    "Hugging Face repo is not configured. Set RLLAB_HF_NAMESPACE or "
-                    "RLLAB_HF_REPO_ID on the API process."
+                    "Hugging Face repo is not configured. "
+                    "한국어 안내: 업로드할 HF repo를 찾지 못했습니다. "
+                    "원본 HF dataset을 열었으면 repo id 입력칸에 owner/name을 넣거나, "
+                    "API 실행 환경에 RLLAB_HF_REPO_ID=owner/name 또는 "
+                    "RLLAB_HF_NAMESPACE=owner를 설정하세요."
                 ),
             )
 
@@ -183,7 +188,7 @@ class ExportStore:
                     created_at = datetime.fromisoformat(created_at_raw)
                 except ValueError:
                     created_at = None
-            return ExportRecord(
+            record = ExportRecord(
                 export_id=manifest["export_id"],
                 dataset_id=manifest["dataset_id"],
                 episode_indices=list(manifest.get("episode_indices", [])),
@@ -194,9 +199,37 @@ class ExportStore:
                 artifacts=manifest.get("artifacts"),
                 num_episodes=int(manifest.get("num_episodes", 0)),
                 created_at=created_at,
+                hub_repo_id=_string_or_none(
+                    (manifest.get("hub_upload") or {}).get("default_repo_id")
+                    if isinstance(manifest.get("hub_upload"), dict)
+                    else None
+                ),
+                hub_repo_source=_string_or_none(
+                    (manifest.get("hub_upload") or {}).get("repo_source")
+                    if isinstance(manifest.get("hub_upload"), dict)
+                    else None
+                ),
             )
+            return self._with_hub_defaults(record)
         except (KeyError, TypeError, ValueError, json.JSONDecodeError):
             return None
+
+    @staticmethod
+    def _with_hub_defaults(record: ExportRecord) -> ExportRecord:
+        repo_id, repo_source = ExportStore._hub_repo_target(record)
+        if repo_source and repo_source.startswith("env:"):
+            default_repo_id = repo_id
+            default_repo_source = repo_source
+        else:
+            default_repo_id = record.hub_repo_id or repo_id
+            default_repo_source = record.hub_repo_source or repo_source
+        return model_copy(
+            record,
+            update={
+                "hub_repo_id": default_repo_id,
+                "hub_repo_source": default_repo_source,
+            },
+        )
 
     @staticmethod
     def _hub_upload_path(record: ExportRecord) -> Path:
@@ -214,20 +247,31 @@ class ExportStore:
 
     @staticmethod
     def _hub_repo_id(record: ExportRecord) -> str | None:
+        repo_id, _source = ExportStore._hub_repo_target(record)
+        return repo_id
+
+    @staticmethod
+    def _hub_repo_target(record: ExportRecord) -> tuple[str | None, str | None]:
         explicit = os.getenv("RLLAB_HF_REPO_ID")
         if explicit:
-            return explicit
+            return explicit, "env:RLLAB_HF_REPO_ID"
+        source_repo = _source_hub_repo_id(record.dataset_id)
+        if source_repo:
+            return source_repo, "source_dataset"
         namespace = os.getenv("RLLAB_HF_NAMESPACE")
         if not namespace:
-            return None
+            return None, None
         # The HF dataset repo is keyed by dataset_id; each curated export becomes
         # a new commit (and optionally a tag via RLLAB_HF_REVISION) on the same
         # repo, not a separate <id>-curated-<hash> repo. Set
         # RLLAB_HF_CURATED_REPO_PER_EXPORT=1 to fall back to the legacy naming.
         if _truthy_env("RLLAB_HF_CURATED_REPO_PER_EXPORT"):
             name = _hub_repo_name(f"{record.dataset_id}-curated-{record.export_id[:8]}")
-            return f"{namespace.rstrip('/')}/{name}"
-        return f"{namespace.rstrip('/')}/{_hub_repo_name(record.dataset_id)}"
+            return f"{namespace.rstrip('/')}/{name}", "env:RLLAB_HF_NAMESPACE"
+        return (
+            f"{namespace.rstrip('/')}/{_hub_repo_name(record.dataset_id)}",
+            "env:RLLAB_HF_NAMESPACE",
+        )
 
     def _record_hub_upload(
         self,
@@ -476,6 +520,16 @@ class ExportStore:
             "artifacts": artifacts,
             "episodes": episodes,
         }
+        hub_repo_id, hub_repo_source = self._hub_repo_target(record)
+        if hub_repo_id:
+            manifest["hub_upload"] = {
+                "default_repo_id": hub_repo_id,
+                "repo_source": hub_repo_source,
+                "hint_ko": (
+                    "HF 업로드는 이 repo에 새 commit으로 올라갑니다. "
+                    "다른 repo로 올리려면 UI의 repo id 입력칸을 바꾸세요."
+                ),
+            }
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest_path.write_text(json.dumps(manifest, indent=2, default=str), encoding="utf-8")
         publish_uri = manifest.get("publish_uri")
@@ -605,10 +659,6 @@ class ExportStore:
                 break
         return frames
 
-
-exports = ExportStore()
-
-
 def _truthy_env(name: str, default: bool = False) -> bool:
     value = os.getenv(name)
     if value is None:
@@ -624,6 +674,117 @@ def _hub_repo_name(value: str) -> str:
     return slug[:96].strip(".-") or "robot-data-studio-export"
 
 
+def _string_or_none(value: Any) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _source_hub_repo_id(dataset_id: str) -> str | None:
+    try:
+        summary = store.get_summary(dataset_id)
+    except Exception:  # noqa: BLE001 - repo inference is best-effort only
+        return None
+    if summary is None:
+        return None
+    return _infer_hub_repo_id(summary.uri)
+
+
+def _infer_hub_repo_id(uri: str | None) -> str | None:
+    if not uri:
+        return None
+    direct = _repo_id_from_text(uri)
+    if direct:
+        return direct
+
+    path = _local_path_from_uri(uri)
+    if path is None or not path.exists():
+        return None
+
+    for manifest_path in (path / "manifest.json", path / "metadata.json"):
+        if not manifest_path.exists():
+            continue
+        try:
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        repo_id = _repo_id_from_manifest(payload)
+        if repo_id:
+            return repo_id
+
+    for text_path in (path / "README.md", path / ".git" / "config"):
+        if not text_path.exists():
+            continue
+        try:
+            repo_id = _repo_id_from_text(text_path.read_text(encoding="utf-8"))
+        except OSError:
+            repo_id = None
+        if repo_id:
+            return repo_id
+    return None
+
+
+def _local_path_from_uri(uri: str) -> Path | None:
+    parsed = urlparse(uri)
+    if parsed.scheme == "file":
+        return Path(parsed.path).expanduser()
+    if parsed.scheme and parsed.scheme != "":
+        return None
+    return Path(uri).expanduser()
+
+
+def _repo_id_from_manifest(payload: Any) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    for key in (
+        "repo_id",
+        "hf_repo_id",
+        "source_repo_id",
+        "source_dataset",
+        "source_dataset_url",
+        "dataset_url",
+    ):
+        value = payload.get(key)
+        if isinstance(value, str):
+            repo_id = _repo_id_from_text(value)
+            if repo_id:
+                return repo_id
+            if _looks_like_repo_id(value):
+                return value.strip().removesuffix(".git")
+    artifacts = payload.get("artifacts")
+    if isinstance(artifacts, dict):
+        hub = artifacts.get("huggingface_hub")
+        if isinstance(hub, dict):
+            return _repo_id_from_manifest(hub)
+    return None
+
+
+def _repo_id_from_text(text: str) -> str | None:
+    patterns = (
+        r"hf://datasets/([A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*)",
+        r"(?:https?://)?(?:www\.)?(?:huggingface\.co|hf\.co)/datasets/([A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*)",
+        r"git@(?:huggingface\.co|hf\.co):datasets/([A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*)(?:\.git)?",
+        r"(?m)^#\s+([A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*)\s*$",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            return match.group(1).removesuffix(".git")
+    stripped = text.strip().removesuffix(".git")
+    if _looks_like_repo_id(stripped):
+        return stripped
+    return None
+
+
+def _looks_like_repo_id(value: str) -> bool:
+    return bool(
+        re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*",
+            value.strip(),
+        )
+    )
+
+
 def _clip_export_options(payload: ExportCreateRequest) -> dict[str, Any]:
     return {
         "clip_label_type": payload.clip_label_type,
@@ -632,3 +793,6 @@ def _clip_export_options(payload: ExportCreateRequest) -> dict[str, Any]:
         "jitter_offsets": payload.jitter_offsets,
         "copies_per_clip": payload.copies_per_clip,
     }
+
+
+exports = ExportStore()

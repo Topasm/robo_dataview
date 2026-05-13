@@ -5,6 +5,8 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import lance
 import pyarrow as pa
@@ -605,6 +607,63 @@ class HubRepoNamingTest(unittest.TestCase):
         os.environ["RLLAB_HF_NAMESPACE"] = "rllab-postech"
         repo_id = export_service.ExportStore._hub_repo_id(self.record)
         self.assertEqual(repo_id, "rllab-postech/bg2-grasp-v1")
+
+    def test_source_hf_repo_is_default_before_namespace(self) -> None:
+        os.environ["RLLAB_HF_NAMESPACE"] = "rllab-postech"
+        with tempfile.TemporaryDirectory() as tmp:
+            dataset_root = Path(tmp)
+            (dataset_root / "README.md").write_text(
+                "# rllab-postech/data_pickup_tire\n",
+                encoding="utf-8",
+            )
+            fake_store = SimpleNamespace(
+                get_summary=lambda _dataset_id: SimpleNamespace(uri=str(dataset_root))
+            )
+            with patch.object(export_service, "store", fake_store):
+                repo_id = export_service.ExportStore._hub_repo_id(self.record)
+        self.assertEqual(repo_id, "rllab-postech/data_pickup_tire")
+
+    def test_explicit_repo_id_wins_over_source_hf_repo(self) -> None:
+        os.environ["RLLAB_HF_REPO_ID"] = "myorg/something-explicit"
+        with tempfile.TemporaryDirectory() as tmp:
+            dataset_root = Path(tmp)
+            (dataset_root / "README.md").write_text(
+                "# rllab-postech/data_pickup_tire\n",
+                encoding="utf-8",
+            )
+            fake_store = SimpleNamespace(
+                get_summary=lambda _dataset_id: SimpleNamespace(uri=str(dataset_root))
+            )
+            with patch.object(export_service, "store", fake_store):
+                repo_id = export_service.ExportStore._hub_repo_id(self.record)
+        self.assertEqual(repo_id, "myorg/something-explicit")
+
+    def test_git_clone_origin_can_define_source_hf_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dataset_root = Path(tmp)
+            git_dir = dataset_root / ".git"
+            git_dir.mkdir()
+            (git_dir / "config").write_text(
+                "[remote \"origin\"]\n"
+                "\turl = https://huggingface.co/datasets/rllab-postech/data_pickup_tire\n",
+                encoding="utf-8",
+            )
+            fake_store = SimpleNamespace(
+                get_summary=lambda _dataset_id: SimpleNamespace(uri=str(dataset_root))
+            )
+            with patch.object(export_service, "store", fake_store):
+                repo_id = export_service.ExportStore._hub_repo_id(self.record)
+        self.assertEqual(repo_id, "rllab-postech/data_pickup_tire")
+
+    def test_hf_uri_can_define_source_hf_repo(self) -> None:
+        fake_store = SimpleNamespace(
+            get_summary=lambda _dataset_id: SimpleNamespace(
+                uri="hf://datasets/rllab-postech/data_pickup_tire"
+            )
+        )
+        with patch.object(export_service, "store", fake_store):
+            repo_id = export_service.ExportStore._hub_repo_id(self.record)
+        self.assertEqual(repo_id, "rllab-postech/data_pickup_tire")
 
     def test_legacy_curated_suffix_opt_in(self) -> None:
         os.environ["RLLAB_HF_NAMESPACE"] = "rllab-postech"

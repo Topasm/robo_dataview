@@ -337,6 +337,8 @@ export type ExportRecord = {
   artifacts: ExportArtifacts | null;
   numEpisodes: number;
   createdAt: string | null;
+  hubRepoId: string | null;
+  hubRepoSource: string | null;
 };
 
 export type ExportHubUploadResult = {

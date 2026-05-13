@@ -23,7 +23,7 @@ type ExportStripProps = {
     scope?: "episode" | "split",
     options?: SkillExportOptions,
   ) => Promise<void>;
-  onUploadExportToHub: (exportId: string) => Promise<ExportHubUploadResult>;
+  onUploadExportToHub: (exportId: string, repoId?: string) => Promise<ExportHubUploadResult>;
   split: string | null;
 };
 
@@ -53,12 +53,15 @@ export function ExportStrip({
   const [hubUpload, setHubUpload] = useState<ExportHubUploadResult | null>(null);
   const [hubUploadError, setHubUploadError] = useState<string | null>(null);
   const [hubUploading, setHubUploading] = useState(false);
+  const defaultHubRepoId = exportRecord?.hubRepoId ?? hubArtifact?.repo_id ?? "";
+  const [hubRepoDraft, setHubRepoDraft] = useState(defaultHubRepoId);
 
   useEffect(() => {
     setHubUpload(null);
     setHubUploadError(null);
     setHubUploading(false);
-  }, [exportRecord?.exportId]);
+    setHubRepoDraft(defaultHubRepoId);
+  }, [defaultHubRepoId, exportRecord?.exportId]);
 
   async function handleHubUpload() {
     if (!exportRecord || hubUploading) {
@@ -67,7 +70,10 @@ export function ExportStrip({
     setHubUploading(true);
     setHubUploadError(null);
     try {
-      const result = await onUploadExportToHub(exportRecord.exportId);
+      const result = await onUploadExportToHub(
+        exportRecord.exportId,
+        hubRepoDraft.trim() || undefined,
+      );
       setHubUpload(result);
     } catch (error) {
       setHubUploadError(error instanceof Error ? error.message : String(error));
@@ -155,19 +161,38 @@ export function ExportStrip({
           <ExportArtifactSummary artifact={hfDatasetArtifact} label="HF Dataset" />
         ) : null}
         {canUploadHub ? (
-          <div className="export-artifact">
+          <div className="export-artifact export-hub-panel">
             <span>Hugging Face</span>
             <span>
               {hubUpload?.repoUrl ?? hubArtifact?.repo_url ?? "Upload this curated export?"}
             </span>
+            <label className="export-hub-repo-row">
+              <span>HF repo</span>
+              <input
+                aria-label="Hugging Face repository id"
+                onChange={(event) => setHubRepoDraft(event.target.value)}
+                placeholder="rllab-postech/data_pickup_tire"
+                spellCheck={false}
+                value={hubRepoDraft}
+              />
+            </label>
+            <span className="export-hub-guide">
+              한국어 안내: Apply는 로컬 curated export를 만들고, Upload는 위 HF repo에 새
+              commit으로 올립니다. 원본 HF dataset을 열었으면 repo가 자동 입력됩니다.
+            </span>
+            {exportRecord?.hubRepoSource ? (
+              <span className="export-hub-guide">
+                기본값 출처: {hubRepoSourceLabel(exportRecord.hubRepoSource)}
+              </span>
+            ) : null}
             {hubUpload?.commitUrl ?? hubArtifact?.commit_url ? (
               <span>{hubUpload?.commitUrl ?? hubArtifact?.commit_url}</span>
             ) : hubUploadError ? (
-              <span>{hubUploadError}</span>
+              <span className="export-hub-error">{hubUploadError}</span>
             ) : null}
             <button
               className="text-button secondary-text-button"
-              disabled={hubUploading}
+              disabled={hubUploading || !hubRepoDraft.trim()}
               onClick={() => void handleHubUpload()}
               title="Upload this curated Lance export to Hugging Face"
               type="button"
@@ -332,4 +357,17 @@ function loaderStatus(loader: {
     return "ok";
   }
   return "check";
+}
+
+function hubRepoSourceLabel(source: string): string {
+  if (source === "source_dataset") {
+    return "원본 HF dataset";
+  }
+  if (source === "env:RLLAB_HF_REPO_ID") {
+    return "API 환경변수 RLLAB_HF_REPO_ID";
+  }
+  if (source === "env:RLLAB_HF_NAMESPACE") {
+    return "API 환경변수 RLLAB_HF_NAMESPACE";
+  }
+  return source;
 }
