@@ -443,6 +443,19 @@ class LanceDatasetStoreTest(unittest.TestCase):
         self.assertEqual(reloaded.status, "sample")
         self.assertEqual(summary.episode_count, 3)
 
+    def test_applied_deleted_episode_is_hidden_from_curated_view(self) -> None:
+        with patch.object(LanceDatasetStore, "_hidden_episode_indices", return_value={0}):
+            store = LanceDatasetStore()
+            summary = store.get_summary("sample-xvla-soft-fold")
+            page = store.list_episode_page("sample-xvla-soft-fold", limit=10, offset=0)
+
+            self.assertIsNotNone(summary)
+            assert summary is not None
+            self.assertEqual(summary.episode_count, 2)
+            self.assertEqual(page.total, 2)
+            self.assertNotIn(0, [episode.episode_index for episode in page.items])
+            self.assertIsNone(store.get_episode("sample-xvla-soft-fold", 0))
+
     def test_v2_camera_segments_resolve_video_by_stable_media_id(self) -> None:
         episode_rows = [
             {

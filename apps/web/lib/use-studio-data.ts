@@ -16,6 +16,7 @@ import {
   fetchAnnotations,
   fetchCurrentUser,
   fetchDatasetHealth,
+  fetchDatasetSummary,
   fetchDatasetSummaries,
   fetchEpisodePage,
   fetchExport,
@@ -318,6 +319,39 @@ export function useStudioData() {
       }
     },
     []
+  );
+
+  const refreshCuratedDatasetView = useCallback(
+    async (datasetId: string) => {
+      const summary = await fetchDatasetSummary(datasetId);
+      setSummaries((current) => [
+        summary,
+        ...current.filter((item) => item.datasetId !== datasetId)
+      ]);
+      if (datasetId !== selectedDatasetId) {
+        return;
+      }
+      const page = await loadEpisodePage(
+        datasetId,
+        0,
+        false,
+        episodeMetadataFilters,
+        episodeSearchText
+      );
+      const stillVisible = page.items.some(
+        (episode) => episode.episodeIndex === selectedEpisodeIndex
+      );
+      if (!stillVisible) {
+        setSelectedEpisodeIndex(page.items[0]?.episodeIndex ?? -1);
+      }
+    },
+    [
+      episodeMetadataFilters,
+      episodeSearchText,
+      loadEpisodePage,
+      selectedDatasetId,
+      selectedEpisodeIndex
+    ]
   );
 
   const handleAnnotationMutationError = useCallback(
@@ -781,6 +815,7 @@ export function useStudioData() {
             .then((record) => {
               if (isActive) {
                 setExportRecord(record);
+                void refreshCuratedDatasetView(record.datasetId);
               }
             })
             .catch(() => undefined);
@@ -806,7 +841,7 @@ export function useStudioData() {
       isActive = false;
       controller.abort();
     };
-  }, [exportJobId, exportJobStatus]);
+  }, [exportJobId, exportJobStatus, refreshCuratedDatasetView]);
 
   function resetDerivedState() {
     setRerunSession(null);
@@ -1335,6 +1370,7 @@ export function useStudioData() {
       const record = await fetchExport(job.createdExportId);
       setExportRecord(record);
       void refreshPastExports(record.datasetId);
+      await refreshCuratedDatasetView(record.datasetId);
     }
   }
 
@@ -1346,6 +1382,7 @@ export function useStudioData() {
     const record = await fetchExport(exportId);
     setExportRecord(record);
     void refreshPastExports(record.datasetId);
+    await refreshCuratedDatasetView(record.datasetId);
     return result;
   }
 

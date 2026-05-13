@@ -391,6 +391,31 @@ class AnnotationServiceTest(unittest.TestCase):
 
         self.assertEqual([event.action for event in events], ["create", "accept", "assign"])
 
+    def test_applied_deleted_episode_disposition_cannot_be_cleared(self) -> None:
+        store = AnnotationStore(persist=False)
+        created = store.upsert_episode_disposition(
+            dataset_id="dataset-a",
+            episode_index=2,
+            disposition="deleted",
+            reason=None,
+            actor="local",
+        )
+        self.assertIsNotNone(created)
+        records = store.list("dataset-a", episode_index=2)
+        store.mark_applied([records[0].annotation_id], export_id="export-001")
+
+        cleared = store.upsert_episode_disposition(
+            dataset_id="dataset-a",
+            episode_index=2,
+            disposition=None,
+            reason=None,
+            actor="local",
+        )
+
+        self.assertEqual(cleared["disposition"], "deleted")
+        self.assertEqual(cleared["applied_export_id"], "export-001")
+        self.assertEqual(store.applied_deleted_episode_indices("dataset-a"), {2})
+
 
 if __name__ == "__main__":
     unittest.main()

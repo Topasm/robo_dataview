@@ -299,6 +299,16 @@ class AnnotationStore:
         if disposition is None:
             if existing is None:
                 return None
+            if (
+                existing.label_value == "deleted"
+                and existing.applied_export_id is not None
+            ):
+                return {
+                    "disposition": existing.label_value,
+                    "reason": (existing.metadata or {}).get("reason"),
+                    "disposition_updated_at": existing.updated_at,
+                    "applied_export_id": existing.applied_export_id,
+                }
             self.delete(existing.annotation_id, actor=actor)
             return None
 
@@ -319,6 +329,7 @@ class AnnotationStore:
                 "disposition": updated.label_value,
                 "reason": (updated.metadata or {}).get("reason"),
                 "disposition_updated_at": updated.updated_at,
+                "applied_export_id": updated.applied_export_id,
             }
 
         created = self.create(
@@ -339,6 +350,7 @@ class AnnotationStore:
             "disposition": created.label_value,
             "reason": (created.metadata or {}).get("reason"),
             "disposition_updated_at": created.updated_at,
+            "applied_export_id": created.applied_export_id,
         }
 
     def list_episode_dispositions(
@@ -361,8 +373,17 @@ class AnnotationStore:
                 "disposition": record.label_value,
                 "reason": (record.metadata or {}).get("reason"),
                 "disposition_updated_at": record.updated_at,
+                "applied_export_id": record.applied_export_id,
             }
             for episode_index, record in latest.items()
+        }
+
+    def applied_deleted_episode_indices(self, dataset_id: str) -> set[int]:
+        return {
+            int(episode_index)
+            for episode_index, info in self.list_episode_dispositions(dataset_id).items()
+            if info.get("disposition") == "deleted"
+            and info.get("applied_export_id") is not None
         }
 
     def _find_active_disposition(

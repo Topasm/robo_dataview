@@ -36,7 +36,7 @@ from apps.api.schemas.frames import FrameRecord
 from apps.api.schemas.search import FilterSearchRequest, SearchResult
 from apps.api.services.lance_filter import LanceFilterEngine
 from apps.api.services.lerobot_io import read_lerobot_snapshot_episodes
-from apps.api.services.pydantic_compat import model_dump
+from apps.api.services.pydantic_compat import model_copy, model_dump
 from packages.robot_schema import (
     build_episode_label_history_pyarrow_schema,
     build_episode_labels_pyarrow_schema,
@@ -2105,7 +2105,29 @@ class LanceDatasetStore:
         return record
 
     def get_summary(self, dataset_id: str) -> DatasetSummary | None:
-        return self._summaries.get(dataset_id)
+        summary = self._summaries.get(dataset_id)
+        if summary is None:
+            return None
+        hidden = self._hidden_episode_indices(dataset_id)
+        if not hidden:
+            return summary
+        episodes = self._all_episode_items(dataset_id)
+        return model_copy(
+            summary,
+            update={
+                "episode_count": len(episodes),
+                "frame_count": sum(episode.length or 0 for episode in episodes),
+                "reviewed_count": sum(
+                    1 for episode in episodes if episode.review_status != "pending"
+                ),
+                "accepted_count": sum(
+                    1 for episode in episodes if episode.review_status == "accepted"
+                ),
+                "rejected_count": sum(
+                    1 for episode in episodes if episode.review_status == "rejected"
+                ),
+            },
+        )
 
     def get_schema(self, dataset_id: str) -> dict[str, list[str]] | None:
         bundle = self._bundles.get(dataset_id)
@@ -2128,7 +2150,12 @@ class LanceDatasetStore:
         sort_order: str = "asc",
         filter_query: str | None = None,
     ) -> list[EpisodeListItem]:
-        if sort_by != "episode_index" or sort_order != "asc" or filter_query:
+        if (
+            sort_by != "episode_index"
+            or sort_order != "asc"
+            or filter_query
+            or self._hidden_episode_indices(dataset_id)
+        ):
             return self.list_episode_page(
                 dataset_id,
                 limit=limit,
@@ -2192,12 +2219,24 @@ class LanceDatasetStore:
         if sort_order not in {"asc", "desc"}:
             raise ValueError("sort_order must be 'asc' or 'desc'")
 
-        needs_materialized_page = filter_query or sort_by != "episode_index" or sort_order != "asc"
+        hidden = self._hidden_episode_indices(dataset_id)
+        needs_materialized_page = (
+            filter_query
+            or sort_by != "episode_index"
+            or sort_order != "asc"
+            or bool(hidden)
+        )
         if needs_materialized_page:
             if filter_query:
                 episodes = self.filter_episode_items(dataset_id, filter_query)
             else:
                 episodes = self._all_episode_items(dataset_id)
+            if hidden:
+                episodes = [
+                    episode
+                    for episode in episodes
+                    if int(episode.episode_index) not in hidden
+                ]
             episodes = _sort_episodes(episodes, sort_by=sort_by, sort_order=sort_order)
             total = len(episodes)
             items = episodes[offset : offset + limit]
@@ -2221,6 +2260,8 @@ class LanceDatasetStore:
         )
 
     def get_episode(self, dataset_id: str, episode_index: int) -> EpisodeDetail | None:
+        if int(episode_index) in self._hidden_episode_indices(dataset_id):
+            return None
         bundle = self._bundles.get(dataset_id)
         if bundle is not None:
             return self._get_lance_episode(dataset_id, bundle, episode_index)
@@ -2499,7 +2540,15 @@ class LanceDatasetStore:
         *,
         limit: int | None = None,
     ) -> list[EpisodeListItem]:
-        return self.filter_engine.filter_episode_items(dataset_id, query, limit=limit)
+        items = self.filter_engine.filter_episode_items(dataset_id, query, limit=limit)
+        hidden = self._hidden_episode_indices(dataset_id)
+        if hidden:
+            items = [
+                episode
+                for episode in items
+                if int(episode.episode_index) not in hidden
+            ]
+        return items
 
     def _filter_lance_episode_items(
         self,
@@ -3246,6 +3295,13 @@ class LanceDatasetStore:
         self._episode_row_offsets.pop(dataset_id, None)
 
     def _episode_count(self, dataset_id: str) -> int:
+        hidden = self._hidden_episode_indices(dataset_id)
+        if not hidden:
+            return self._raw_episode_count(dataset_id)
+        raw_items = self._all_raw_episode_items(dataset_id)
+        return sum(1 for episode in raw_items if int(episode.episode_index) not in hidden)
+
+    def _raw_episode_count(self, dataset_id: str) -> int:
         bundle = self._bundles.get(dataset_id)
         if bundle is not None:
             try:
@@ -3256,7 +3312,18 @@ class LanceDatasetStore:
         return len(self._episodes.get(dataset_id, []))
 
     def _all_episode_items(self, dataset_id: str) -> list[EpisodeListItem]:
-        total = self._episode_count(dataset_id)
+        hidden = self._hidden_episode_indices(dataset_id)
+        items = self._all_raw_episode_items(dataset_id)
+        if not hidden:
+            return items
+        return [
+            episode
+            for episode in items
+            if int(episode.episode_index) not in hidden
+        ]
+
+    def _all_raw_episode_items(self, dataset_id: str) -> list[EpisodeListItem]:
+        total = self._raw_episode_count(dataset_id)
         if total == 0:
             return []
         bundle = self._bundles.get(dataset_id)
@@ -3270,6 +3337,15 @@ class LanceDatasetStore:
             EpisodeListItem(**self._apply_episode_overrides(dataset_id, model_dump(episode)))
             for episode in self._episodes.get(dataset_id, [])
         ]
+
+    @staticmethod
+    def _hidden_episode_indices(dataset_id: str) -> set[int]:
+        try:
+            from apps.api.services.annotation_service import annotation_store
+
+            return annotation_store.applied_deleted_episode_indices(dataset_id)
+        except Exception:
+            return set()
 
     def _load_dataset_registry(self) -> None:
         if not self.dataset_registry_path.exists():
