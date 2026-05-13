@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from importlib.resources import files as resource_files
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -48,6 +49,9 @@ CANONICAL_SKILL_NAMES = frozenset(
 )
 MANIFEST_JSON_PATH = Path("manifest.json")
 METADATA_JSON_PATH = Path("metadata.json")
+STATS_JSON_PATH = Path("meta/stats.json")
+STATE_BODY_STATS_PATH = Path("meta/stats/state_body.json")
+ACTION_BODY_STATS_PATH = Path("meta/stats/action_body.json")
 EPISODES_LANCE_PATH = Path("episodes.lance")
 FRAMES_LANCE_PATH = Path("frames.lance")
 MEDIA_LANCE_PATH = Path("media.lance")
@@ -326,6 +330,15 @@ def write_lance_subset(
         )
 
     _validate_camera_keys_consistency(camera_feature_keys, train_episode_rows)
+    primary_training_table = (
+        table_paths["train_skill_clips"].name
+        if train_skill_clip_rows
+        else table_paths["train_episodes"].name
+    )
+    training_row_unit = "skill_clip" if train_skill_clip_rows else "episode"
+    training_stats_rows = train_skill_clip_rows if train_skill_clip_rows else train_episode_rows
+    stats_payload = _build_training_stats_json(training_stats_rows)
+    stats_summary = _stats_summary(stats_payload)
 
     metadata = {
         "dataset_id": dataset_id,
@@ -351,18 +364,28 @@ def write_lance_subset(
         "state_dim": state_dim,
         "action_dim": action_dim,
         "fps": fps,
-        "primary_training_table": (
-            table_paths["train_skill_clips"].name
-            if train_skill_clip_rows
-            else table_paths["train_episodes"].name
-        ),
-        "training_row_unit": "skill_clip" if train_skill_clip_rows else "episode",
+        "primary_training_table": primary_training_table,
+        "training_row_unit": training_row_unit,
         "training_index_column": "episode_index",
         "source_episode_column": "source_episode_index" if train_skill_clip_rows else None,
         "video_frame_offset_column": "video_frame_offset" if train_skill_clip_rows else None,
         "training_columns": {
             "state": "observation_state",
             "action": "actions",
+        },
+        "stats": {
+            "path": str(STATS_JSON_PATH),
+            "state_body": str(STATE_BODY_STATS_PATH),
+            "action_body": str(ACTION_BODY_STATS_PATH),
+            "source_table": primary_training_table,
+            "source_row_unit": training_row_unit,
+            **stats_summary,
+        },
+        "meta": {
+            "stats": str(STATS_JSON_PATH),
+            "stats_dir": str(STATS_JSON_PATH.parent / "stats"),
+            "state_body_stats": str(STATE_BODY_STATS_PATH),
+            "action_body_stats": str(ACTION_BODY_STATS_PATH),
         },
         "skill_vocabulary": (
             {
@@ -410,6 +433,7 @@ def write_lance_subset(
     try:
         manifest_path = root / MANIFEST_JSON_PATH
         metadata_path = root / METADATA_JSON_PATH
+        _write_stats_sidecars(root, stats_payload)
         manifest_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
         metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
         validation = validate_lance_subset(root)
@@ -427,12 +451,18 @@ def write_lance_subset(
     final_manifest_path = final_root / MANIFEST_JSON_PATH
     final_metadata_path = final_root / METADATA_JSON_PATH
     final_validation_path = final_root / "validation.json"
+    final_stats_path = final_root / STATS_JSON_PATH
+    final_state_body_stats_path = final_root / STATE_BODY_STATS_PATH
+    final_action_body_stats_path = final_root / ACTION_BODY_STATS_PATH
     final_table_paths = {name: final_root / path.name for name, path in table_paths.items()}
 
     files: dict[str, str] = {
         "manifest": str(final_manifest_path),
         "metadata": str(final_metadata_path),
         "validation": str(final_validation_path),
+        "stats": str(final_stats_path),
+        "state_body_stats": str(final_state_body_stats_path),
+        "action_body_stats": str(final_action_body_stats_path),
     }
     files.update({name: str(path) for name, path in final_table_paths.items()})
 
@@ -447,6 +477,8 @@ def write_lance_subset(
         "train_skill_clip_rows": len(train_skill_clip_rows),
         "annotation_current_rows": len(annotation_rows),
         "annotation_event_rows": len(annotation_event_rows),
+        "state_stats_count": stats_summary["state_count"],
+        "action_stats_count": stats_summary["action_count"],
     }
     if write_legacy:
         materialized["video_rows"] = len(legacy_video_rows)
@@ -467,6 +499,9 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
     paths = {
         "manifest": manifest_path,
         "metadata": metadata_path,
+        "stats": root / STATS_JSON_PATH,
+        "state_body_stats": root / STATE_BODY_STATS_PATH,
+        "action_body_stats": root / ACTION_BODY_STATS_PATH,
         "episodes": root / EPISODES_LANCE_PATH,
         "frames": root / FRAMES_LANCE_PATH,
         "media": root / MEDIA_LANCE_PATH,
@@ -484,6 +519,7 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
     errors: list[str] = []
     warnings: list[str] = []
     metadata: dict[str, Any] = {}
+    stats_payload: dict[str, Any] = {}
 
     metadata_source_path = (
         metadata_path
@@ -511,6 +547,31 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
     ):
         if not present[table_name]:
             errors.append(f"missing {table_name}.lance")
+    for stats_name, label in (
+        ("stats", str(STATS_JSON_PATH)),
+        ("state_body_stats", str(STATE_BODY_STATS_PATH)),
+        ("action_body_stats", str(ACTION_BODY_STATS_PATH)),
+    ):
+        if not present[stats_name]:
+            errors.append(f"missing {label}")
+
+    if present["stats"]:
+        try:
+            stats_payload = json.loads(paths["stats"].read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            errors.append(f"{STATS_JSON_PATH} is not valid JSON: {exc}")
+        else:
+            if not isinstance(stats_payload, dict):
+                errors.append(f"{STATS_JSON_PATH} is not a JSON object")
+            else:
+                for feature in ("observation.state", "action"):
+                    feature_stats = stats_payload.get(feature)
+                    if not isinstance(feature_stats, dict):
+                        errors.append(f"{STATS_JSON_PATH} missing {feature} stats")
+                        continue
+                    for key in ("mean", "std", "min", "max", "count"):
+                        if not isinstance(feature_stats.get(key), list):
+                            errors.append(f"{STATS_JSON_PATH} {feature}.{key} must be a list")
 
     table_readability = _lance_table_readability(paths, present)
     for name, status in table_readability.items():
@@ -576,6 +637,8 @@ def validate_lance_subset(root: Path) -> dict[str, Any]:
         "annotation_count": int(metadata.get("total_annotations") or 0),
         "annotation_current_count": int(metadata.get("total_annotations") or 0),
         "annotation_event_count": int(metadata.get("total_annotation_events") or 0),
+        "state_stats_count": _stats_feature_count(stats_payload, "observation.state"),
+        "action_stats_count": _stats_feature_count(stats_payload, "action"),
         "files": {name: str(path) for name, path in paths.items()},
         "present": present,
         "table_readability": table_readability,
@@ -675,6 +738,163 @@ def _lance_table_row_count_errors(
                 f"{status.get('label', name)} row count {actual} does not match expected {expected}"
             )
     return errors
+
+
+def _write_stats_sidecars(root: Path, stats: dict[str, Any]) -> None:
+    stats_path = root / STATS_JSON_PATH
+    state_body_path = root / STATE_BODY_STATS_PATH
+    action_body_path = root / ACTION_BODY_STATS_PATH
+    for path in (stats_path, state_body_path, action_body_path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+    stats_path.write_text(
+        json.dumps(stats, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    state_body_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "2.0",
+                "modality": "state.body",
+                "feature": "observation.state",
+                **stats.get("observation.state", {}),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    action_body_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "2.0",
+                "action": "action.body",
+                "feature": "action",
+                **stats.get("action", {}),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def _build_training_stats_json(training_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    states: list[list[float]] = []
+    actions: list[list[float]] = []
+    for row in training_rows:
+        states.extend(_as_vector_rows(row.get("observation_state")))
+        actions.extend(_as_vector_rows(row.get("actions")))
+    return {
+        "observation.state": _vector_stats(states),
+        "action": _vector_stats(actions),
+    }
+
+
+def _as_vector_rows(value: Any) -> list[list[float]]:
+    vector = _as_float_vector(value)
+    if vector is not None:
+        return [vector]
+    if not isinstance(value, list):
+        return []
+    rows: list[list[float]] = []
+    for item in value:
+        vector = _as_float_vector(item)
+        if vector is not None:
+            rows.append(vector)
+    return rows
+
+
+def _as_float_vector(value: Any) -> list[float] | None:
+    if not isinstance(value, list):
+        return None
+    out: list[float] = []
+    for item in value:
+        if isinstance(item, list):
+            return None
+        try:
+            number = float(item)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(number):
+            return None
+        out.append(number)
+    return out
+
+
+def _vector_stats(vectors: list[list[float]]) -> dict[str, list[float]]:
+    if not vectors:
+        return {"mean": [], "std": [], "min": [], "max": [], "count": []}
+    dim = max(len(vector) for vector in vectors)
+    columns = [
+        [
+            float(vector[index])
+            for vector in vectors
+            if index < len(vector) and math.isfinite(float(vector[index]))
+        ]
+        for index in range(dim)
+    ]
+    means = [_mean(column) for column in columns]
+    return {
+        "mean": means,
+        "std": [_std(column, mean) for column, mean in zip(columns, means, strict=False)],
+        "min": [min(column) if column else 0.0 for column in columns],
+        "max": [max(column) if column else 0.0 for column in columns],
+        "count": [len(column) for column in columns],
+    }
+
+
+def _mean(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    return sum(values) / len(values)
+
+
+def _std(values: list[float], mean: float) -> float:
+    if len(values) <= 1:
+        return 0.0
+    variance = sum((value - mean) ** 2 for value in values) / len(values)
+    return math.sqrt(variance)
+
+
+def _stats_summary(stats: dict[str, Any]) -> dict[str, int | None]:
+    state_stats = stats.get("observation.state")
+    action_stats = stats.get("action")
+    return {
+        "state_dim": _stats_feature_dim(state_stats),
+        "action_dim": _stats_feature_dim(action_stats),
+        "state_count": _stats_max_count(state_stats),
+        "action_count": _stats_max_count(action_stats),
+    }
+
+
+def _stats_feature_dim(stats: Any) -> int | None:
+    if not isinstance(stats, dict):
+        return None
+    mean = stats.get("mean")
+    if not isinstance(mean, list):
+        return None
+    return len(mean)
+
+
+def _stats_max_count(stats: Any) -> int:
+    if not isinstance(stats, dict):
+        return 0
+    counts = stats.get("count")
+    if not isinstance(counts, list):
+        return 0
+    numeric_counts: list[int] = []
+    for value in counts:
+        try:
+            numeric_counts.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    return max(numeric_counts, default=0)
+
+
+def _stats_feature_count(stats_payload: dict[str, Any], feature: str) -> int:
+    return _stats_max_count(stats_payload.get(feature))
 
 
 def _episode_metadata_rows(

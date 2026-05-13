@@ -53,8 +53,13 @@ export function ExportStrip({
   const [hubUpload, setHubUpload] = useState<ExportHubUploadResult | null>(null);
   const [hubUploadError, setHubUploadError] = useState<string | null>(null);
   const [hubUploading, setHubUploading] = useState(false);
+  const [applySubmitting, setApplySubmitting] = useState(false);
+  const applyLocalProgressPercent = useOperationProgress(applySubmitting);
+  const hubUploadProgressPercent = useOperationProgress(hubUploading);
   const defaultHubRepoId = exportRecord?.hubRepoId ?? hubArtifact?.repo_id ?? "";
   const [hubRepoDraft, setHubRepoDraft] = useState(defaultHubRepoId);
+  const applyBusy = applySubmitting || exportJobActive;
+  const applyProgressPercent = exportJobActive ? exportProgressPercent : applyLocalProgressPercent;
 
   useEffect(() => {
     setHubUpload(null);
@@ -82,6 +87,18 @@ export function ExportStrip({
     }
   }
 
+  async function handleCreateExportClick(format: ExportFormat, options?: SkillExportOptions) {
+    if (applyBusy) {
+      return;
+    }
+    setApplySubmitting(true);
+    try {
+      await onCreateExport(format, scope, options);
+    } finally {
+      setApplySubmitting(false);
+    }
+  }
+
   return (
     <section className="export-strip">
       <div>
@@ -104,6 +121,13 @@ export function ExportStrip({
             Job {exportJob.status} {exportProgressPercent}%:{" "}
             {exportJob.exportUri ?? exportJob.message ?? exportJob.createdExportId}
           </div>
+        ) : null}
+        {applySubmitting || exportJobActive ? (
+          <OperationProgress
+            detail="metadata와 state/action stats를 다시 계산하는 중"
+            label="Apply 진행 중"
+            percent={applyProgressPercent}
+          />
         ) : null}
         {lerobotArtifact ? (
           <div className="export-artifact">
@@ -149,6 +173,18 @@ export function ExportStrip({
                   0}
               </span>
             ) : null}
+            {lanceArtifact.materialized || lanceValidation ? (
+              <span>
+                stats state{" "}
+                {lanceArtifact.materialized?.state_stats_count ??
+                  lanceValidation?.state_stats_count ??
+                  0}{" "}
+                / action{" "}
+                {lanceArtifact.materialized?.action_stats_count ??
+                  lanceValidation?.action_stats_count ??
+                  0}
+              </span>
+            ) : null}
           </div>
         ) : null}
         {jsonlArtifact ? (
@@ -185,6 +221,13 @@ export function ExportStrip({
                 기본값 출처: {hubRepoSourceLabel(exportRecord.hubRepoSource)}
               </span>
             ) : null}
+            {hubUploading ? (
+              <OperationProgress
+                detail="파일 업로드와 HF commit 생성 중"
+                label="HF upload 진행 중"
+                percent={hubUploadProgressPercent}
+              />
+            ) : null}
             {hubUpload?.commitUrl ?? hubArtifact?.commit_url ? (
               <span>{hubUpload?.commitUrl ?? hubArtifact?.commit_url}</span>
             ) : hubUploadError ? (
@@ -211,7 +254,7 @@ export function ExportStrip({
         <div className="segmented-control export-scope-control">
           <button
             className={scope === "episode" ? "active" : ""}
-            disabled={exportJobActive}
+            disabled={applyBusy}
             onClick={() => setScope("episode")}
             title="Apply only the currently selected episode"
             aria-label="Apply only the current episode"
@@ -222,7 +265,7 @@ export function ExportStrip({
           </button>
           <button
             className={scope === "split" ? "active" : ""}
-            disabled={!split || exportJobActive}
+            disabled={!split || applyBusy}
             onClick={() => setScope("split")}
             title="Apply every episode in the selected split (train/val/test)"
             aria-label="Apply every episode in the selected split"
@@ -243,9 +286,9 @@ export function ExportStrip({
         ) : null}
         <button
           className="text-button primary-export-button"
-          disabled={exportJobActive}
+          disabled={applyBusy}
           onClick={() =>
-            void onCreateExport("lance", scope, {
+            void handleCreateExportClick("lance", {
               clipLabelType: "skill",
               acceptedClipsOnly: true,
               materializeSkillClips: true,
@@ -258,7 +301,7 @@ export function ExportStrip({
           type="button"
         >
           <Download size={15} />
-          Apply to dataset
+          {applySubmitting ? "Applying..." : "Apply to dataset"}
         </button>
         <details className="advanced-menu export-advanced-menu">
           <summary>Augmentation Options</summary>
@@ -282,8 +325,8 @@ export function ExportStrip({
           <div className="advanced-menu-content">
             <button
               className="text-button secondary-text-button"
-              disabled={exportJobActive}
-              onClick={() => void onCreateExport("lerobot", scope)}
+              disabled={applyBusy}
+              onClick={() => void handleCreateExportClick("lerobot")}
               title="Export as LeRobot v3 (manifest + Parquet + MP4 + SHA256 index)"
               type="button"
             >
@@ -291,8 +334,8 @@ export function ExportStrip({
             </button>
             <button
               className="text-button secondary-text-button"
-              disabled={exportJobActive}
-              onClick={() => void onCreateExport("jsonl", scope)}
+              disabled={applyBusy}
+              onClick={() => void handleCreateExportClick("jsonl")}
               title="Export as line-delimited JSON (one frame per line)"
               type="button"
             >
@@ -300,8 +343,8 @@ export function ExportStrip({
             </button>
             <button
               className="text-button secondary-text-button"
-              disabled={exportJobActive}
-              onClick={() => void onCreateExport("vla", scope)}
+              disabled={applyBusy}
+              onClick={() => void handleCreateExportClick("vla")}
               title="Export as VLA training format (vision-language-action JSONL)"
               type="button"
             >
@@ -309,8 +352,8 @@ export function ExportStrip({
             </button>
             <button
               className="text-button secondary-text-button"
-              disabled={exportJobActive}
-              onClick={() => void onCreateExport("hf_dataset", scope)}
+              disabled={applyBusy}
+              onClick={() => void handleCreateExportClick("hf_dataset")}
               title="Export as HuggingFace Datasets snapshot"
               type="button"
             >
@@ -344,6 +387,60 @@ function ExportArtifactSummary({
       </span>
     </div>
   );
+}
+
+function OperationProgress({
+  detail,
+  label,
+  percent
+}: {
+  detail: string;
+  label: string;
+  percent: number;
+}) {
+  const clamped = Math.max(0, Math.min(100, Math.round(percent)));
+  return (
+    <div className="export-progress" role="status">
+      <div className="export-progress-header">
+        <span>{label}</span>
+        <span>{clamped}%</span>
+      </div>
+      <div
+        aria-label={label}
+        aria-valuemax={100}
+        aria-valuemin={0}
+        aria-valuenow={clamped}
+        className="export-progress-track"
+        role="progressbar"
+      >
+        <div className="export-progress-fill" style={{ width: `${clamped}%` }} />
+      </div>
+      <div className="export-progress-detail">{detail}</div>
+    </div>
+  );
+}
+
+function useOperationProgress(active: boolean): number {
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    if (!active) {
+      setProgress(0);
+      return undefined;
+    }
+    setProgress(8);
+    const timer = window.setInterval(() => {
+      setProgress((current) => {
+        if (current >= 94) {
+          return current;
+        }
+        return Math.min(94, current + Math.max(1, Math.round((94 - current) * 0.14)));
+      });
+    }, 450);
+    return () => window.clearInterval(timer);
+  }, [active]);
+
+  return progress;
 }
 
 function loaderStatus(loader: {

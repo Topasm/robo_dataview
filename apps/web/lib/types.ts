@@ -396,6 +396,8 @@ export type ExportArtifacts = {
       frame_skill_label_count?: number;
       train_skill_clip_count?: number;
       annotation_count?: number;
+      state_stats_count?: number;
+      action_stats_count?: number;
       errors?: string[];
       warnings?: string[];
     };
@@ -412,6 +414,8 @@ export type ExportArtifacts = {
       annotation_rows?: number;
       annotation_current_rows?: number;
       annotation_event_rows?: number;
+      state_stats_count?: number;
+      action_stats_count?: number;
     };
   };
   jsonl?: JsonlExportArtifact;

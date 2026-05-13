@@ -2195,6 +2195,42 @@ textarea {
   color: var(--danger);
 }
 
+.export-progress {
+  display: grid;
+  gap: 5px;
+  margin-top: 6px;
+  max-width: min(560px, 62vw);
+}
+
+.export-progress-header {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  justify-content: space-between;
+}
+
+.export-progress-track {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+}
+
+.export-progress-fill {
+  background: var(--accent);
+  height: 100%;
+  transition: width 180ms ease;
+}
+
+.export-progress-detail {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}
+
 .export-actions {
   align-items: center;
   display: flex;
