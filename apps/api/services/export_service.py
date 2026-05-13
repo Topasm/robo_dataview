@@ -550,6 +550,42 @@ class ExportStore:
                 },
             )
 
+        selected_episode_indices = [int(episode["episode_index"]) for episode in episodes]
+        materialized_episode_indices = selected_episode_indices
+        materialized_episodes = episodes
+        materialized_num_episodes = len(episodes)
+        materialized_num_frames = sum(int(episode["length"] or 0) for episode in episodes)
+        if payload.format == ExportFormat.lance:
+            lance_validation = artifacts.get("lance_subset", {}).get("validation", {})
+            if isinstance(lance_validation, dict):
+                lance_metadata = artifacts.get("lance_subset", {})
+                excluded: set[int] = set()
+                metadata_path = (lance_metadata.get("files") or {}).get("metadata")
+                if isinstance(metadata_path, str) and Path(metadata_path).exists():
+                    try:
+                        metadata = json.loads(Path(metadata_path).read_text(encoding="utf-8"))
+                        excluded = {
+                            int(index)
+                            for index in metadata.get("excluded_episode_indices", [])
+                        }
+                    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+                        excluded = set()
+                materialized_episodes = [
+                    episode
+                    for episode in episodes
+                    if int(episode["episode_index"]) not in excluded
+                ]
+                materialized_episode_indices = [
+                    int(episode["episode_index"]) for episode in materialized_episodes
+                ]
+                materialized_num_episodes = int(
+                    lance_validation.get("episode_count") or len(materialized_episodes)
+                )
+                materialized_num_frames = int(
+                    lance_validation.get("frame_count")
+                    or sum(int(episode["length"] or 0) for episode in materialized_episodes)
+                )
+
         created_at = datetime.now(timezone.utc)
         manifest = {
             "export_id": record.export_id,
@@ -559,12 +595,13 @@ class ExportStore:
             "version_description": payload.version_description,
             "publish_uri": payload.publish_uri or configured_export_publish_uri(),
             "created_at": created_at.isoformat(),
-            "num_episodes": len(episodes),
-            "episode_indices": [episode["episode_index"] for episode in episodes],
+            "num_episodes": materialized_num_episodes,
+            "episode_indices": materialized_episode_indices,
+            "requested_episode_indices": selected_episode_indices,
             "missing_episode_indices": missing_episodes,
             "clip_export": clip_export,
             "artifacts": artifacts,
-            "episodes": episodes,
+            "episodes": materialized_episodes,
         }
         hub_repo_id, hub_repo_source = self._hub_repo_target(record)
         if hub_repo_id:
@@ -621,15 +658,20 @@ class ExportStore:
                     dataset_id=record.dataset_id,
                     description=payload.version_description,
                     filter_query=f"episode_indices={manifest['episode_indices']}",
-                    num_episodes=len(episodes),
-                    num_frames=sum(int(episode["length"] or 0) for episode in episodes),
+                    num_episodes=materialized_num_episodes,
+                    num_frames=materialized_num_frames,
                     export_format=str(record.format.value),
                     export_uri=str(manifest_path),
                 )
             )
-        message = f"Exported {len(episodes)} episode manifest."
+        message = f"Exported {materialized_num_episodes} episode manifest."
         if missing_episodes:
             message = f"{message} Missing episodes skipped: {missing_episodes}."
+        if materialized_num_episodes != len(episodes):
+            message = (
+                f"{message} Excluded {len(episodes) - materialized_num_episodes} "
+                "deleted episode(s)."
+            )
         applied_ids = [
             annotation.annotation_id
             for annotations in annotations_by_episode.values()
@@ -649,10 +691,10 @@ class ExportStore:
             record,
             update={
                 "status": JobStatus.succeeded,
-                "episode_indices": [episode["episode_index"] for episode in episodes],
+                "episode_indices": materialized_episode_indices,
                 "message": message,
                 "artifacts": artifacts,
-                "num_episodes": len(episodes),
+                "num_episodes": materialized_num_episodes,
                 "created_at": created_at,
             }
         )
