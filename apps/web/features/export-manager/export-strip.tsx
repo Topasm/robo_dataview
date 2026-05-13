@@ -62,6 +62,7 @@ export function ExportStrip({
   const [hubRepoDraft, setHubRepoDraft] = useState(defaultHubRepoId);
   const applyBusy = applySubmitting || exportJobActive;
   const applyProgressPercent = exportJobActive ? exportProgressPercent : applyLocalProgressPercent;
+  const hubRepoValue = hubRepoDraft.trim();
 
   useEffect(() => {
     setHubUpload(null);
@@ -75,12 +76,18 @@ export function ExportStrip({
     if (!exportRecord || hubUploading) {
       return;
     }
+    if (!hubRepoValue && !defaultHubRepoId) {
+      setHubUploadError(
+        "HF repo가 비어 있습니다. owner/name 형식으로 입력하거나 stack .env에 RLLAB_HF_REPO_ID 또는 RLLAB_HF_NAMESPACE를 설정한 뒤 ./scripts/view.sh로 다시 실행하세요.",
+      );
+      return;
+    }
     setHubUploading(true);
     setHubUploadError(null);
     try {
       const result = await onUploadExportToHub(
         exportRecord.exportId,
-        hubRepoDraft.trim() || undefined,
+        hubRepoValue || undefined,
       );
       setHubUpload(result);
     } catch (error) {
@@ -248,7 +255,12 @@ export function ExportStrip({
               <span className="export-hub-guide">
                 기본값 출처: {hubRepoSourceLabel(exportRecord.hubRepoSource)}
               </span>
-            ) : null}
+            ) : (
+              <span className="export-hub-guide">
+                기본 HF repo 없음: owner/name을 직접 입력하거나 stack .env에
+                RLLAB_HF_REPO_ID를 설정한 뒤 <code>./scripts/view.sh</code>로 다시 여세요.
+              </span>
+            )}
             {hubUploading ? (
               <OperationProgress
                 detail="파일 업로드와 HF commit 생성 중"
@@ -263,9 +275,13 @@ export function ExportStrip({
             ) : null}
             <button
               className="text-button secondary-text-button"
-              disabled={hubUploading || !hubRepoDraft.trim()}
+              disabled={hubUploading}
               onClick={() => void handleHubUpload()}
-              title="Upload this curated Lance export to Hugging Face"
+              title={
+                hubRepoValue
+                  ? "Upload this curated Lance export to Hugging Face"
+                  : "HF repo is required; click to show setup guidance"
+              }
               type="button"
             >
               <UploadCloud size={14} />
