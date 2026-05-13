@@ -117,7 +117,7 @@ export function EpisodeCharts({
             row.datasetId === episode.datasetId &&
             row.episodeIndex === episode.episodeIndex &&
             row.labelType === SKILL_LABEL_TYPE &&
-            row.reviewStatus === "accepted"
+            row.reviewStatus !== "rejected"
         )
         .map((row) => {
           const skill = skillByName(row.labelValue);
@@ -126,7 +126,8 @@ export function EpisodeCharts({
             startFrame: row.startFrame,
             endFrame: row.endFrame,
             skillName: row.labelValue,
-            color: skill?.color ?? "var(--muted)"
+            color: skill?.color ?? "var(--muted)",
+            reviewStatus: row.reviewStatus
           };
         }),
     [annotations, episode.datasetId, episode.episodeIndex]
@@ -208,6 +209,7 @@ type SkillBand = {
   endFrame: number;
   skillName: string;
   color: string;
+  reviewStatus: SegmentAnnotation["reviewStatus"];
 };
 
 type DimSeries = {
@@ -430,18 +432,22 @@ function ChartCard({
             />
 
             {/* Skill clip background bands */}
-            {skillBands.map((band) => (
-              <ReferenceArea
-                key={band.id}
-                x1={band.startFrame}
-                x2={band.endFrame}
-                fill={band.color}
-                fillOpacity={0.15}
-                stroke={band.color}
-                strokeOpacity={0.34}
-                ifOverflow="hidden"
-              />
-            ))}
+            {skillBands.map((band) => {
+              const isPending = band.reviewStatus === "pending";
+              return (
+                <ReferenceArea
+                  key={band.id}
+                  x1={band.startFrame}
+                  x2={band.endFrame}
+                  fill={band.color}
+                  fillOpacity={isPending ? 0.09 : 0.15}
+                  stroke={band.color}
+                  strokeDasharray={isPending ? "4 3" : undefined}
+                  strokeOpacity={isPending ? 0.24 : 0.34}
+                  ifOverflow="hidden"
+                />
+              );
+            })}
 
             {/* Per-dim faint lines (only those toggled visible) */}
             {visibleDimSeries.map((dim) => (
