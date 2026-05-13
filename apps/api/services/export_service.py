@@ -169,6 +169,7 @@ class ExportStore:
         )
         self._record_hub_upload(record, response)
         self._prune_previous_exports(record)
+        self._compact_uploaded_annotations(record)
         return response
 
     def _load_existing_exports(self) -> None:
@@ -347,6 +348,40 @@ class ExportStore:
                     )
                 except (OSError, json.JSONDecodeError, TypeError):
                     logger.warning("Failed to persist pruned export ids for %s", keep.export_id)
+
+    def _compact_uploaded_annotations(self, record: ExportRecord) -> None:
+        try:
+            summary = annotation_store.compact_dataset(
+                record.dataset_id,
+                keep_history=False,
+            )
+        except Exception as exc:  # noqa: BLE001 - upload already succeeded; record cleanup failure.
+            logger.warning(
+                "Failed to compact annotations after Hub upload for %s: %s",
+                record.dataset_id,
+                exc,
+            )
+            summary = {
+                "dataset_id": record.dataset_id,
+                "metadata_ok": False,
+                "error": str(exc),
+            }
+        if not record.output_uri:
+            return
+        manifest_path = Path(record.output_uri)
+        if not manifest_path.exists():
+            return
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            hub_upload = dict(manifest.get("hub_upload") or {})
+            hub_upload["annotation_compaction"] = summary
+            manifest["hub_upload"] = hub_upload
+            manifest_path.write_text(
+                json.dumps(manifest, indent=2, default=str),
+                encoding="utf-8",
+            )
+        except (OSError, json.JSONDecodeError, TypeError):
+            logger.warning("Failed to persist annotation compaction for %s", record.export_id)
 
     def _write_manifest(
         self,

@@ -183,6 +183,54 @@ class AnnotationStore:
             self._persist_dataset(dataset_id)
         return updated
 
+    def compact_dataset(
+        self,
+        dataset_id: str,
+        *,
+        keep_history: bool = False,
+    ) -> dict[str, Any]:
+        """Drop soft-deleted tombstones and optionally audit history for a dataset.
+
+        Normal annotation edits keep tombstones/history so local review can audit
+        changes. After a curated export is safely uploaded, the UI can call this
+        to make the local overlay match the currently active annotation state.
+        """
+
+        records_before = self._dataset_records(dataset_id)
+        history_before = [
+            event for event in self._history if event.dataset_id == dataset_id
+        ]
+        deleted_ids = {
+            record.annotation_id
+            for record in records_before
+            if record.deleted_at is not None
+        }
+        for annotation_id in deleted_ids:
+            self._records.pop(annotation_id, None)
+        if not keep_history:
+            self._history = [
+                event for event in self._history if event.dataset_id != dataset_id
+            ]
+
+        self._persist_dataset(dataset_id)
+        self._rewrite_history_dataset(dataset_id)
+
+        records_after = self._dataset_records(dataset_id)
+        history_after = [
+            event for event in self._history if event.dataset_id == dataset_id
+        ]
+        return {
+            "dataset_id": dataset_id,
+            "active_records": len(records_after),
+            "records_before": len(records_before),
+            "records_pruned": len(records_before) - len(records_after),
+            "deleted_records_pruned": len(deleted_ids),
+            "history_events_before": len(history_before),
+            "history_events_after": len(history_after),
+            "history_events_pruned": len(history_before) - len(history_after),
+            "history_kept": keep_history,
+        }
+
     def delete(
         self,
         annotation_id: str,
@@ -423,6 +471,26 @@ class AnnotationStore:
             handle.write(json.dumps(self._history_json_row(event), sort_keys=True) + "\n")
         self._mirror_events_lance(dataset_dir / "annotation_events.lance", dataset_id)
 
+    def _rewrite_history_dataset(self, dataset_id: str) -> None:
+        if not self.persist:
+            return
+        dataset_dir = self._dataset_dir(dataset_id)
+        dataset_dir.mkdir(parents=True, exist_ok=True)
+        history_path = dataset_dir / "history.jsonl"
+        rows = [
+            self._history_json_row(event)
+            for event in self._history
+            if event.dataset_id == dataset_id
+        ]
+        if rows:
+            text = "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n"
+            _atomic_write_text(history_path, text)
+            self._mirror_events_lance(dataset_dir / "annotation_events.lance", dataset_id)
+            return
+        if history_path.exists():
+            history_path.unlink()
+        _remove_path(dataset_dir / "annotation_events.lance")
+
     def _mirror_current_lance(self, lance_path: Path, records: list[AnnotationRecord]) -> None:
         if not self.mirror_lance:
             return
@@ -573,3 +641,12 @@ def _atomic_write_text(path: Path, text: str) -> None:
     tmp_path = path.with_name(f".{path.name}.tmp")
     tmp_path.write_text(text, encoding="utf-8")
     tmp_path.replace(path)
+
+
+def _remove_path(path: Path) -> None:
+    if path.is_dir():
+        import shutil
+
+        shutil.rmtree(path)
+    elif path.exists():
+        path.unlink()

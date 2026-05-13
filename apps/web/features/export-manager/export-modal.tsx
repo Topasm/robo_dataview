@@ -60,7 +60,6 @@ export function ExportModal({ open, onClose, studio }: ExportModalProps) {
         <div className="modal-body export-modal-body">
           <ExportStrip
             annotations={studio.annotationRows}
-            episodeIndex={studio.selectedEpisode.episodeIndex}
             exportJob={studio.exportJob}
             exportRecord={studio.exportRecord}
             pastExports={studio.pastExports}

@@ -512,9 +512,22 @@ class ExportServiceTest(unittest.TestCase):
                 )
             )
 
-        with patch.dict(sys.modules, {"huggingface_hub": fake_hub}), patch.dict(
-            os.environ,
-            {"RLLAB_HF_NAMESPACE": "rllab-postech", "RLLAB_HF_PRIVATE": "1"},
+        with (
+            patch.dict(sys.modules, {"huggingface_hub": fake_hub}),
+            patch.dict(
+                os.environ,
+                {"RLLAB_HF_NAMESPACE": "rllab-postech", "RLLAB_HF_PRIVATE": "1"},
+            ),
+            patch.object(
+                export_service.annotation_store,
+                "compact_dataset",
+                return_value={
+                    "dataset_id": "sample-xvla-soft-fold",
+                    "active_records": 0,
+                    "records_pruned": 0,
+                    "history_events_pruned": 0,
+                },
+            ) as compact_dataset,
         ):
             response = exports.upload_to_hub(record.export_id, ExportHubUploadRequest())
 
@@ -527,12 +540,20 @@ class ExportServiceTest(unittest.TestCase):
             record.artifacts["published_lance"]["root"],
         )
         self.assertEqual(upload_calls["upload_folder"][0]["delete_patterns"], ["*"])
+        compact_dataset.assert_called_once_with(
+            "sample-xvla-soft-fold",
+            keep_history=False,
+        )
 
         manifest = json.loads(Path(record.output_uri or "").read_text(encoding="utf-8"))
         self.assertEqual(manifest["artifacts"]["huggingface_hub"]["repo_id"], response.repo_id)
         self.assertEqual(
             manifest["artifacts"]["huggingface_hub"]["uploaded_path"],
             response.uploaded_path,
+        )
+        self.assertEqual(
+            manifest["hub_upload"]["annotation_compaction"]["dataset_id"],
+            "sample-xvla-soft-fold",
         )
 
     def test_lance_export_writes_video_table_when_blobs_are_available(self) -> None:

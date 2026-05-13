@@ -260,6 +260,52 @@ class AnnotationServiceTest(unittest.TestCase):
         skipped = store.mark_applied([second.annotation_id], export_id="export-003")
         self.assertEqual(skipped, [])
 
+    def test_compact_dataset_prunes_tombstones_and_history(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage_root = Path(tmpdir)
+            store = AnnotationStore(storage_root=storage_root, mirror_lance=False)
+            active = store.create(
+                AnnotationCreate(
+                    dataset_id="dataset-a",
+                    episode_index=0,
+                    start_frame=0,
+                    end_frame=4,
+                    label_type="skill",
+                    label_value="approach",
+                    review_status=ReviewStatus.accepted,
+                )
+            )
+            deleted = store.create(
+                AnnotationCreate(
+                    dataset_id="dataset-a",
+                    episode_index=0,
+                    start_frame=5,
+                    end_frame=9,
+                    label_type="skill",
+                    label_value="grasp_part",
+                    review_status=ReviewStatus.accepted,
+                )
+            )
+            store.delete(deleted.annotation_id)
+
+            summary = store.compact_dataset("dataset-a")
+
+            self.assertEqual(summary["active_records"], 1)
+            self.assertEqual(summary["deleted_records_pruned"], 1)
+            self.assertEqual(summary["history_events_after"], 0)
+            reloaded = AnnotationStore(storage_root=storage_root, mirror_lance=False)
+            self.assertIsNotNone(reloaded.get(active.annotation_id))
+            self.assertIsNone(reloaded.get(deleted.annotation_id))
+            self.assertEqual(reloaded.list_history("dataset-a"), [])
+            jsonl_path = Path(reloaded.storage_paths("dataset-a")["jsonl"])
+            rows = [
+                json.loads(line)
+                for line in jsonl_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual([row["annotation_id"] for row in rows], [active.annotation_id])
+            self.assertFalse(Path(reloaded.storage_paths("dataset-a")["history"]).exists())
+
     def test_applied_export_id_persists_across_jsonl_reload(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             storage_root = Path(tmpdir)

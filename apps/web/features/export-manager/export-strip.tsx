@@ -14,7 +14,6 @@ import { ExportHistory } from "./export-history";
 
 type ExportStripProps = {
   annotations: SegmentAnnotation[];
-  episodeIndex: number;
   exportJob: JobRecord | null;
   exportRecord: ExportRecord | null;
   pastExports?: ExportRecord[];
@@ -29,7 +28,6 @@ type ExportStripProps = {
 
 export function ExportStrip({
   annotations,
-  episodeIndex,
   exportJob,
   exportRecord,
   pastExports = [],
@@ -110,9 +108,9 @@ export function ExportStrip({
           <span>Apply to dataset</span>
         </div>
         <div className="muted">
-          Materializes accepted skill clips from episode #{episodeIndex} as a new dataset
-          version under <code>data/exports/&lt;id&gt;/</code>. Previous versions remain as
-          backups; raw Lance tables are never modified.
+          Applies the current curated dataset state under{" "}
+          <code>data/exports/&lt;id&gt;/</code>. Upload replaces the HF repo cleanly and
+          prunes older local export/annotation history; raw Lance tables are never modified.
         </div>
         {exportRecord ? (
           <div className="muted">
@@ -230,8 +228,8 @@ export function ExportStrip({
             </label>
             <span className="export-hub-guide">
               한국어 안내: Apply는 전체 dataset 기준 curated export를 만들고, Upload는 위 HF
-              repo를 깨끗한 새 commit으로 교체합니다. 원본 HF dataset을 열었으면 repo가 자동
-              입력됩니다.
+              repo를 깨끗한 새 commit으로 교체합니다. 업로드가 성공하면 이전 export와 annotation
+              tombstone/history도 정리됩니다.
             </span>
             {exportRecord?.hubRepoSource ? (
               <span className="export-hub-guide">
@@ -324,8 +322,8 @@ export function ExportStrip({
               copiesPerClip: 1
             })
           }
-          title="Materialize accepted skill clips as a new dataset version under data/exports/. Previous versions remain as backups."
-          aria-label="Apply accepted skill clips to a new dataset version"
+          title="Apply the current curated dataset state under data/exports/."
+          aria-label="Apply curated dataset state"
           type="button"
         >
           <Download size={15} />
