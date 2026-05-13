@@ -212,15 +212,23 @@ export function TimelinePanel({
       startFrame: dragState.annotation.startFrame,
       endFrame: dragState.annotation.endFrame
     };
+    const clampedFrame = clampSkillDragFrame(
+      dragState.annotation,
+      dragState.edge,
+      frame,
+      current,
+      annotations,
+      maxFrame
+    );
     const next =
       dragState.edge === "start"
         ? {
             ...current,
-            startFrame: Math.min(frame, current.endFrame)
+            startFrame: Math.min(clampedFrame, current.endFrame)
           }
         : {
             ...current,
-            endFrame: Math.max(frame, current.startFrame)
+            endFrame: Math.max(clampedFrame, current.startFrame)
           };
     setDraftBounds((bounds) => ({ ...bounds, [dragState.annotation.id]: next }));
   }
@@ -497,6 +505,42 @@ function canMerge(left: SegmentAnnotation, right: SegmentAnnotation | null): rig
     return left.labelValue === right.labelValue;
   }
   return true;
+}
+
+function clampSkillDragFrame(
+  annotation: SegmentAnnotation,
+  edge: "start" | "end",
+  frame: number,
+  current: { startFrame: number; endFrame: number },
+  annotations: SegmentAnnotation[],
+  maxFrame: number,
+): number {
+  const target = clampFrame(frame, maxFrame);
+  if (annotation.labelType !== SKILL_LABEL_TYPE) {
+    return target;
+  }
+  const neighborSkills = annotations.filter(
+    (row) =>
+      row.id !== annotation.id &&
+      row.datasetId === annotation.datasetId &&
+      row.episodeIndex === annotation.episodeIndex &&
+      row.labelType === SKILL_LABEL_TYPE &&
+      row.reviewStatus !== "rejected"
+  );
+  if (edge === "start") {
+    const fixedEnd = current.endFrame;
+    const minStart = neighborSkills.reduce(
+      (limit, row) => (row.startFrame <= fixedEnd ? Math.max(limit, row.endFrame + 1) : limit),
+      0
+    );
+    return Math.min(Math.max(target, minStart), fixedEnd);
+  }
+  const fixedStart = current.startFrame;
+  const maxEnd = neighborSkills.reduce(
+    (limit, row) => (row.endFrame >= fixedStart ? Math.min(limit, row.startFrame - 1) : limit),
+    maxFrame
+  );
+  return Math.max(Math.min(target, maxEnd), fixedStart);
 }
 
 function framePercent(frame: number, frameCount: number): number {
