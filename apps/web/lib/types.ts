@@ -86,6 +86,7 @@ export type DatasetHealth = {
 export type Episode = {
   datasetId: string;
   episodeIndex: number;
+  curatedEpisodeIndex?: number | null;
   taskIndex: number;
   length: number;
   successLabel: boolean | null;

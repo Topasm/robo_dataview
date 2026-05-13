@@ -454,6 +454,10 @@ class LanceDatasetStoreTest(unittest.TestCase):
             self.assertEqual(summary.episode_count, 2)
             self.assertEqual(page.total, 2)
             self.assertNotIn(0, [episode.episode_index for episode in page.items])
+            self.assertEqual(
+                [episode.curated_episode_index for episode in page.items],
+                [0, 1],
+            )
             self.assertIsNone(store.get_episode("sample-xvla-soft-fold", 0))
 
     def test_v2_camera_segments_resolve_video_by_stable_media_id(self) -> None:

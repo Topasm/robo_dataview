@@ -106,6 +106,7 @@ type DatasetHealthResponse = {
 type EpisodeResponse = {
   dataset_id: string;
   episode_index: number;
+  curated_episode_index?: number | null;
   task_index: number | null;
   length: number | null;
   success_label: boolean | null;
@@ -1254,6 +1255,7 @@ function toEpisode(raw: EpisodeResponse): Episode {
   return {
     datasetId: raw.dataset_id,
     episodeIndex: raw.episode_index,
+    curatedEpisodeIndex: raw.curated_episode_index ?? null,
     taskIndex: raw.task_index ?? 0,
     length: raw.length ?? 0,
     successLabel: raw.success_label,

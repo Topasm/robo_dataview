@@ -157,6 +157,10 @@ def write_lance_subset(
                 if int(index) in kept_indices
             }
     episodes = filtered_episodes
+    episode_index_by_source = {
+        int(episode.episode_index): local_index
+        for local_index, episode in enumerate(episodes)
+    }
     disposition_warnings: list[str] = [
         f"episode {index} is flagged but included in export"
         for index in flagged_episode_indices
@@ -164,7 +168,7 @@ def write_lance_subset(
 
     frame_rows = sorted(
         [
-            _frame_row(frame)
+            _frame_row(frame, episode_index_by_source=episode_index_by_source)
             for episode in episodes
             for frame in frames_by_episode.get(episode.episode_index, [])
         ],
@@ -174,12 +178,14 @@ def write_lance_subset(
         episodes,
         annotations_by_episode,
         frames_by_episode,
+        episode_index_by_source=episode_index_by_source,
     )
     train_episode_rows = _train_episode_rows(
         episodes,
         annotations_by_episode,
         frames_by_episode,
         video_blobs_by_episode or {},
+        episode_index_by_source=episode_index_by_source,
     )
     clip_export = clip_export_options or {}
     materialize_skill_clips = bool(clip_export.get("materialize_skill_clips"))
@@ -189,6 +195,7 @@ def write_lance_subset(
         annotations_by_episode,
         clip_label_type=clip_label_type,
         accepted_only=accepted_only,
+        episode_index_by_source=episode_index_by_source,
     )
     clip_export_warnings = [
         *_skill_segment_overlap_warnings(skill_segment_rows),
@@ -208,12 +215,13 @@ def write_lance_subset(
             video_blobs_by_episode or {},
             clip_label_type=clip_label_type,
             accepted_only=accepted_only,
+            episode_index_by_source=episode_index_by_source,
         )
         if materialize_skill_clips
         else []
     )
     annotation_rows = [
-        _annotation_row(annotation)
+        _annotation_row(annotation, episode_index_by_source=episode_index_by_source)
         for annotations in annotations_by_episode.values()
         for annotation in annotations
     ]
@@ -222,9 +230,15 @@ def write_lance_subset(
         episodes,
         video_blobs_by_episode or {},
         include_blobs=write_media_blobs,
+        episode_index_by_source=episode_index_by_source,
     )
     legacy_video_rows = (
-        _media_rows(episodes, video_blobs_by_episode or {}, include_blobs=True)
+        _media_rows(
+            episodes,
+            video_blobs_by_episode or {},
+            include_blobs=True,
+            episode_index_by_source=episode_index_by_source,
+        )
         if write_legacy
         else []
     )
@@ -498,7 +512,10 @@ def write_lance_subset(
         dataset_id=dataset_id,
         source_rows=training_stats_rows,
         frame_rows=frame_rows,
-        video_blobs_by_episode=video_blobs_by_episode or {},
+        video_blobs_by_episode=_remap_video_blobs_by_episode(
+            video_blobs_by_episode or {},
+            episode_index_by_source,
+        ),
         camera_feature_keys=camera_feature_keys,
         stats_payload=stats_payload,
         stats_summary=stats_summary,
@@ -1875,19 +1892,26 @@ def _episode_metadata_rows(
     episodes: list[EpisodeDetail],
     annotations_by_episode: dict[int, list[AnnotationRecord]],
     frames_by_episode: dict[int, list[FrameRecord]],
+    *,
+    episode_index_by_source: dict[int, int] | None = None,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     created_at = datetime.now(timezone.utc)
     for episode in episodes:
+        source_episode_index = int(episode.episode_index)
+        episode_index = _local_episode_index(
+            source_episode_index,
+            episode_index_by_source,
+        )
         frames = sorted(
-            frames_by_episode.get(episode.episode_index, []),
+            frames_by_episode.get(source_episode_index, []),
             key=lambda frame: frame.frame_index,
         )
         timestamps = [frame.timestamp for frame in frames]
         timestamp_values = [timestamp for timestamp in timestamps if timestamp is not None]
         row: dict[str, Any] = {
-            "episode_id": _episode_id(episode.episode_index),
-            "episode_index": episode.episode_index,
+            "episode_id": _episode_id(episode_index),
+            "episode_index": episode_index,
             "task_id": _task_id(episode.task_index),
             "task_index": episode.task_index,
             "num_frames": len(frames) or episode.length,
@@ -1906,7 +1930,7 @@ def _episode_metadata_rows(
             "created_at": created_at,
             "dataset_version": None,
         }
-        if len(annotations_by_episode.get(episode.episode_index, [])) > 0:
+        if len(annotations_by_episode.get(source_episode_index, [])) > 0:
             row["review_status"] = row["review_status"] or "accepted"
         rows.append(row)
     return rows
@@ -1917,17 +1941,25 @@ def _train_episode_rows(
     annotations_by_episode: dict[int, list[AnnotationRecord]],
     frames_by_episode: dict[int, list[FrameRecord]],
     video_blobs_by_episode: dict[int, dict[str, bytes]],
+    *,
+    episode_index_by_source: dict[int, int] | None = None,
 ) -> list[dict[str, Any]]:
-    rows = _episode_metadata_rows(episodes, annotations_by_episode, frames_by_episode)
+    rows = _episode_metadata_rows(
+        episodes,
+        annotations_by_episode,
+        frames_by_episode,
+        episode_index_by_source=episode_index_by_source,
+    )
     for row, episode in zip(rows, episodes, strict=False):
+        source_episode_index = int(episode.episode_index)
         frames = sorted(
-            frames_by_episode.get(episode.episode_index, []),
+            frames_by_episode.get(source_episode_index, []),
             key=lambda frame: frame.frame_index,
         )
         row["timestamps"] = [frame.timestamp for frame in frames]
         row["observation_state"] = [frame.observation_state for frame in frames]
         row["actions"] = [frame.action for frame in frames]
-        for camera, blob in sorted(video_blobs_by_episode.get(episode.episode_index, {}).items()):
+        for camera, blob in sorted(video_blobs_by_episode.get(source_episode_index, {}).items()):
             if not blob:
                 continue
             key = _normalize_feature_key(camera)
@@ -1942,9 +1974,14 @@ def _skill_segment_rows(
     *,
     clip_label_type: str,
     accepted_only: bool,
+    episode_index_by_source: dict[int, int] | None = None,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for episode_index, annotations in sorted(annotations_by_episode.items()):
+        local_episode_index = _local_episode_index(
+            int(episode_index),
+            episode_index_by_source,
+        )
         for annotation in sorted(annotations, key=lambda row: (row.start_frame, row.end_frame)):
             if annotation.label_type != clip_label_type:
                 continue
@@ -1954,7 +1991,7 @@ def _skill_segment_rows(
             rows.append(
                 {
                     "clip_id": annotation.annotation_id,
-                    "source_episode_index": int(episode_index),
+                    "source_episode_index": local_episode_index,
                     "skill_id": _int_or_none(metadata.get("skillId", metadata.get("skill_id"))),
                     "skill_name": annotation.label_value,
                     "start_frame": int(annotation.start_frame),
@@ -2133,12 +2170,18 @@ def _train_skill_clip_rows(
     *,
     clip_label_type: str,
     accepted_only: bool,
+    episode_index_by_source: dict[int, int] | None = None,
 ) -> list[dict[str, Any]]:
     episodes_by_index = {int(episode.episode_index): episode for episode in episodes}
     rows: list[dict[str, Any]] = []
     clip_index = 0
     for source_episode_index, annotations in sorted(annotations_by_episode.items()):
-        episode = episodes_by_index.get(int(source_episode_index))
+        source_episode_index = int(source_episode_index)
+        local_source_episode_index = _local_episode_index(
+            source_episode_index,
+            episode_index_by_source,
+        )
+        episode = episodes_by_index.get(source_episode_index)
         if episode is None:
             continue
         frames = sorted(
@@ -2167,7 +2210,7 @@ def _train_skill_clip_rows(
             metadata = dict(annotation.metadata or {})
             row: dict[str, Any] = {
                 "clip_id": annotation.annotation_id,
-                "source_episode_index": int(source_episode_index),
+                "source_episode_index": local_source_episode_index,
                 "skill_id": _int_or_none(metadata.get("skillId", metadata.get("skill_id"))),
                 "skill_name": annotation.label_value,
                 "start_frame": start_frame,
@@ -2214,10 +2257,18 @@ def _train_skill_clip_rows(
     return rows
 
 
-def _frame_row(frame: FrameRecord) -> dict[str, Any]:
+def _frame_row(
+    frame: FrameRecord,
+    *,
+    episode_index_by_source: dict[int, int] | None = None,
+) -> dict[str, Any]:
+    episode_index = _local_episode_index(
+        int(frame.episode_index),
+        episode_index_by_source,
+    )
     return {
-        "episode_id": _episode_id(frame.episode_index),
-        "episode_index": frame.episode_index,
+        "episode_id": _episode_id(episode_index),
+        "episode_index": episode_index,
         "frame_index": frame.frame_index,
         "global_frame_index": None,
         "timestamp": frame.timestamp,
@@ -2240,19 +2291,25 @@ def _media_rows(
     video_blobs_by_episode: dict[int, dict[str, bytes]],
     *,
     include_blobs: bool,
+    episode_index_by_source: dict[int, int] | None = None,
 ) -> list[dict[str, Any]]:
     rows = []
     for episode in episodes:
-        for camera, blob in sorted(video_blobs_by_episode.get(episode.episode_index, {}).items()):
+        source_episode_index = int(episode.episode_index)
+        episode_index = _local_episode_index(
+            source_episode_index,
+            episode_index_by_source,
+        )
+        for camera, blob in sorted(video_blobs_by_episode.get(source_episode_index, {}).items()):
             if not blob:
                 continue
             video_key = _safe_path_name(camera)
-            filename = f"episode_{int(episode.episode_index):06d}.mp4"
+            filename = f"episode_{episode_index:06d}.mp4"
             rows.append(
                 {
-                    "media_id": f"{_episode_id(episode.episode_index)}:{video_key}",
-                    "episode_id": _episode_id(episode.episode_index),
-                    "episode_index": episode.episode_index,
+                    "media_id": f"{_episode_id(episode_index)}:{video_key}",
+                    "episode_id": _episode_id(episode_index),
+                    "episode_index": episode_index,
                     "camera_id": video_key,
                     "camera_name": camera,
                     "media_type": "video",
@@ -2276,9 +2333,18 @@ def _media_rows(
     return rows
 
 
-def _annotation_row(annotation: AnnotationRecord) -> dict[str, Any]:
+def _annotation_row(
+    annotation: AnnotationRecord,
+    *,
+    episode_index_by_source: dict[int, int] | None = None,
+) -> dict[str, Any]:
+    row = model_dump(annotation)
+    row["episode_index"] = _local_episode_index(
+        int(annotation.episode_index),
+        episode_index_by_source,
+    )
     return {
-        **model_dump(annotation),
+        **row,
         "source": annotation.source.value,
         "review_status": annotation.review_status.value,
     }
@@ -2327,6 +2393,25 @@ def _camera_feature_keys(
 
 def _episode_id(episode_index: int) -> str:
     return f"episode_{int(episode_index):06d}"
+
+
+def _local_episode_index(
+    source_episode_index: int,
+    episode_index_by_source: dict[int, int] | None,
+) -> int:
+    if episode_index_by_source is None:
+        return int(source_episode_index)
+    return int(episode_index_by_source.get(int(source_episode_index), source_episode_index))
+
+
+def _remap_video_blobs_by_episode(
+    video_blobs_by_episode: dict[int, dict[str, bytes]],
+    episode_index_by_source: dict[int, int],
+) -> dict[int, dict[str, bytes]]:
+    return {
+        _local_episode_index(source_episode_index, episode_index_by_source): blobs
+        for source_episode_index, blobs in video_blobs_by_episode.items()
+    }
 
 
 def _task_id(task_index: int | None) -> str | None:

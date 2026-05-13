@@ -81,7 +81,10 @@ export function AutoLabelDialog({ open, onClose, studio }: AutoLabelDialogProps)
             </div>
             <div>
               <dt>Episode</dt>
-              <dd>{studio.selectedEpisode.episodeIndex}</dd>
+              <dd>
+                {studio.selectedEpisode.curatedEpisodeIndex ??
+                  studio.selectedEpisode.episodeIndex}
+              </dd>
             </div>
             <div>
               <dt>Dataset</dt>

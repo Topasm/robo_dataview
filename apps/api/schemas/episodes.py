@@ -29,6 +29,7 @@ class TaskSegment(BaseModel):
 class EpisodeListItem(BaseModel):
     dataset_id: str
     episode_index: int
+    curated_episode_index: int | None = None
     task_index: int | None = None
     length: int | None = None
     success_label: bool | None = None

@@ -216,7 +216,11 @@ export function AnnotationMode({
       <main className="annotation-stage">
         <div className="annotation-mode-header">
           <div className="annotation-mode-header-meta">
-            <span>Episode #{studio.selectedEpisode.episodeIndex}</span>
+            <span>
+              Episode #
+              {studio.selectedEpisode.curatedEpisodeIndex ??
+                studio.selectedEpisode.episodeIndex}
+            </span>
             {caption ? <small>{caption}</small> : null}
           </div>
           <div className="annotation-mode-header-actions">

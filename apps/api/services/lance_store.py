@@ -2246,6 +2246,7 @@ class LanceDatasetStore:
 
         next_offset = offset + limit if offset + limit < total else None
         previous_offset = max(offset - limit, 0) if offset > 0 and total > 0 else None
+        items = self._with_curated_episode_indices(dataset_id, items)
         return EpisodeListPage(
             dataset_id=dataset_id,
             items=items,
@@ -2548,7 +2549,7 @@ class LanceDatasetStore:
                 for episode in items
                 if int(episode.episode_index) not in hidden
             ]
-        return items
+        return self._with_curated_episode_indices(dataset_id, items)
 
     def _filter_lance_episode_items(
         self,
@@ -3316,11 +3317,11 @@ class LanceDatasetStore:
         items = self._all_raw_episode_items(dataset_id)
         if not hidden:
             return items
-        return [
+        return self._with_curated_episode_indices(dataset_id, [
             episode
             for episode in items
             if int(episode.episode_index) not in hidden
-        ]
+        ])
 
     def _all_raw_episode_items(self, dataset_id: str) -> list[EpisodeListItem]:
         total = self._raw_episode_count(dataset_id)
@@ -3346,6 +3347,46 @@ class LanceDatasetStore:
             return annotation_store.applied_deleted_episode_indices(dataset_id)
         except Exception:
             return set()
+
+    def _with_curated_episode_indices(
+        self,
+        dataset_id: str,
+        items: list[EpisodeListItem],
+    ) -> list[EpisodeListItem]:
+        hidden = self._hidden_episode_indices(dataset_id)
+        if not hidden or not items:
+            return items
+        index_by_source = self._curated_index_by_source_episode(dataset_id, hidden)
+        return [
+            model_copy(
+                episode,
+                update={
+                    "curated_episode_index": index_by_source.get(
+                        int(episode.episode_index)
+                    ),
+                },
+            )
+            for episode in items
+        ]
+
+    def _curated_index_by_source_episode(
+        self,
+        dataset_id: str,
+        hidden: set[int],
+    ) -> dict[int, int]:
+        raw_items = sorted(
+            self._all_raw_episode_items(dataset_id),
+            key=lambda episode: int(episode.episode_index),
+        )
+        mapping: dict[int, int] = {}
+        next_index = 0
+        for episode in raw_items:
+            source_index = int(episode.episode_index)
+            if source_index in hidden:
+                continue
+            mapping[source_index] = next_index
+            next_index += 1
+        return mapping
 
     def _load_dataset_registry(self) -> None:
         if not self.dataset_registry_path.exists():

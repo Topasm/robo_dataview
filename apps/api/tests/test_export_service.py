@@ -578,8 +578,14 @@ class ExportServiceTest(unittest.TestCase):
 
         manifest = json.loads(Path(record.output_uri or "").read_text(encoding="utf-8"))
         artifact = manifest["artifacts"]["lance_subset"]
+        published_artifact = manifest["artifacts"]["published_lance"]
 
         self.assertEqual(record.status, JobStatus.succeeded)
+        self.assertEqual(record.episode_indices, [0])
+        self.assertEqual(manifest["episode_indices"], [0])
+        self.assertEqual(manifest["requested_episode_indices"], [7])
+        self.assertEqual(manifest["episodes"][0]["episode_index"], 0)
+        self.assertEqual(manifest["episodes"][0]["source_episode_index"], 7)
         self.assertEqual(artifact["materialized"]["media_rows"], 1)
         self.assertNotIn("video_rows", artifact["materialized"])
         self.assertEqual(artifact["validation"]["media_count"], 1)
@@ -593,8 +599,35 @@ class ExportServiceTest(unittest.TestCase):
         metadata = json.loads(Path(artifact["files"]["manifest"]).read_text(encoding="utf-8"))
         self.assertEqual(metadata["camera_keys"], ["cam_high"])
         self.assertEqual(metadata["blob_storage"]["media"], "metadata_only")
+        episode_rows = written_paths.lookup(artifact["files"]["episodes"])["rows"]
+        frame_rows = written_paths.lookup(artifact["files"]["frames"])["rows"]
         media_rows = written_paths.lookup(artifact["files"]["media"])["rows"]
         train_episode_rows = written_paths.lookup(artifact["files"]["train_episodes"])["rows"]
+        published_episode_rows = next(
+            table["rows"]
+            for path, table in written_paths.tables.items()
+            if "published_lance" in path and path.endswith("data/episodes.lance")
+        )
+        published_frame_rows = next(
+            table["rows"]
+            for path, table in written_paths.tables.items()
+            if "published_lance" in path and path.endswith("data/frames.lance")
+        )
+        published_video_rows = next(
+            table["rows"]
+            for path, table in written_paths.tables.items()
+            if "published_lance" in path and path.endswith("data/videos.lance")
+        )
+        self.assertEqual(episode_rows[0]["episode_index"], 0)
+        self.assertEqual(frame_rows[0]["episode_index"], 0)
+        self.assertEqual(media_rows[0]["episode_index"], 0)
+        self.assertEqual(train_episode_rows[0]["episode_index"], 0)
+        self.assertEqual(published_episode_rows[0]["episode_index"], 0)
+        self.assertEqual(published_episode_rows[0]["source_episode_index"], 0)
+        self.assertEqual(published_frame_rows[0]["episode_index"], 0)
+        self.assertEqual(published_frame_rows[0]["source_episode_index"], 0)
+        self.assertEqual(published_video_rows[0]["episode_index"], 0)
+        self.assertEqual(published_video_rows[0]["source_episode_index"], 0)
         self.assertEqual(media_rows[0]["byte_size"], len(b"video-bytes"))
         self.assertIsNone(media_rows[0]["video_blob"])
         self.assertEqual(train_episode_rows[0]["cam_high_video_blob"], b"video-bytes")

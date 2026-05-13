@@ -147,7 +147,9 @@ export function BrowseMode({
         </div>
         <div className="browse-mode-stage-actions">
           <span className="browse-stage-meta muted">
-            Episode #{studio.selectedEpisode.episodeIndex}
+            Episode #
+            {studio.selectedEpisode.curatedEpisodeIndex ??
+              studio.selectedEpisode.episodeIndex}
             {studio.selectedEpisode.caption ? (
               <> · {studio.selectedEpisode.caption}</>
             ) : null}

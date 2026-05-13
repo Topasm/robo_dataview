@@ -310,6 +310,8 @@ export function EpisodeList({
         </div>
         {sorted.map((episode) => {
           const isDeleted = episode.disposition === "deleted";
+          const displayEpisodeIndex =
+            episode.curatedEpisodeIndex ?? episode.episodeIndex;
           return (
             <div
               className={`episode-row ${episode.episodeIndex === selectedEpisodeIndex ? "selected" : ""}${isDeleted ? " episode-row-deleted" : ""}`}
@@ -325,7 +327,7 @@ export function EpisodeList({
               tabIndex={0}
               title={episode.languageInstruction ?? episode.caption}
             >
-              <span className="mono">#{episode.episodeIndex}</span>
+              <span className="mono">#{displayEpisodeIndex}</span>
               <span>{episode.taskIndex}</span>
               <span>{episode.length}</span>
               <span>
@@ -383,7 +385,7 @@ export function EpisodeList({
                         ? `Edit flag note${episode.dispositionReason ? ` — ${episode.dispositionReason}` : ""}`
                         : "Flag this episode (attach a memo)"
                     }
-                    aria-label={`Flag episode ${episode.episodeIndex}`}
+                    aria-label={`Flag episode ${displayEpisodeIndex}`}
                   >
                     <Flag size={12} />
                   </button>
@@ -400,8 +402,8 @@ export function EpisodeList({
                     title={isDeleted ? "Undo delete" : "Mark this episode as deleted"}
                     aria-label={
                       isDeleted
-                        ? `Undo delete episode ${episode.episodeIndex}`
-                        : `Delete episode ${episode.episodeIndex}`
+                        ? `Undo delete episode ${displayEpisodeIndex}`
+                        : `Delete episode ${displayEpisodeIndex}`
                     }
                   >
                     {isDeleted ? <RotateCcw size={12} /> : <Trash2 size={12} />}

@@ -605,14 +605,26 @@ class ExportStore:
                         }
                     except (OSError, TypeError, ValueError, json.JSONDecodeError):
                         excluded = set()
-                materialized_episodes = [
+                source_materialized_episodes = [
                     episode
                     for episode in episodes
                     if int(episode["episode_index"]) not in excluded
                 ]
-                materialized_episode_indices = [
-                    int(episode["episode_index"]) for episode in materialized_episodes
-                ]
+                source_to_local = {
+                    int(episode["episode_index"]): local_index
+                    for local_index, episode in enumerate(source_materialized_episodes)
+                }
+                materialized_episodes = []
+                for episode in source_materialized_episodes:
+                    source_episode_index = int(episode["episode_index"])
+                    materialized_episodes.append(
+                        {
+                            **episode,
+                            "episode_index": source_to_local[source_episode_index],
+                            "source_episode_index": source_episode_index,
+                        }
+                    )
+                materialized_episode_indices = list(range(len(materialized_episodes)))
                 materialized_num_episodes = int(
                     lance_validation.get("episode_count") or len(materialized_episodes)
                 )

@@ -110,7 +110,8 @@ export function ExportStrip({
         <div className="muted">
           Applies the current curated dataset state under{" "}
           <code>data/exports/&lt;id&gt;/</code>. Upload replaces the HF repo cleanly and
-          prunes older local export/annotation history; raw Lance tables are never modified.
+          prunes older local export/annotation history. Exported Lance tables are
+          renumbered from episode 0 after deletions.
         </div>
         {exportRecord ? (
           <div className="muted">
@@ -229,7 +230,8 @@ export function ExportStrip({
             <span className="export-hub-guide">
               한국어 안내: Apply는 전체 dataset 기준 curated export를 만들고, Upload는 위 HF
               repo를 깨끗한 새 commit으로 교체합니다. 업로드가 성공하면 이전 export와 annotation
-              tombstone/history도 정리됩니다.
+              tombstone/history도 정리됩니다. 삭제된 episode를 제외한 export 데이터는 0번부터 다시
+              번호가 매겨집니다.
             </span>
             {exportRecord?.hubRepoSource ? (
               <span className="export-hub-guide">
