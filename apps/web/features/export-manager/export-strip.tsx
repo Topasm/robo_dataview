@@ -108,7 +108,8 @@ export function ExportStrip({
           <span>Apply to dataset</span>
         </div>
         <div className="muted">
-          Applies the current curated dataset state under{" "}
+          Applies the current curated dataset state, including Browse deletions and Annotate
+          skill clips, under{" "}
           <code>data/exports/&lt;id&gt;/</code>. Upload replaces the HF repo cleanly and
           prunes older local export/annotation history. Exported Lance tables are
           renumbered from episode 0 after deletions.
@@ -265,7 +266,26 @@ export function ExportStrip({
                   : "Upload to HF"}
             </button>
           </div>
-        ) : null}
+        ) : (
+          <div className="export-artifact export-hub-panel export-hub-panel-disabled">
+            <span>Hugging Face</span>
+            <span>Upload appears after Apply to dataset succeeds.</span>
+            <span className="export-hub-guide">
+              한국어 안내: Annotate에서 만든 skill clip도 Apply 대상입니다. 먼저
+              <strong> Apply to dataset</strong>으로 curated Lance export를 만든 뒤 같은 창에서
+              <strong> Upload to HF</strong> 버튼이 열립니다.
+            </span>
+            <button
+              className="text-button secondary-text-button"
+              disabled
+              title="Apply to dataset first, then upload the produced export to Hugging Face"
+              type="button"
+            >
+              <UploadCloud size={14} />
+              Apply first
+            </button>
+          </div>
+        )}
       </div>
       <div className="export-actions">
         <div className="segmented-control export-scope-control">

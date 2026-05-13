@@ -42,11 +42,11 @@ export function ExportModal({ open, onClose, studio }: ExportModalProps) {
         }
       }}
     >
-      <div className="modal-panel export-modal-panel" role="dialog" aria-label="Apply to dataset">
+      <div className="modal-panel export-modal-panel" role="dialog" aria-label="Apply and upload dataset">
         <header className="modal-header">
           <div className="modal-header-title">
             <Download size={18} />
-            <h2>Apply to dataset</h2>
+            <h2>Apply / Upload dataset</h2>
           </div>
           <button
             type="button"

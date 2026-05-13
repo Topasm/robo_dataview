@@ -70,8 +70,8 @@ export function IconRail({
           type="button"
           className={`icon-rail-button${exportModalOpen ? " active" : ""}`}
           onClick={onToggleExport}
-          title="Apply curated annotations to a new dataset version"
-          aria-label="Open the apply-to-dataset panel"
+          title="Apply curated annotations, then upload to Hugging Face"
+          aria-label="Open apply and upload panel"
           aria-pressed={exportModalOpen}
         >
           <Download size={18} />

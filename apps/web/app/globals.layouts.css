@@ -652,6 +652,12 @@ kbd {
   justify-content: center;
 }
 
+.top-apply-button.active {
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, var(--surface)));
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* === Skill combobox === */
 
 .skill-combobox {

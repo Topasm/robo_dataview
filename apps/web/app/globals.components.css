@@ -2219,6 +2219,11 @@ textarea {
   max-width: min(760px, 70vw);
 }
 
+.export-hub-panel-disabled {
+  border-left: 3px solid var(--border);
+  padding-left: var(--space-2);
+}
+
 .export-hub-repo-row {
   align-items: center;
   display: grid;

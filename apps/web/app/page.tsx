@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Database, Settings } from "lucide-react";
+import { Database, Download, Settings } from "lucide-react";
 
 import { DirtyChip } from "@/components/dirty-chip";
 import { AnnotationMode } from "@/features/annotation-mode/annotation-mode";
@@ -124,6 +124,17 @@ export default function Home() {
         </nav>
         <div className="top-bar-actions">
           <DirtyChip count={dirtyEpisodeCount} onJumpToFirst={handleJumpToFirstDirty} />
+          <button
+            className={`btn btn--sm top-apply-button${exportModalOpen ? " active" : ""}`}
+            onClick={() => setExportModalOpen((current) => !current)}
+            title="Apply curated Browse/Annotate edits, then upload the export to Hugging Face"
+            aria-label="Open apply and upload panel"
+            aria-pressed={exportModalOpen}
+            type="button"
+          >
+            <Download size={14} />
+            <span>Apply / Upload</span>
+          </button>
           <button className="icon-button" title="Advanced settings" aria-label="Advanced settings" type="button">
             <Settings size={17} />
           </button>

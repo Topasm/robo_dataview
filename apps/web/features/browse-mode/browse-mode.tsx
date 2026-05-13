@@ -117,13 +117,13 @@ export function BrowseMode({
           <button
             className={`btn btn--sm browse-side-apply${exportModalOpen ? " active" : ""}`}
             onClick={onToggleExport}
-            title="Apply curated annotations to a new dataset version"
-            aria-label="Open the apply-to-dataset panel"
+            title="Apply curated annotations, then upload to Hugging Face"
+            aria-label="Open apply and upload panel"
             aria-pressed={exportModalOpen}
             type="button"
           >
             <Download size={14} />
-            <span>Apply</span>
+            <span>Apply / Upload</span>
           </button>
         </div>
       </Panel>
