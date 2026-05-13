@@ -230,7 +230,7 @@
   overflow: hidden;
 }
 
-/* annotation-stage now has 7 rows: header / preview / hot bar / status / charts / timeline / chip */
+/* annotation-stage rows: header / preview / edit bar / status / timeline / charts / chip */
 .annotation-mode-shell .annotation-stage {
   grid-template-rows: auto minmax(0, 1fr) auto auto auto auto auto;
 }
@@ -863,7 +863,7 @@
   --frame-axis-left: calc(var(--frame-axis-label-width) + var(--frame-axis-gap));
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  min-height: 180px;
+  min-height: 136px;
   padding: 13px var(--space-3);
 }
 
@@ -1054,11 +1054,22 @@
 .timeline-selected-frame {
   background: var(--text);
   bottom: 3px;
+  pointer-events: none;
   position: absolute;
   top: 3px;
   transform: translateX(-50%);
   width: 2px;
   z-index: 2;
+}
+
+.clip-boundary-button.start {
+  background: #e4f5ed;
+  border-color: #acd8c1;
+}
+
+.clip-boundary-button.end {
+  background: #e7effb;
+  border-color: #b7c9ea;
 }
 
 .segment-accepted {

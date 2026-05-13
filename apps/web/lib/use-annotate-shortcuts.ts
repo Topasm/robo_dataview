@@ -183,6 +183,7 @@ export function useAnnotateShortcuts({
     setClipEnd,
     selectedClipId,
     setSelectedClipId,
-    setSelectedSkillId
+    setSelectedSkillId,
+    setSelectedSkillName
   ]);
 }

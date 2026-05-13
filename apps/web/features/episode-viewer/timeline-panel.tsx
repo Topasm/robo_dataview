@@ -4,6 +4,8 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type DragEvent as ReactDragEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent
 } from "react";
 
@@ -31,12 +33,15 @@ type TimelinePanelProps = {
   onMergeSegments: (left: SegmentAnnotation, right: SegmentAnnotation) => Promise<void>;
   onSelectFrame: (frameIndex: number) => void;
   onSelectSegment?: (annotationId: string | null) => void;
+  onCreateSkillClip?: (skillName: string, anchorFrame: number) => Promise<void> | void;
   onSetClipEnd?: (frame: number | null) => void;
   onSetClipStart?: (frame: number | null) => void;
   onSplitSegment: (annotation: SegmentAnnotation) => Promise<void>;
   onUpdateSegment: (annotationId: string, draft: SegmentDraft) => Promise<void>;
   selectedSegmentId?: string | null;
   selectedFrame: number;
+  selectedSkillName?: string;
+  showActions?: boolean;
   vlmResponses?: VlmResponseRecord[];
 };
 
@@ -59,6 +64,7 @@ export function TimelinePanel({
   onCreateSegment,
   onDeleteSegment,
   onMergeSegments,
+  onCreateSkillClip,
   onSelectFrame,
   onSelectSegment,
   onSetClipEnd,
@@ -67,6 +73,8 @@ export function TimelinePanel({
   onUpdateSegment,
   selectedSegmentId = null,
   selectedFrame,
+  selectedSkillName,
+  showActions = true,
   vlmResponses = []
 }: TimelinePanelProps) {
   const trackRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -87,15 +95,10 @@ export function TimelinePanel({
         annotations: sortedAnnotations.filter((annotation) => annotation.labelType === SKILL_LABEL_TYPE)
       },
       {
-        key: "bad",
-        title: "Bad Ranges",
-        annotations: sortedAnnotations.filter((annotation) => annotation.labelType === "bad_range")
-      },
-      {
-        key: "events",
-        title: "Events",
+        key: "marks",
+        title: "Marks",
         annotations: sortedAnnotations.filter(
-          (annotation) => annotation.labelType !== SKILL_LABEL_TYPE && annotation.labelType !== "bad_range"
+          (annotation) => annotation.labelType !== SKILL_LABEL_TYPE
         )
       }
     ],
@@ -161,6 +164,45 @@ export function TimelinePanel({
     onSelectFrame(frameFromPointer(event, event.currentTarget, maxFrame));
   }
 
+  function handleTrackDoubleClick(event: ReactMouseEvent<HTMLDivElement>, laneKey: string) {
+    if (laneKey !== "skills" || !selectedSkillName || !onCreateSkillClip) {
+      return;
+    }
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (target?.closest(".timeline-segment")) {
+      return;
+    }
+    event.preventDefault();
+    const frame = frameFromPointer(event, event.currentTarget, maxFrame);
+    onSelectFrame(frame);
+    void onCreateSkillClip(selectedSkillName, frame);
+  }
+
+  function handleTrackDragOver(event: ReactDragEvent<HTMLDivElement>, laneKey: string) {
+    if (laneKey !== "skills" || !hasSkillDragPayload(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleTrackDrop(event: ReactDragEvent<HTMLDivElement>, laneKey: string) {
+    if (laneKey !== "skills" || !onCreateSkillClip) {
+      return;
+    }
+    const skillName =
+      event.dataTransfer.getData("application/x-rds-skill") ||
+      event.dataTransfer.getData("text/plain") ||
+      selectedSkillName;
+    if (!skillName) {
+      return;
+    }
+    event.preventDefault();
+    const frame = frameFromPointer(event, event.currentTarget, maxFrame);
+    onSelectFrame(frame);
+    void onCreateSkillClip(skillName, frame);
+  }
+
   function handleDragPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
     if (dragState === null) {
       return;
@@ -207,36 +249,38 @@ export function TimelinePanel({
           <div className="section-title">Timeline</div>
           <div className="muted">Frame {activeFrame}</div>
         </div>
-        <div className="timeline-actions">
-          <span className="timeline-action-group" aria-label="Marker">
-            <button className="text-button compact-text-button" onClick={handleCreateMarker} type="button">
-              <MapPin size={14} />
-              Marker
-            </button>
-          </span>
-          <span className="timeline-action-divider" aria-hidden="true" />
-          <span className="timeline-action-group" aria-label="Bad range">
-            <button
-              className="text-button compact-text-button"
-              onClick={() => void handleCreateBadRange(1)}
-              title="Mark a 1-second bad range around the current frame"
-              type="button"
-            >
-              <OctagonAlert size={14} />
-              Bad range
-            </button>
-          </span>
-          {onSetClipStart ? (
-            <button className="text-button compact-text-button" onClick={() => onSetClipStart(activeFrame)} type="button" style={{ background: "#e4f5ed", borderColor: "#acd8c1" }}>
-              Set Start
-            </button>
-          ) : null}
-          {onSetClipEnd ? (
-            <button className="text-button compact-text-button" onClick={() => onSetClipEnd(activeFrame)} type="button" style={{ background: "#e7effb", borderColor: "#b7c9ea" }}>
-              Set End
-            </button>
-          ) : null}
-        </div>
+        {showActions ? (
+          <div className="timeline-actions">
+            <span className="timeline-action-group" aria-label="Marker">
+              <button className="text-button compact-text-button" onClick={handleCreateMarker} type="button">
+                <MapPin size={14} />
+                Marker
+              </button>
+            </span>
+            <span className="timeline-action-divider" aria-hidden="true" />
+            <span className="timeline-action-group" aria-label="Bad range">
+              <button
+                className="text-button compact-text-button"
+                onClick={() => void handleCreateBadRange(1)}
+                title="Mark a 1-second bad range around the current frame"
+                type="button"
+              >
+                <OctagonAlert size={14} />
+                Bad range
+              </button>
+            </span>
+            {onSetClipStart ? (
+              <button className="text-button compact-text-button" onClick={() => onSetClipStart(activeFrame)} type="button" style={{ background: "#e4f5ed", borderColor: "#acd8c1" }}>
+                Set Start
+              </button>
+            ) : null}
+            {onSetClipEnd ? (
+              <button className="text-button compact-text-button" onClick={() => onSetClipEnd(activeFrame)} type="button" style={{ background: "#e7effb", borderColor: "#b7c9ea" }}>
+                Set End
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       <div className="timeline-ruler">
         {rulerValues.map((value) => (
@@ -249,6 +293,9 @@ export function TimelinePanel({
             <div className="timeline-lane-title">{lane.title}</div>
             <div
               className="timeline-track"
+              onDoubleClick={(event) => handleTrackDoubleClick(event, lane.key)}
+              onDragOver={(event) => handleTrackDragOver(event, lane.key)}
+              onDrop={(event) => handleTrackDrop(event, lane.key)}
               onPointerDown={handleTrackPointerDown}
               onPointerLeave={handleDragPointerUp}
               onPointerMove={handleDragPointerMove}
@@ -332,7 +379,7 @@ export function TimelinePanel({
                       type="button"
                     >
                       <span className="timeline-segment-name">
-                        {skill?.label ?? annotation.labelValue}
+                        {formatSegmentLabel(annotation, skill?.label)}
                       </span>
                       <span className="timeline-segment-range mono">
                         f{bounds.startFrame}-f{bounds.endFrame}
@@ -413,6 +460,23 @@ function formatOverlapTooltip(overlaps: ClipOverlap[]): string {
   return `Overlaps with ${overlaps.length} clips: ${summary}`;
 }
 
+function formatSegmentLabel(annotation: SegmentAnnotation, skillLabel?: string): string {
+  if (skillLabel) {
+    return skillLabel;
+  }
+  if (annotation.labelType === "bad_range") {
+    return "Bad range";
+  }
+  if (annotation.labelType === "important_frame") {
+    return "Marker";
+  }
+  return annotation.labelValue;
+}
+
+function hasSkillDragPayload(event: ReactDragEvent<HTMLElement>): boolean {
+  return Array.from(event.dataTransfer.types).includes("application/x-rds-skill");
+}
+
 function canMerge(left: SegmentAnnotation, right: SegmentAnnotation | null): right is SegmentAnnotation {
   if (right === null) {
     return false;
@@ -435,7 +499,7 @@ function clampFrame(frame: number, maxFrame: number): number {
 }
 
 function frameFromPointer(
-  event: ReactPointerEvent<HTMLElement>,
+  event: { clientX: number },
   track: HTMLDivElement | null,
   maxFrame: number,
 ): number {

@@ -178,6 +178,7 @@
 /* --- Skill hot bar --- */
 
 .skill-hot-bar {
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -234,6 +235,17 @@
 
 .skill-chip-label {
   white-space: nowrap;
+}
+
+.skill-hot-bar-actions {
+  align-items: center;
+  display: flex;
+  flex: 1 1 280px;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-left: auto;
+  min-width: 260px;
 }
 
 .skill-chip-custom {

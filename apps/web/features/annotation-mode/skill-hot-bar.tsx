@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type DragEvent, type ReactNode } from "react";
 import { Plus, X } from "lucide-react";
 
 import { SkillCombobox } from "@/components/skill-combobox";
@@ -14,15 +14,27 @@ type SkillHotBarProps = {
   onSelectId: (id: number) => void;
   /** Set when any pill (canonical or custom) is selected. Always carries the labelValue. */
   onSelectName: (name: string) => void;
+  /** Optional timeline editing actions rendered on the same row as skill chips. */
+  actions?: ReactNode;
+  /** Double-clicking a skill chip creates a clip at the current timeline frame. */
+  onCreateSkillClip?: (skillName: string) => void;
 };
 
 export function SkillHotBar({
+  actions,
+  onCreateSkillClip,
   selectedSkillName,
   onSelectId,
   onSelectName
 }: SkillHotBarProps) {
   const customSkills = useCustomSkills();
   const [adding, setAdding] = useState(false);
+
+  function handleDragStart(event: DragEvent<HTMLElement>, skillName: string) {
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData("application/x-rds-skill", skillName);
+    event.dataTransfer.setData("text/plain", skillName);
+  }
 
   return (
     <div className="skill-hot-bar" role="toolbar" aria-label="Skill picker">
@@ -37,6 +49,9 @@ export function SkillHotBar({
             key={skill.id}
             type="button"
             className={`skill-chip${isActive ? " active" : ""}${clickOnly ? " click-only" : ""}`}
+            draggable
+            onDragStart={(event) => handleDragStart(event, skill.name)}
+            onDoubleClick={() => onCreateSkillClip?.(skill.name)}
             onClick={() => {
               onSelectId(skill.id);
               onSelectName(skill.name);
@@ -66,6 +81,9 @@ export function SkillHotBar({
             <button
               type="button"
               className="skill-chip-main"
+              draggable
+              onDragStart={(event) => handleDragStart(event, skill.name)}
+              onDoubleClick={() => onCreateSkillClip?.(skill.name)}
               onClick={() => onSelectName(skill.name)}
               title={`${skill.label} — custom skill (no keyboard shortcut)`}
             >
@@ -126,6 +144,7 @@ export function SkillHotBar({
           <Plus size={12} />
         </button>
       )}
+      {actions ? <div className="skill-hot-bar-actions">{actions}</div> : null}
     </div>
   );
 }

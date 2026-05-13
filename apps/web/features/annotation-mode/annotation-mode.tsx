@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { HelpCircle, RefreshCw, Wand2 } from "lucide-react";
+import { HelpCircle, MapPin, OctagonAlert, RefreshCw, Wand2 } from "lucide-react";
 
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
@@ -16,7 +16,7 @@ import { StatusHud } from "@/features/annotation-mode/status-hud";
 import { EpisodeCharts } from "@/features/browse-mode/episode-charts-async";
 import { EpisodeViewer } from "@/features/episode-viewer/episode-viewer";
 import { TimelinePanel } from "@/features/episode-viewer/timeline-panel-async";
-import { SKILL_LABEL_TYPE } from "@/lib/skill-vocabulary";
+import { SKILL_LABEL_TYPE, skillByName } from "@/lib/skill-vocabulary";
 import { useAnnotateShortcuts } from "@/lib/use-annotate-shortcuts";
 import { useAnnotationEditor } from "@/lib/use-annotation-editor";
 import type { useStudioData } from "@/lib/use-studio-data";
@@ -181,6 +181,83 @@ export function AnnotationMode({
       : `Apply ${editor.lastEpisodeBoundaries.clips.length} clip(s) from episode #${editor.lastEpisodeBoundaries.episodeIndex} (frame-ratio normalized)`
     : "No previously annotated episode to apply yet";
 
+  const handleCreateMarker = useCallback(async () => {
+    await studio.handleCreateSegment({
+      labelType: "important_frame",
+      labelValue: "important_frame",
+      startFrame: studio.selectedFrameIndex,
+      endFrame: studio.selectedFrameIndex
+    });
+  }, [studio]);
+
+  const handleCreateBadRange = useCallback(async () => {
+    const lastFrame = Math.max(0, studio.selectedEpisode.length - 1);
+    const radius = Math.max(1, Math.round(fps / 2));
+    const frame = Math.max(0, Math.min(lastFrame, studio.selectedFrameIndex));
+    await studio.handleCreateSegment({
+      labelType: "bad_range",
+      labelValue: "bad_range",
+      startFrame: Math.max(0, frame - radius),
+      endFrame: Math.min(lastFrame, frame + radius)
+    });
+  }, [fps, studio]);
+
+  const handleCreateSkillClip = useCallback(
+    async (skillName: string, anchorFrame = studio.selectedFrameIndex) => {
+      const lastFrame = Math.max(0, studio.selectedEpisode.length - 1);
+      const skill = skillByName(skillName);
+      const hasDraftBounds = clipStart !== null || clipEnd !== null;
+      const bounds = hasDraftBounds
+        ? (() => {
+            const frame = Math.max(0, Math.min(lastFrame, Math.round(anchorFrame)));
+            const start = clipStart ?? frame;
+            const end = clipEnd ?? frame;
+            return {
+              startFrame: Math.min(start, end),
+              endFrame: Math.max(start, end)
+            };
+          })()
+        : (() => {
+            const radius = Math.max(1, Math.round(fps / 2));
+            const frame = Math.max(0, Math.min(lastFrame, Math.round(anchorFrame)));
+            return {
+              startFrame: Math.max(0, frame - radius),
+              endFrame: Math.min(lastFrame, frame + radius)
+            };
+          })();
+      await studio.handleCreateSegment({
+        labelType: SKILL_LABEL_TYPE,
+        labelValue: skillName,
+        startFrame: bounds.startFrame,
+        endFrame: bounds.endFrame,
+        reviewStatus: "accepted",
+        metadata: {
+          skillId: skill?.id ?? -1,
+          qualityScore: null,
+          successLabel: null
+        }
+      });
+      if (skill && skill.id >= 0) {
+        onSetSelectedSkillId(skill.id);
+      }
+      onSetSelectedSkillName(skillName);
+      if (hasDraftBounds) {
+        onSetClipStart(null);
+        onSetClipEnd(null);
+      }
+    },
+    [
+      clipEnd,
+      clipStart,
+      fps,
+      onSetClipEnd,
+      onSetClipStart,
+      onSetSelectedSkillId,
+      onSetSelectedSkillName,
+      studio
+    ]
+  );
+
   useAnnotateShortcuts({
     enabled: true,
     enableBadFrameShortcuts: editor.enableBadFrameShortcuts,
@@ -282,6 +359,47 @@ export function AnnotationMode({
           selectedSkillName={selectedSkillName}
           onSelectId={onSetSelectedSkillId}
           onSelectName={onSetSelectedSkillName}
+          onCreateSkillClip={(skillName) => {
+            void handleCreateSkillClip(skillName);
+          }}
+          actions={
+            <>
+              <button
+                className="text-button compact-text-button"
+                onClick={() => void handleCreateMarker()}
+                title="Add a marker at the current frame"
+                type="button"
+              >
+                <MapPin size={14} />
+                Marker
+              </button>
+              <button
+                className="text-button compact-text-button"
+                onClick={() => void handleCreateBadRange()}
+                title="Mark a 1-second bad range around the current frame"
+                type="button"
+              >
+                <OctagonAlert size={14} />
+                Bad range
+              </button>
+              <button
+                className="text-button compact-text-button clip-boundary-button start"
+                onClick={() => onSetClipStart(studio.selectedFrameIndex)}
+                title="Set skill clip start to the current frame (I)"
+                type="button"
+              >
+                Set Start
+              </button>
+              <button
+                className="text-button compact-text-button clip-boundary-button end"
+                onClick={() => onSetClipEnd(studio.selectedFrameIndex)}
+                title="Set skill clip end to the current frame (O)"
+                type="button"
+              >
+                Set End
+              </button>
+            </>
+          }
         />
         <StatusHud
           frameIndex={studio.selectedFrameIndex}
@@ -292,15 +410,6 @@ export function AnnotationMode({
           clipEnd={clipEnd}
           annotations={studio.annotationRows}
         />
-        <div className="annotation-mode-charts">
-          <EpisodeCharts
-            episode={studio.selectedEpisode}
-            annotations={studio.annotationRows}
-            selectedFrame={studio.selectedFrameIndex}
-            onSelectFrame={studio.handleSelectFrame}
-            variant="compact"
-          />
-        </div>
         <TimelinePanel
           annotations={studio.annotationRows}
           clipEnd={clipEnd}
@@ -314,12 +423,24 @@ export function AnnotationMode({
           onSelectFrame={studio.handleSelectFrame}
           onSetClipEnd={onSetClipEnd}
           onSetClipStart={onSetClipStart}
+          onCreateSkillClip={handleCreateSkillClip}
           onSplitSegment={studio.handleSplitSegment}
           onUpdateSegment={studio.handleUpdateSegment}
           selectedFrame={studio.selectedFrameIndex}
           selectedSegmentId={selectedClipId}
+          selectedSkillName={selectedSkillName}
+          showActions={false}
           vlmResponses={studio.vlmResponses}
         />
+        <div className="annotation-mode-charts">
+          <EpisodeCharts
+            episode={studio.selectedEpisode}
+            annotations={studio.annotationRows}
+            selectedFrame={studio.selectedFrameIndex}
+            onSelectFrame={studio.handleSelectFrame}
+            variant="compact"
+          />
+        </div>
         <ShortcutChip
           enableBadFrameShortcuts={editor.enableBadFrameShortcuts}
           onOpenCheatsheet={onOpenCheatsheet}
