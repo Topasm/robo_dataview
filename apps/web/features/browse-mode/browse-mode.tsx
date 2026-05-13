@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Eye, EyeOff, Scissors } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
@@ -138,12 +138,20 @@ export function BrowseMode({
           selectedFrame={studio.selectedFrameIndex}
         />
         <div className="browse-mode-charts">
-          <EpisodeCharts
-            episode={studio.selectedEpisode}
-            annotations={annotationsForOverlay}
-            selectedFrame={studio.selectedFrameIndex}
-            onSelectFrame={studio.handleSelectFrame}
-          />
+          <Suspense
+            fallback={
+              <div className="episode-charts episode-charts-empty">
+                <span className="muted">Loading charts...</span>
+              </div>
+            }
+          >
+            <EpisodeCharts
+              episode={studio.selectedEpisode}
+              annotations={annotationsForOverlay}
+              selectedFrame={studio.selectedFrameIndex}
+              onSelectFrame={studio.handleSelectFrame}
+            />
+          </Suspense>
         </div>
         <div className="browse-mode-stage-actions">
           <span className="browse-stage-meta muted">
