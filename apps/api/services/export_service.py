@@ -170,12 +170,19 @@ class ExportStore:
         )
         self._record_hub_upload(record, response)
         local_install = self._install_uploaded_published_dataset(record, upload_path)
+        annotation_remap = (
+            self._remap_uploaded_annotations(record)
+            if local_install.get("installed")
+            else {}
+        )
         self._prune_previous_exports(record)
         self._compact_uploaded_annotations(
             record,
             drop_applied_episode_deletions=bool(local_install.get("installed")),
         )
         if local_install:
+            if annotation_remap:
+                local_install["annotation_remap"] = annotation_remap
             self._record_local_published_update(record, local_install)
         return response
 
@@ -421,6 +428,37 @@ class ExportStore:
             )
         except (OSError, json.JSONDecodeError, TypeError):
             logger.warning("Failed to persist local published update for %s", record.export_id)
+
+    def _remap_uploaded_annotations(self, record: ExportRecord) -> dict[str, Any]:
+        if not record.output_uri:
+            return {}
+        manifest_path = Path(record.output_uri)
+        if not manifest_path.exists():
+            return {}
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            mapping = {
+                int(episode["source_episode_index"]): int(episode["episode_index"])
+                for episode in manifest.get("episodes", [])
+                if isinstance(episode, dict)
+                and episode.get("source_episode_index") is not None
+                and episode.get("episode_index") is not None
+            }
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            return {}
+        try:
+            return annotation_store.remap_episode_indices(record.dataset_id, mapping)
+        except Exception as exc:  # noqa: BLE001 - upload already succeeded; local sync is best effort.
+            logger.warning(
+                "Failed to remap annotations after local published sync for %s: %s",
+                record.dataset_id,
+                exc,
+            )
+            return {
+                "dataset_id": record.dataset_id,
+                "metadata_ok": False,
+                "error": str(exc),
+            }
 
     def _compact_uploaded_annotations(
         self,

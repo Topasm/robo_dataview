@@ -332,6 +332,30 @@ class AnnotationServiceTest(unittest.TestCase):
             self.assertEqual(summary["applied_episode_deletions_pruned"], 1)
             self.assertEqual(store.applied_deleted_episode_indices("dataset-a"), set())
 
+    def test_remap_episode_indices_updates_active_overlay_records(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage_root = Path(tmpdir)
+            store = AnnotationStore(storage_root=storage_root, mirror_lance=False)
+            active = store.create(
+                AnnotationCreate(
+                    dataset_id="dataset-a",
+                    episode_index=6,
+                    start_frame=0,
+                    end_frame=10,
+                    label_type="skill",
+                    label_value="insert_tire",
+                    review_status=ReviewStatus.edited,
+                )
+            )
+
+            summary = store.remap_episode_indices("dataset-a", {6: 0})
+
+            self.assertEqual(summary["records_remapped"], 1)
+            remapped = store.get(active.annotation_id)
+            self.assertIsNotNone(remapped)
+            self.assertEqual(remapped.episode_index, 0)
+            self.assertEqual(remapped.updated_by, "local_sync")
+
     def test_applied_export_id_persists_across_jsonl_reload(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             storage_root = Path(tmpdir)

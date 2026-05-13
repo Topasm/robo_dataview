@@ -183,6 +183,46 @@ class AnnotationStore:
             self._persist_dataset(dataset_id)
         return updated
 
+    def remap_episode_indices(
+        self,
+        dataset_id: str,
+        episode_index_by_source: dict[int, int],
+    ) -> dict[str, Any]:
+        """Rewrite active local overlay records after source tables are renumbered."""
+
+        if not episode_index_by_source:
+            return {
+                "dataset_id": dataset_id,
+                "records_remapped": 0,
+            }
+        remapped = 0
+        now = datetime.now(timezone.utc)
+        for annotation_id, record in list(self._records.items()):
+            if record.dataset_id != dataset_id or record.deleted_at is not None:
+                continue
+            source_episode_index = int(record.episode_index)
+            if source_episode_index not in episode_index_by_source:
+                continue
+            episode_index = int(episode_index_by_source[source_episode_index])
+            if episode_index == source_episode_index:
+                continue
+            self._records[annotation_id] = model_copy(
+                record,
+                update={
+                    "episode_index": episode_index,
+                    "updated_at": now,
+                    "updated_by": "local_sync",
+                    "revision": record.revision + 1,
+                },
+            )
+            remapped += 1
+        if remapped:
+            self._persist_dataset(dataset_id)
+        return {
+            "dataset_id": dataset_id,
+            "records_remapped": remapped,
+        }
+
     def compact_dataset(
         self,
         dataset_id: str,
