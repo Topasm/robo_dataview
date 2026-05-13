@@ -6,6 +6,7 @@ import logging
 import os
 from pathlib import Path
 import re
+import shutil
 from typing import Any
 from urllib.parse import urlparse
 from uuid import uuid4
@@ -148,6 +149,7 @@ class ExportStore:
                 folder_path=str(upload_path),
                 revision=revision,
                 commit_message=f"Upload Robot Data Studio export {record.export_id}",
+                delete_patterns=["*"],
             )
         except Exception as exc:  # noqa: BLE001 - surface Hub auth/config errors cleanly
             raise HTTPException(
@@ -166,6 +168,7 @@ class ExportStore:
             message=f"Uploaded export {record.export_id} to {repo_id}.",
         )
         self._record_hub_upload(record, response)
+        self._prune_previous_exports(record)
         return response
 
     def _load_existing_exports(self) -> None:
@@ -234,8 +237,18 @@ class ExportStore:
     @staticmethod
     def _hub_upload_path(record: ExportRecord) -> Path:
         artifacts = record.artifacts or {}
+        published_artifact = artifacts.get("published_lance")
+        if isinstance(published_artifact, dict):
+            root = published_artifact.get("root")
+            if isinstance(root, str) and Path(root).exists():
+                return Path(root)
         lance_artifact = artifacts.get("lance_subset")
         if isinstance(lance_artifact, dict):
+            published_lance = lance_artifact.get("published_lance")
+            if isinstance(published_lance, dict):
+                root = published_lance.get("root")
+                if isinstance(root, str) and Path(root).exists():
+                    return Path(root)
             root = lance_artifact.get("root")
             if isinstance(root, str) and Path(root).exists():
                 return Path(root)
@@ -304,6 +317,36 @@ class ExportStore:
                         record.export_id,
                     )
         self._records[record.export_id] = updated
+
+    def _prune_previous_exports(self, keep: ExportRecord) -> None:
+        pruned: list[str] = []
+        for manifest_path in sorted(EXPORT_ROOT.glob("*/manifest.json")):
+            if manifest_path.parent.name == keep.export_id:
+                continue
+            other = self._record_from_manifest(manifest_path)
+            if other is None or other.dataset_id != keep.dataset_id:
+                continue
+            try:
+                shutil.rmtree(manifest_path.parent)
+            except OSError:
+                logger.warning("Failed to prune previous export %s", manifest_path.parent)
+                continue
+            pruned.append(other.export_id)
+            self._records.pop(other.export_id, None)
+        if pruned and keep.output_uri:
+            manifest_path = Path(keep.output_uri)
+            if manifest_path.exists():
+                try:
+                    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    hub_upload = dict(manifest.get("hub_upload") or {})
+                    hub_upload["pruned_export_ids"] = pruned
+                    manifest["hub_upload"] = hub_upload
+                    manifest_path.write_text(
+                        json.dumps(manifest, indent=2, default=str),
+                        encoding="utf-8",
+                    )
+                except (OSError, json.JSONDecodeError, TypeError):
+                    logger.warning("Failed to persist pruned export ids for %s", keep.export_id)
 
     def _write_manifest(
         self,
@@ -404,6 +447,9 @@ class ExportStore:
                     version_description=payload.version_description,
                     clip_export_options=clip_export,
                 )
+                published_lance = artifacts["lance_subset"].get("published_lance")
+                if isinstance(published_lance, dict):
+                    artifacts["published_lance"] = published_lance
                 validation = artifacts["lance_subset"].get("validation", {})
                 if not validation.get("metadata_ok", False):
                     errors = validation.get("errors") or ["Lance subset export validation failed."]

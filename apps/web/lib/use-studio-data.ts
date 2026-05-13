@@ -1310,12 +1310,12 @@ export function useStudioData() {
 
   async function handleCreateExport(
     format: ExportFormat = "lance",
-    scope: "episode" | "split" = "episode",
+    scope: "dataset" | "episode" | "split" = "dataset",
     options?: SkillExportOptions,
   ) {
     const split = selectedEpisode.split || null;
     const splits = scope === "split" && split ? [split] : [];
-    const episodeIndices = splits.length > 0 ? [] : [selectedEpisode.episodeIndex];
+    const episodeIndices = scope === "episode" ? [selectedEpisode.episodeIndex] : [];
     const job = await createExportJob(
       selectedEpisode.datasetId,
       episodeIndices,

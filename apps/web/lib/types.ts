@@ -418,6 +418,27 @@ export type ExportArtifacts = {
       action_stats_count?: number;
     };
   };
+  published_lance?: {
+    root?: string;
+    validation?: {
+      metadata_ok?: boolean;
+      episode_count?: number;
+      frame_count?: number;
+      video_count?: number;
+      state_stats_count?: number;
+      action_stats_count?: number;
+      errors?: string[];
+      warnings?: string[];
+    };
+    files?: Record<string, string | null>;
+    materialized?: {
+      episode_rows?: number;
+      frame_rows?: number;
+      video_rows?: number;
+      state_stats_count?: number;
+      action_stats_count?: number;
+    };
+  };
   jsonl?: JsonlExportArtifact;
   vla_jsonl?: JsonlExportArtifact;
   hf_dataset?: JsonlExportArtifact & {

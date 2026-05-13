@@ -416,11 +416,12 @@ class ExportServiceTest(unittest.TestCase):
         self.assertTrue(artifact["validation"]["present"]["manifest"])
         self.assertTrue(artifact["validation"]["present"]["stats"])
         # 6 export-bundle lance writes (episodes, frames, media, train_episodes,
-        # annotations_current, annotation_events) plus 3 from the post-export
+        # annotations_current, annotation_events), 2 published-HF layout writes
+        # (data/episodes, data/frames), plus 3 from the post-export
         # mark_applied side effect on the global annotation store: appends one
         # annotation_events.lance row and rewrites annotations_current +
         # annotations (legacy mirror).
-        self.assertEqual(len(written_paths), 9)
+        self.assertEqual(len(written_paths), 11)
         self.assertEqual(accepted.applied_export_id, None)
         refreshed = annotation_store.get(accepted.annotation_id)
         self.assertIsNotNone(refreshed)
@@ -432,7 +433,17 @@ class ExportServiceTest(unittest.TestCase):
             Path(artifact["files"]["manifest"]).read_text(encoding="utf-8")
         )
         metadata = json.loads(Path(artifact["files"]["metadata"]).read_text(encoding="utf-8"))
+        published_artifact = manifest["artifacts"]["published_lance"]
         self.assertEqual(exported_manifest, metadata)
+        self.assertEqual(published_artifact["format"], "rllab_published_lance_dataset_v2")
+        self.assertEqual(published_artifact["validation"]["episode_count"], 1)
+        self.assertEqual(published_artifact["validation"]["frame_count"], 180)
+        published_metadata = json.loads(
+            Path(published_artifact["files"]["manifest"]).read_text(encoding="utf-8")
+        )
+        self.assertEqual(published_metadata["primary_training_table"], "data/episodes.lance")
+        self.assertEqual(published_metadata["total_episodes"], 1)
+        self.assertEqual(published_metadata["total_frames"], 180)
         self.assertEqual(metadata["primary_training_table"], "train_episodes.lance")
         self.assertEqual(metadata["training_columns"]["state"], "observation_state")
         self.assertEqual(metadata["training_columns"]["action"], "actions")
@@ -513,8 +524,9 @@ class ExportServiceTest(unittest.TestCase):
         self.assertEqual(upload_calls["create_repo"][0]["private"], True)
         self.assertEqual(
             upload_calls["upload_folder"][0]["folder_path"],
-            record.artifacts["lance_subset"]["root"],
+            record.artifacts["published_lance"]["root"],
         )
+        self.assertEqual(upload_calls["upload_folder"][0]["delete_patterns"], ["*"])
 
         manifest = json.loads(Path(record.output_uri or "").read_text(encoding="utf-8"))
         self.assertEqual(manifest["artifacts"]["huggingface_hub"]["repo_id"], response.repo_id)
@@ -555,7 +567,8 @@ class ExportServiceTest(unittest.TestCase):
         self.assertNotIn("videos", artifact["files"])
         self.assertTrue(any(path.endswith("media.lance") for path in written_paths))
         self.assertTrue(any(path.endswith("train_episodes.lance") for path in written_paths))
-        self.assertFalse(any(path.endswith("videos.lance") for path in written_paths))
+        self.assertFalse(any("lance_subset/videos.lance" in path for path in written_paths))
+        self.assertTrue(any("published_lance" in path and path.endswith("data/videos.lance") for path in written_paths))
         metadata = json.loads(Path(artifact["files"]["manifest"]).read_text(encoding="utf-8"))
         self.assertEqual(metadata["camera_keys"], ["cam_high"])
         self.assertEqual(metadata["blob_storage"]["media"], "metadata_only")
@@ -851,15 +864,26 @@ class _FakeTable:
     def from_pylist(rows: list[dict], schema: object | None = None) -> dict:
         return {"rows": rows, "schema": schema}
 
+    @staticmethod
+    def from_arrays(arrays: list[object], schema: object | None = None) -> dict:
+        rows = []
+        if isinstance(schema, list):
+            names = [field["name"] for field in schema]
+            row_count = len(arrays[0]) if arrays else 0
+            for index in range(row_count):
+                rows.append({name: arrays[column][index] for column, name in enumerate(names)})
+        return {"rows": rows, "schema": schema}
+
 
 def _fake_pyarrow_module() -> ModuleType:
     module = ModuleType("pyarrow")
     module.Table = _FakeTable
-    module.schema = lambda fields, metadata=None: {"fields": fields, "metadata": metadata}
+    module.schema = lambda fields, metadata=None: list(fields)
     module.field = lambda name, dtype, nullable=True: {
         "name": name,
         "dtype": dtype,
         "nullable": nullable,
+        "type": dtype,
     }
     module.string = lambda: "string"
     module.int64 = lambda: "int64"
@@ -868,7 +892,10 @@ def _fake_pyarrow_module() -> ModuleType:
     module.bool_ = lambda: "bool"
     module.binary = lambda: "binary"
     module.large_binary = lambda: "large_binary"
-    module.list_ = lambda dtype: f"list<{dtype}>"
+    module.list_ = lambda dtype, size=None: f"list<{dtype}{',' + str(size) if size is not None else ''}>"
+    module.large_list = lambda dtype: f"large_list<{dtype}>"
+    module.struct = lambda fields: f"struct<{fields}>"
+    module.array = lambda values, type=None: list(values)
     module.timestamp = lambda unit, tz=None: f"timestamp<{unit},{tz}>"
     return module
 
@@ -904,8 +931,9 @@ def _fake_lance_module(
     row_counts: dict[str, int] = {}
     row_count_overrides = row_count_overrides or {}
 
-    def write_dataset(table: object, path: str, mode: str = "overwrite") -> None:
+    def write_dataset(table: object, path: str, mode: str = "overwrite", **kwargs: object) -> None:
         del mode
+        del kwargs
         path_obj = Path(path)
         path_obj.mkdir(parents=True, exist_ok=True)
         (path_obj / "_SUCCESS").write_text("ok", encoding="utf-8")
@@ -921,6 +949,8 @@ def _fake_lance_module(
 
     module.dataset = dataset
     module.write_dataset = write_dataset
+    module.blob_array = lambda values: list(values)
+    module.blob_field = lambda name: {"name": name, "dtype": "blob", "nullable": True, "type": "blob"}
     return module, written_paths
 
 

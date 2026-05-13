@@ -20,7 +20,7 @@ type ExportStripProps = {
   pastExports?: ExportRecord[];
   onCreateExport: (
     format?: ExportFormat,
-    scope?: "episode" | "split",
+    scope?: "dataset" | "episode" | "split",
     options?: SkillExportOptions,
   ) => Promise<void>;
   onUploadExportToHub: (exportId: string, repoId?: string) => Promise<ExportHubUploadResult>;
@@ -38,18 +38,21 @@ export function ExportStrip({
   split
 }: ExportStripProps) {
   const overlapCount = useMemo(() => countOverlappingPairs(annotations), [annotations]);
-  const [scope, setScope] = useState<"episode" | "split">("episode");
+  const [scope, setScope] = useState<"dataset" | "episode" | "split">("dataset");
   const exportJobActive = exportJob ? !["succeeded", "failed"].includes(exportJob.status) : false;
   const exportProgressPercent = Math.round(Math.max(0, Math.min(1, exportJob?.progress ?? 0)) * 100);
   const lerobotArtifact = exportRecord?.artifacts?.lerobot_v3;
   const lanceArtifact = exportRecord?.artifacts?.lance_subset;
+  const publishedLanceArtifact = exportRecord?.artifacts?.published_lance;
   const jsonlArtifact = exportRecord?.artifacts?.jsonl;
   const vlaArtifact = exportRecord?.artifacts?.vla_jsonl;
   const hfDatasetArtifact = exportRecord?.artifacts?.hf_dataset;
   const hubArtifact = exportRecord?.artifacts?.huggingface_hub;
   const validation = lerobotArtifact?.validation;
   const lanceValidation = lanceArtifact?.validation;
-  const canUploadHub = exportRecord?.status === "succeeded" && Boolean(lanceArtifact?.root);
+  const canUploadHub =
+    exportRecord?.status === "succeeded" &&
+    Boolean(publishedLanceArtifact?.root ?? lanceArtifact?.root);
   const [hubUpload, setHubUpload] = useState<ExportHubUploadResult | null>(null);
   const [hubUploadError, setHubUploadError] = useState<string | null>(null);
   const [hubUploading, setHubUploading] = useState(false);
@@ -187,6 +190,19 @@ export function ExportStrip({
             ) : null}
           </div>
         ) : null}
+        {publishedLanceArtifact ? (
+          <div className="export-artifact">
+            <span>HF published layout</span>
+            <span>{publishedLanceArtifact.root}</span>
+            {publishedLanceArtifact.validation ? (
+              <span>
+                metadata {publishedLanceArtifact.validation.metadata_ok ? "ok" : "check"} /
+                episodes {publishedLanceArtifact.validation.episode_count ?? 0} / frames{" "}
+                {publishedLanceArtifact.validation.frame_count ?? 0}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
         {jsonlArtifact ? (
           <ExportArtifactSummary artifact={jsonlArtifact} label="JSONL" />
         ) : null}
@@ -213,8 +229,9 @@ export function ExportStrip({
               />
             </label>
             <span className="export-hub-guide">
-              한국어 안내: Apply는 로컬 curated export를 만들고, Upload는 위 HF repo에 새
-              commit으로 올립니다. 원본 HF dataset을 열었으면 repo가 자동 입력됩니다.
+              한국어 안내: Apply는 전체 dataset 기준 curated export를 만들고, Upload는 위 HF
+              repo를 깨끗한 새 commit으로 교체합니다. 원본 HF dataset을 열었으면 repo가 자동
+              입력됩니다.
             </span>
             {exportRecord?.hubRepoSource ? (
               <span className="export-hub-guide">
@@ -252,6 +269,17 @@ export function ExportStrip({
       </div>
       <div className="export-actions">
         <div className="segmented-control export-scope-control">
+          <button
+            aria-label="Apply every episode in this dataset"
+            aria-pressed={scope === "dataset"}
+            className={scope === "dataset" ? "active" : ""}
+            disabled={applyBusy}
+            onClick={() => setScope("dataset")}
+            title="Apply curation to the full dataset"
+            type="button"
+          >
+            Full Dataset
+          </button>
           <button
             className={scope === "episode" ? "active" : ""}
             disabled={applyBusy}
