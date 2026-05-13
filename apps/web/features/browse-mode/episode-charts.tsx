@@ -40,6 +40,8 @@ type ChartRow = {
 const STATE_COLOR = "var(--accent)";
 const ACTION_COLOR = "var(--blue)";
 const MAX_DIMS_INLINE = 32;
+const CHART_LEFT_GUTTER = 64;
+const CHART_Y_AXIS_WIDTH = 28;
 
 export function EpisodeCharts({
   episode,
@@ -391,7 +393,7 @@ function ChartCard({
         <ResponsiveContainer>
           <LineChart
             data={data}
-            margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
+            margin={{ top: 4, right: 0, left: CHART_LEFT_GUTTER, bottom: 0 }}
             onClick={onClick}
             onMouseMove={onMove}
           >
@@ -409,7 +411,7 @@ function ChartCard({
               tickLine={false}
               axisLine={{ stroke: "var(--border)" }}
               tick={{ fill: "var(--muted)", fontSize: 10 }}
-              width={28}
+              width={CHART_Y_AXIS_WIDTH}
             />
             <Tooltip
               cursor={{ stroke: "var(--accent)", strokeWidth: 1 }}
@@ -434,8 +436,9 @@ function ChartCard({
                 x1={band.startFrame}
                 x2={band.endFrame}
                 fill={band.color}
-                fillOpacity={0.12}
-                stroke="none"
+                fillOpacity={0.15}
+                stroke={band.color}
+                strokeOpacity={0.34}
                 ifOverflow="hidden"
               />
             ))}

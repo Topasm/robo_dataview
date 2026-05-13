@@ -1656,10 +1656,6 @@ button.shortcut-chip-item.shortcut-chip-button:hover .shortcut-chip-label {
   z-index: 2;
 }
 
-.timeline-segment {
-  position: relative;
-}
-
 .export-overlap-warning {
   display: inline-flex;
   align-items: center;

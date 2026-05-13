@@ -1,8 +1,14 @@
 import { AlertTriangle, GitBranch, MapPin, Merge, OctagonAlert, Trash2 } from "lucide-react";
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent
+} from "react";
 
 import { findClipOverlaps, type ClipOverlap } from "@/lib/clip-validation";
-import { SKILL_LABEL_TYPE } from "@/lib/skill-vocabulary";
+import { SKILL_LABEL_TYPE, skillByName } from "@/lib/skill-vocabulary";
 import type { SegmentAnnotation, VlmResponseRecord } from "@/lib/types";
 import { buildRationaleMap, formatRationaleTooltip } from "@/lib/vlm-rationales";
 
@@ -271,6 +277,10 @@ export function TimelinePanel({
                 const hasOverlap = overlaps.length > 0;
                 const baseTitle = `${annotation.labelValue} (${bounds.startFrame}-${bounds.endFrame})`;
                 const rationaleIndex = pendingClipRationaleIndex.get(annotation.id);
+                const skill =
+                  annotation.labelType === SKILL_LABEL_TYPE
+                    ? skillByName(annotation.labelValue)
+                    : null;
                 const rationaleTooltip =
                   rationaleIndex !== undefined
                     ? formatRationaleTooltip(rationaleMap.get(annotation.labelValue)?.[rationaleIndex])
@@ -288,11 +298,16 @@ export function TimelinePanel({
                 ]
                   .filter(Boolean)
                   .join(" ");
+                const segmentStyle = {
+                  left: `${left}%`,
+                  width: `${width}%`,
+                  ...(skill ? { "--timeline-segment-color": skill.color } : {})
+                } as CSSProperties;
                 return (
                   <div
                     className={segmentClassName}
                     key={annotation.id}
-                    style={{ left: `${left}%`, width: `${width}%` }}
+                    style={segmentStyle}
                     title={segmentTitle}
                   >
                     <button
@@ -316,7 +331,12 @@ export function TimelinePanel({
                       }}
                       type="button"
                     >
-                      {annotation.labelValue}
+                      <span className="timeline-segment-name">
+                        {skill?.label ?? annotation.labelValue}
+                      </span>
+                      <span className="timeline-segment-range mono">
+                        f{bounds.startFrame}-f{bounds.endFrame}
+                      </span>
                     </button>
                     {hasOverlap ? (
                       <span className="timeline-overlap-warning" aria-hidden="true">

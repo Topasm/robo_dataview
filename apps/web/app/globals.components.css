@@ -46,6 +46,9 @@
 /* === Chart panels === */
 
 .episode-charts {
+  --frame-axis-gap: var(--space-2);
+  --frame-axis-label-width: 84px;
+  --frame-axis-left: calc(var(--frame-axis-label-width) + var(--frame-axis-gap));
   display: grid;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
@@ -855,10 +858,13 @@
 }
 
 .timeline-panel {
+  --frame-axis-gap: var(--space-2);
+  --frame-axis-label-width: 84px;
+  --frame-axis-left: calc(var(--frame-axis-label-width) + var(--frame-axis-gap));
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   min-height: 180px;
-  padding: 13px 14px;
+  padding: 13px var(--space-3);
 }
 
 .timeline-panel--loading {
@@ -907,7 +913,7 @@
   font-size: var(--text-xs);
   justify-content: space-between;
   margin-bottom: 8px;
-  margin-left: 92px;
+  margin-left: var(--frame-axis-left);
 }
 
 .timeline-lanes {
@@ -919,7 +925,7 @@
   align-items: center;
   display: grid;
   gap: var(--space-2);
-  grid-template-columns: 84px minmax(0, 1fr);
+  grid-template-columns: var(--frame-axis-label-width) minmax(0, 1fr);
 }
 
 .timeline-lane-title {
@@ -935,7 +941,7 @@
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  height: 34px;
+  height: 42px;
   overflow: hidden;
   position: relative;
   touch-action: none;
@@ -943,16 +949,22 @@
 
 .timeline-segment {
   align-items: center;
-  border-right: 1px solid rgb(255 255 255 / 0.72);
+  background: var(--timeline-segment-color, var(--blue));
+  border-left: 4px solid color-mix(in srgb, var(--timeline-segment-color, var(--blue)) 76%, #ffffff);
+  border-right: 1px solid rgb(255 255 255 / 0.74);
+  border-radius: 5px;
+  box-shadow:
+    inset 0 -1px 0 rgb(0 0 0 / 0.18),
+    inset 0 1px 0 rgb(255 255 255 / 0.28);
   color: #ffffff;
   display: flex;
   font-size: var(--text-xs);
-  height: 22px;
+  height: 28px;
   left: 0;
   overflow: hidden;
   position: absolute;
   text-overflow: ellipsis;
-  top: 5px;
+  top: 6px;
   white-space: nowrap;
 }
 
@@ -972,10 +984,13 @@
 }
 
 .timeline-segment-body {
+  align-items: center;
   background: transparent;
   border: 0;
   color: inherit;
+  display: flex;
   flex: 1;
+  gap: 6px;
   font: inherit;
   height: 100%;
   min-width: 0;
@@ -984,6 +999,22 @@
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.timeline-segment-name {
+  flex: 1 1 auto;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timeline-segment-range {
+  background: rgb(0 0 0 / 0.22);
+  border-radius: 4px;
+  flex: 0 0 auto;
+  font-size: 10px;
+  padding: 1px 4px;
 }
 
 .timeline-handle {
@@ -1031,24 +1062,24 @@
 }
 
 .segment-accepted {
-  background: var(--accent-2);
+  background: var(--timeline-segment-color, var(--accent-2));
 }
 
 .segment-pending {
-  background: color-mix(in srgb, var(--muted) 18%, transparent);
+  background: color-mix(in srgb, var(--timeline-segment-color, var(--muted)) 22%, transparent);
   outline: 1.5px dashed var(--muted);
   outline-offset: -1.5px;
   color: var(--text);
 }
 
 .segment-pending:hover {
-  background: color-mix(in srgb, var(--muted) 28%, transparent);
+  background: color-mix(in srgb, var(--timeline-segment-color, var(--muted)) 32%, transparent);
 }
 
 .segment-pending.selected {
-  outline-color: var(--accent);
+  outline-color: var(--timeline-segment-color, var(--accent));
   outline-style: dashed;
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  background: color-mix(in srgb, var(--timeline-segment-color, var(--accent)) 24%, transparent);
 }
 
 .segment-pending .timeline-segment-body {
@@ -1060,7 +1091,7 @@
 }
 
 .segment-edited {
-  background: var(--blue);
+  background: var(--timeline-segment-color, var(--blue));
 }
 
 .rerun-panel {
@@ -1857,6 +1888,7 @@ textarea {
 .segment-row {
   align-items: center;
   border: 1px solid var(--border);
+  border-left: 4px solid var(--segment-color, var(--border));
   border-radius: var(--radius-sm);
   display: grid;
   gap: 4px 6px;
@@ -1866,6 +1898,7 @@ textarea {
 
 .segment-row.selected {
   border-color: var(--accent);
+  border-left-color: var(--segment-color, var(--border));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
@@ -1886,8 +1919,15 @@ textarea {
   align-items: center;
   display: grid;
   gap: var(--space-1);
-  grid-template-columns: minmax(64px, 1fr) minmax(60px, 0.8fr) 46px 46px;
+  grid-template-columns: 9px minmax(64px, 1fr) minmax(62px, auto) auto;
   min-width: 0;
+}
+
+.segment-color-swatch {
+  align-self: stretch;
+  background: var(--segment-color, var(--border));
+  border-radius: 999px;
+  min-height: 22px;
 }
 
 .segment-edit-grid input,

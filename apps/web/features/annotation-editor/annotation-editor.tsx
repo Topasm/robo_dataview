@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Check, Sparkles, Trash2, X } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
@@ -312,8 +312,13 @@ export function AnnotationEditor({
               {skillClips.map((clip) => {
                 const skill = skillByName(clip.labelValue);
                 return (
-                  <div className={`segment-row${selectedClipId === clip.id ? " selected" : ""}`} key={clip.id}>
+                  <div
+                    className={`segment-row${selectedClipId === clip.id ? " selected" : ""}`}
+                    key={clip.id}
+                    style={{ "--segment-color": skill?.color ?? "var(--border)" } as CSSProperties}
+                  >
                     <div className="segment-edit-grid">
+                      <span className="segment-color-swatch" aria-hidden="true" />
                       <button
                         className="segment-select-button"
                         onClick={() => onSelectClip(clip.id)}
