@@ -306,6 +306,32 @@ class AnnotationServiceTest(unittest.TestCase):
             self.assertEqual([row["annotation_id"] for row in rows], [active.annotation_id])
             self.assertFalse(Path(reloaded.storage_paths("dataset-a")["history"]).exists())
 
+    def test_compact_dataset_can_prune_applied_episode_deletions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage_root = Path(tmpdir)
+            store = AnnotationStore(storage_root=storage_root, mirror_lance=False)
+            deletion = store.create(
+                AnnotationCreate(
+                    dataset_id="dataset-a",
+                    episode_index=3,
+                    start_frame=0,
+                    end_frame=0,
+                    label_type="episode_disposition",
+                    label_value="deleted",
+                    review_status=ReviewStatus.accepted,
+                )
+            )
+            store.mark_applied([deletion.annotation_id], export_id="export-001")
+
+            summary = store.compact_dataset(
+                "dataset-a",
+                drop_applied_episode_deletions=True,
+            )
+
+            self.assertEqual(summary["active_records"], 0)
+            self.assertEqual(summary["applied_episode_deletions_pruned"], 1)
+            self.assertEqual(store.applied_deleted_episode_indices("dataset-a"), set())
+
     def test_applied_export_id_persists_across_jsonl_reload(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             storage_root = Path(tmpdir)

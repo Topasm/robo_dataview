@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 from fastapi import HTTPException
 
 from apps.api.schemas.common import ExportFormat, JobStatus, ReviewStatus
+from apps.api.schemas.datasets import DatasetOpenRequest
 from apps.api.schemas.episodes import EpisodeDetail
 from apps.api.schemas.exports import (
     ExportCreateRequest,
@@ -168,8 +169,14 @@ class ExportStore:
             message=f"Uploaded export {record.export_id} to {repo_id}.",
         )
         self._record_hub_upload(record, response)
+        local_install = self._install_uploaded_published_dataset(record, upload_path)
         self._prune_previous_exports(record)
-        self._compact_uploaded_annotations(record)
+        self._compact_uploaded_annotations(
+            record,
+            drop_applied_episode_deletions=bool(local_install.get("installed")),
+        )
+        if local_install:
+            self._record_local_published_update(record, local_install)
         return response
 
     def _load_existing_exports(self) -> None:
@@ -349,11 +356,83 @@ class ExportStore:
                 except (OSError, json.JSONDecodeError, TypeError):
                     logger.warning("Failed to persist pruned export ids for %s", keep.export_id)
 
-    def _compact_uploaded_annotations(self, record: ExportRecord) -> None:
+    def _install_uploaded_published_dataset(
+        self,
+        record: ExportRecord,
+        upload_path: Path,
+    ) -> dict[str, Any]:
+        root = os.getenv("ROBOT_DATA_STUDIO_LOCAL_PUBLISHED_ROOT")
+        if not root:
+            return {}
+        target = Path(root) / record.dataset_id
+        try:
+            if target.exists() and target.resolve() == upload_path.resolve():
+                return {"installed": False, "target": str(target), "reason": "already_current"}
+        except OSError:
+            return {"installed": False, "target": str(target), "reason": "resolve_failed"}
+
+        scratch = target.with_name(f".{target.name}.tmp.{os.getpid()}")
+        if scratch.exists():
+            shutil.rmtree(scratch)
+        try:
+            shutil.copytree(upload_path, scratch)
+            if target.exists():
+                shutil.rmtree(target)
+            os.rename(str(scratch), str(target))
+            store.open_dataset(DatasetOpenRequest(uri=str(target), name=record.dataset_id))
+        except Exception as exc:  # noqa: BLE001 - upload already succeeded; local sync is best effort.
+            if scratch.exists():
+                shutil.rmtree(scratch, ignore_errors=True)
+            logger.warning(
+                "Failed to install uploaded dataset %s into %s: %s",
+                record.export_id,
+                target,
+                exc,
+            )
+            return {
+                "installed": False,
+                "target": str(target),
+                "error": str(exc),
+            }
+        return {
+            "installed": True,
+            "target": str(target),
+            "source": str(upload_path),
+        }
+
+    def _record_local_published_update(
+        self,
+        record: ExportRecord,
+        local_install: dict[str, Any],
+    ) -> None:
+        if not record.output_uri:
+            return
+        manifest_path = Path(record.output_uri)
+        if not manifest_path.exists():
+            return
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            hub_upload = dict(manifest.get("hub_upload") or {})
+            hub_upload["local_published_update"] = local_install
+            manifest["hub_upload"] = hub_upload
+            manifest_path.write_text(
+                json.dumps(manifest, indent=2, default=str),
+                encoding="utf-8",
+            )
+        except (OSError, json.JSONDecodeError, TypeError):
+            logger.warning("Failed to persist local published update for %s", record.export_id)
+
+    def _compact_uploaded_annotations(
+        self,
+        record: ExportRecord,
+        *,
+        drop_applied_episode_deletions: bool = False,
+    ) -> None:
         try:
             summary = annotation_store.compact_dataset(
                 record.dataset_id,
                 keep_history=False,
+                drop_applied_episode_deletions=drop_applied_episode_deletions,
             )
         except Exception as exc:  # noqa: BLE001 - upload already succeeded; record cleanup failure.
             logger.warning(

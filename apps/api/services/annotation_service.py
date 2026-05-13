@@ -188,6 +188,7 @@ class AnnotationStore:
         dataset_id: str,
         *,
         keep_history: bool = False,
+        drop_applied_episode_deletions: bool = False,
     ) -> dict[str, Any]:
         """Drop soft-deleted tombstones and optionally audit history for a dataset.
 
@@ -205,6 +206,16 @@ class AnnotationStore:
             for record in records_before
             if record.deleted_at is not None
         }
+        applied_episode_delete_ids = {
+            record.annotation_id
+            for record in records_before
+            if drop_applied_episode_deletions
+            and record.deleted_at is None
+            and record.label_type == EPISODE_DISPOSITION_LABEL_TYPE
+            and record.label_value == "deleted"
+            and record.applied_export_id is not None
+        }
+        deleted_ids.update(applied_episode_delete_ids)
         for annotation_id in deleted_ids:
             self._records.pop(annotation_id, None)
         if not keep_history:
@@ -225,6 +236,7 @@ class AnnotationStore:
             "records_before": len(records_before),
             "records_pruned": len(records_before) - len(records_after),
             "deleted_records_pruned": len(deleted_ids),
+            "applied_episode_deletions_pruned": len(applied_episode_delete_ids),
             "history_events_before": len(history_before),
             "history_events_after": len(history_after),
             "history_events_pruned": len(history_before) - len(history_after),

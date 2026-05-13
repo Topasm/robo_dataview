@@ -543,6 +543,7 @@ class ExportServiceTest(unittest.TestCase):
         compact_dataset.assert_called_once_with(
             "sample-xvla-soft-fold",
             keep_history=False,
+            drop_applied_episode_deletions=False,
         )
 
         manifest = json.loads(Path(record.output_uri or "").read_text(encoding="utf-8"))
