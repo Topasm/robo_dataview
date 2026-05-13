@@ -8,6 +8,17 @@ export type ClipOverlap = {
   otherEnd: number;
 };
 
+export type SkillClipCandidate = {
+  datasetId: string;
+  episodeIndex: number;
+  id?: string | null;
+  labelType: string;
+  labelValue: string;
+  reviewStatus?: SegmentAnnotation["reviewStatus"] | null;
+  startFrame: number;
+  endFrame: number;
+};
+
 type GroupKey = string;
 
 function groupKey(annotation: SegmentAnnotation): GroupKey {
@@ -15,10 +26,11 @@ function groupKey(annotation: SegmentAnnotation): GroupKey {
 }
 
 function eligibleSkillClips(annotations: SegmentAnnotation[]): SegmentAnnotation[] {
-  return annotations.filter(
-    (annotation) =>
-      annotation.labelType === SKILL_LABEL_TYPE && annotation.reviewStatus === "accepted"
-  );
+  return annotations.filter(activeSkillClip);
+}
+
+function activeSkillClip(annotation: Pick<SegmentAnnotation, "labelType" | "reviewStatus">): boolean {
+  return annotation.labelType === SKILL_LABEL_TYPE && annotation.reviewStatus !== "rejected";
 }
 
 function groupByEpisode(annotations: SegmentAnnotation[]): Map<GroupKey, SegmentAnnotation[]> {
@@ -39,8 +51,59 @@ function rangesOverlap(a: SegmentAnnotation, b: SegmentAnnotation): boolean {
   return a.startFrame <= b.endFrame && b.startFrame <= a.endFrame;
 }
 
+function rangesOverlapBounds(
+  aStart: number,
+  aEnd: number,
+  bStart: number,
+  bEnd: number,
+): boolean {
+  return aStart <= bEnd && bStart <= aEnd;
+}
+
+export function findSkillClipConflict(
+  annotations: SegmentAnnotation[],
+  candidate: SkillClipCandidate,
+  excludeIds: Iterable<string> = [],
+): ClipOverlap | null {
+  const ignored = new Set(excludeIds);
+  if (candidate.id) {
+    ignored.add(candidate.id);
+  }
+  const candidateStatus = candidate.reviewStatus ?? "accepted";
+  if (
+    candidate.labelType !== SKILL_LABEL_TYPE ||
+    candidateStatus === "rejected"
+  ) {
+    return null;
+  }
+  const candidateStart = Math.min(candidate.startFrame, candidate.endFrame);
+  const candidateEnd = Math.max(candidate.startFrame, candidate.endFrame);
+  const conflict = annotations.find(
+    (annotation) =>
+      !ignored.has(annotation.id) &&
+      activeSkillClip(annotation) &&
+      annotation.datasetId === candidate.datasetId &&
+      annotation.episodeIndex === candidate.episodeIndex &&
+      rangesOverlapBounds(
+        candidateStart,
+        candidateEnd,
+        annotation.startFrame,
+        annotation.endFrame,
+      )
+  );
+  if (!conflict) {
+    return null;
+  }
+  return {
+    otherId: conflict.id,
+    otherSkill: conflict.labelValue,
+    otherStart: conflict.startFrame,
+    otherEnd: conflict.endFrame
+  };
+}
+
 /**
- * For accepted skill clips within the same episode, find pairs whose frame
+ * For non-rejected skill clips within the same episode, find pairs whose frame
  * ranges overlap (inclusive). Returns a Map keyed by clip id, where each value
  * lists every overlapping partner. Both clips of an overlapping pair appear in
  * the map.
@@ -88,7 +151,7 @@ function appendOverlap(
 }
 
 /**
- * Counts distinct unordered overlapping pairs (so a single conflict between
+ * Counts distinct unordered overlapping skill pairs (so a single conflict between
  * clip A and clip B counts as 1, not 2).
  */
 export function countOverlappingPairs(annotations: SegmentAnnotation[]): number {

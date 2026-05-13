@@ -37,6 +37,7 @@ import {
   updateFrameRecord,
   uploadExportToHub
 } from "@/lib/api";
+import { findSkillClipConflict } from "@/lib/clip-validation";
 import { annotationHistory, annotations, datasetSummary, episodes } from "@/lib/sample-data";
 import { SKILL_LABEL_TYPE } from "@/lib/skill-vocabulary";
 import type {
@@ -154,6 +155,13 @@ function optimisticAnnotation(
     appliedExportId: null,
     ...patch
   };
+}
+
+function skillOverlapMessage(
+  draft: Pick<SegmentDraft, "labelValue" | "startFrame" | "endFrame">,
+  conflict: { otherSkill: string; otherStart: number; otherEnd: number },
+): string {
+  return `Skill clips cannot overlap: ${draft.labelValue} f${draft.startFrame}-${draft.endFrame} overlaps ${conflict.otherSkill} f${conflict.otherStart}-${conflict.otherEnd}. Move the boundary or delete/reject one clip first.`;
 }
 
 function mergeJobEvent(record: JobRecord, event: JobProgressEvent): JobRecord {
@@ -371,6 +379,35 @@ export function useStudioData() {
     },
     [refreshAnnotationHistory, refreshReviewQueue]
   );
+
+  function rejectSkillOverlap(
+    draft: SegmentDraft,
+    datasetId: string,
+    episodeIndex: number,
+    excludeIds: Iterable<string> = [],
+    reviewStatus: ReviewStatus = draft.reviewStatus ?? "accepted",
+  ): boolean {
+    const startFrame = Math.min(draft.startFrame, draft.endFrame);
+    const endFrame = Math.max(draft.startFrame, draft.endFrame);
+    const conflict = findSkillClipConflict(
+      annotationRows,
+      {
+        datasetId,
+        episodeIndex,
+        labelType: draft.labelType,
+        labelValue: draft.labelValue,
+        reviewStatus,
+        startFrame,
+        endFrame
+      },
+      excludeIds
+    );
+    if (!conflict) {
+      return false;
+    }
+    setMutationNotice(skillOverlapMessage({ ...draft, startFrame, endFrame }, conflict));
+    return true;
+  }
 
   useEffect(() => {
     let isMounted = true;
@@ -993,7 +1030,18 @@ export function useStudioData() {
     [selectedEpisode.length, selectedFrameIndex]
   );
 
-  async function handleCreateSegment(draft: SegmentDraft) {
+  async function handleCreateSegment(draft: SegmentDraft): Promise<boolean> {
+    if (
+      rejectSkillOverlap(
+        draft,
+        selectedEpisode.datasetId,
+        selectedEpisode.episodeIndex,
+        [],
+        draft.reviewStatus ?? "accepted",
+      )
+    ) {
+      return false;
+    }
     const previousAnnotations = annotationRows;
     const optimistic = optimisticAnnotation(selectedEpisode, draft);
     setAnnotationRows((current) => sortAnnotations([...current, optimistic]));
@@ -1015,6 +1063,7 @@ export function useStudioData() {
       );
       await refreshAnnotationHistory(created.datasetId, created.episodeIndex);
       await refreshReviewQueue(created.datasetId);
+      return true;
     } catch (error) {
       setAnnotationRows(previousAnnotations);
       await handleAnnotationMutationError(error, selectedEpisode.datasetId, selectedEpisode.episodeIndex);
@@ -1022,9 +1071,21 @@ export function useStudioData() {
     }
   }
 
-  async function handleUpdateSegment(annotationId: string, draft: SegmentDraft) {
+  async function handleUpdateSegment(annotationId: string, draft: SegmentDraft): Promise<boolean> {
     const previousAnnotations = annotationRows;
     const existing = annotationRows.find((annotation) => annotation.id === annotationId);
+    if (
+      existing &&
+      rejectSkillOverlap(
+        draft,
+        existing.datasetId,
+        existing.episodeIndex,
+        [annotationId],
+        draft.reviewStatus ?? "edited",
+      )
+    ) {
+      return false;
+    }
     if (existing) {
       setAnnotationRows((current) =>
         sortAnnotations(
@@ -1059,6 +1120,7 @@ export function useStudioData() {
       );
       await refreshAnnotationHistory(updated.datasetId, updated.episodeIndex);
       await refreshReviewQueue(updated.datasetId);
+      return true;
     } catch (error) {
       setAnnotationRows(previousAnnotations);
       await handleAnnotationMutationError(
@@ -1068,6 +1130,7 @@ export function useStudioData() {
       );
       throw error;
     }
+    return false;
   }
 
   async function handleSplitSegment(annotation: SegmentAnnotation) {
@@ -1158,6 +1221,17 @@ export function useStudioData() {
       labelValue: left.labelValue,
       metadata: left.metadata
     };
+    if (
+      rejectSkillOverlap(
+        mergedDraft,
+        left.datasetId,
+        left.episodeIndex,
+        [left.id, right.id],
+        "edited",
+      )
+    ) {
+      return;
+    }
     const mergedOptimistic = optimisticAnnotation(left, mergedDraft, {
       confidence: Math.max(left.confidence, right.confidence),
       reviewStatus: "edited"
@@ -1198,21 +1272,41 @@ export function useStudioData() {
     }
   }
 
-  async function handleUpdateReviewStatus(annotationId: string, status: ReviewStatus) {
+  async function handleUpdateReviewStatus(annotationId: string, status: ReviewStatus): Promise<boolean> {
     const previousAnnotations = annotationRows;
+    const existing = annotationRows.find((annotation) => annotation.id === annotationId);
+    if (
+      existing &&
+      rejectSkillOverlap(
+        {
+          labelType: existing.labelType,
+          labelValue: existing.labelValue,
+          startFrame: existing.startFrame,
+          endFrame: existing.endFrame,
+          reviewStatus: status,
+          metadata: existing.metadata
+        },
+        existing.datasetId,
+        existing.episodeIndex,
+        [annotationId],
+        status,
+      )
+    ) {
+      return false;
+    }
     setAnnotationRows((current) =>
       current.map((annotation) =>
         annotation.id === annotationId ? { ...annotation, reviewStatus: status } : annotation
       )
     );
     try {
-      const existing = annotationRows.find((annotation) => annotation.id === annotationId);
       const updated = await updateAnnotationReviewStatus(annotationId, status, existing?.revision);
       setAnnotationRows((current) =>
         current.map((annotation) => (annotation.id === annotationId ? updated : annotation))
       );
       await refreshAnnotationHistory(updated.datasetId, updated.episodeIndex);
       await refreshReviewQueue(updated.datasetId);
+      return true;
     } catch (error) {
       setAnnotationRows(previousAnnotations);
       await handleAnnotationMutationError(error, selectedEpisode.datasetId, selectedEpisode.episodeIndex);

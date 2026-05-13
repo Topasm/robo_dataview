@@ -36,7 +36,7 @@ type AnnotationEditorProps = {
   selectedSkillId: number;
   selectedSkillName: string;
   vlmResponses?: VlmResponseRecord[];
-  onCreateSegment: (draft: AnnotationDraft) => Promise<void>;
+  onCreateSegment: (draft: AnnotationDraft) => Promise<unknown>;
   onDeleteSegment: (annotationId: string) => Promise<void>;
   onSetClipStart: (frame: number | null) => void;
   onSetClipEnd: (frame: number | null) => void;
@@ -48,8 +48,8 @@ type AnnotationEditorProps = {
     labelEnabled: boolean,
   ) => Promise<void>;
   onUpdateSelectedFrameBadFlag: (isBadFrame: boolean) => Promise<void>;
-  onUpdateSegment: (annotationId: string, draft: AnnotationDraft) => Promise<void>;
-  onUpdateReviewStatus: (annotationId: string, status: ReviewStatus) => Promise<void>;
+  onUpdateSegment: (annotationId: string, draft: AnnotationDraft) => Promise<unknown>;
+  onUpdateReviewStatus: (annotationId: string, status: ReviewStatus) => Promise<unknown>;
 };
 
 const QUICK_CLIP_QUALITY = [

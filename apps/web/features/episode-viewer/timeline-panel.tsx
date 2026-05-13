@@ -28,7 +28,7 @@ type TimelinePanelProps = {
   clipStart?: number | null;
   fps?: number;
   frameCount: number;
-  onCreateSegment: (draft: SegmentDraft) => Promise<void>;
+  onCreateSegment: (draft: SegmentDraft) => Promise<unknown>;
   onDeleteSegment: (annotationId: string) => Promise<void>;
   onMergeSegments: (left: SegmentAnnotation, right: SegmentAnnotation) => Promise<void>;
   onSelectFrame: (frameIndex: number) => void;
@@ -37,7 +37,7 @@ type TimelinePanelProps = {
   onSetClipEnd?: (frame: number | null) => void;
   onSetClipStart?: (frame: number | null) => void;
   onSplitSegment: (annotation: SegmentAnnotation) => Promise<void>;
-  onUpdateSegment: (annotationId: string, draft: SegmentDraft) => Promise<void>;
+  onUpdateSegment: (annotationId: string, draft: SegmentDraft) => Promise<boolean | void>;
   selectedSegmentId?: string | null;
   selectedFrame: number;
   selectedSkillName?: string;
@@ -229,17 +229,26 @@ export function TimelinePanel({
     if (dragState === null) {
       return;
     }
+    const annotationId = dragState.annotation.id;
     const bounds = draftBounds[dragState.annotation.id];
     setDragState(null);
     if (!bounds) {
       return;
     }
-    await onUpdateSegment(dragState.annotation.id, {
-      labelType: dragState.annotation.labelType,
-      labelValue: dragState.annotation.labelValue,
-      startFrame: bounds.startFrame,
-      endFrame: bounds.endFrame
-    });
+    try {
+      await onUpdateSegment(annotationId, {
+        labelType: dragState.annotation.labelType,
+        labelValue: dragState.annotation.labelValue,
+        startFrame: bounds.startFrame,
+        endFrame: bounds.endFrame
+      });
+    } finally {
+      setDraftBounds((current) => {
+        const next = { ...current };
+        delete next[annotationId];
+        return next;
+      });
+    }
   }
 
   return (

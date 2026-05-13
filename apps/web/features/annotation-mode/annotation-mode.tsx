@@ -225,7 +225,7 @@ export function AnnotationMode({
               endFrame: Math.min(lastFrame, frame + radius)
             };
           })();
-      await studio.handleCreateSegment({
+      const created = await studio.handleCreateSegment({
         labelType: SKILL_LABEL_TYPE,
         labelValue: skillName,
         startFrame: bounds.startFrame,
@@ -237,6 +237,9 @@ export function AnnotationMode({
           successLabel: null
         }
       });
+      if (created === false) {
+        return;
+      }
       if (skill && skill.id >= 0) {
         onSetSelectedSkillId(skill.id);
       }
